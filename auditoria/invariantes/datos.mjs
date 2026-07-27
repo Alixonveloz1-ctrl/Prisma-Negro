@@ -626,4 +626,55 @@ export const invariantes = [
         t.replace('anteriores.length\n            ?', 'false\n            ?'),
       ),
   },
+
+  {
+    nombre: 'el-documental-se-dramatiza-con-interpretes',
+    dice: 'Salían casi solo objetos, manos y calles vacías. Dos causas: la instrucción del director ofrecía cuatro salidas sin gente de cinco, y el prompt de imagen NO LE CONTABA al generador los sujetos que el director había puesto en la ficha.',
+    async comprobar(ctx) {
+      const { componerInstruccion } = ctx.fn;
+      const { BARRERA_DOCUMENTAL } = await import('../../comun/estilos.mjs');
+      const dir = fuente(ctx, 'app/fases/direccion.js');
+      const fallos = [];
+
+      // 1 · Los sujetos de la ficha tienen que llegar a la instrucción.
+      const cfg = { imagen: { estilo: 'reconstruccion' }, formato: {} };
+      const conGente = {
+        plano: {
+          descripcion: 'Discuten en el portal.', encuadre: 'plano medio',
+          lugar: 'el portal', luz: 'noche',
+          sujetos: ['una mujer de unos treinta', 'un hombre mayor'],
+        },
+      };
+      const texto = componerInstruccion(conGente, cfg);
+      for (const quien of conGente.plano.sujetos) {
+        if (!texto.includes(quien)) fallos.push(`«${quien}» no llega a la instrucción de imagen.`);
+      }
+      // Y sin sujetos no se inventa gente: un plano de detalle es un plano de detalle.
+      const sinGente = { plano: { descripcion: 'El vaso.', encuadre: 'detalle', lugar: 'la mesa', luz: 'x', sujetos: [] } };
+      if (/EN CUADRO HAY PERSONAS/.test(componerInstruccion(sinGente, cfg))) {
+        fallos.push('Se pide gente en una toma que el director dejó sin sujetos.');
+      }
+
+      // 2 · La barrera prohíbe PARECERSE a alguien real, no que salga gente.
+      if (/Sin rostros reconocibles/.test(BARRERA_DOCUMENTAL)) {
+        fallos.push('La barrera se lee como «sin rostros» y devuelve el documental a los objetos.');
+      }
+      if (!/INTÉRPRETES|intérpretes/.test(BARRERA_DOCUMENTAL)) {
+        fallos.push('La barrera no dice que las personas en cuadro son intérpretes.');
+      }
+
+      // 3 · El director tiene que poder elegir dramatización, y que sea lo normal.
+      if (!/'dramatizacion'/.test(dir)) fallos.push('El director no puede marcar una toma como dramatización.');
+      if (!/mitad de las tomas llevan personas/.test(dir)) {
+        fallos.push('Nada le dice al director que reparta entre gente y objetos.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: la instrucción sin los sujetos que el director puso.
+    romper: (ctx) =>
+      conFuncion(ctx, 'componerInstruccion', (toma, config, opciones) =>
+        ctx.fn
+          .componerInstruccion({ ...toma, plano: { ...toma.plano, sujetos: [] } }, config, opciones)
+      ),
+  },
 ];

@@ -51,7 +51,10 @@ const ESQUEMA = {
           sujetos: { type: 'array', items: { type: 'string' } },
           descripcion: { type: 'string' },
           // §8.2: cada toma sabe de qué tipo es su imagen.
-          tipoImagen: { type: 'string', enum: ['reconstruccion', 'mapa', 'esquema', 'recurso', 'archivo'] },
+          tipoImagen: {
+            type: 'string',
+            enum: ['dramatizacion', 'reconstruccion', 'mapa', 'esquema', 'recurso', 'archivo'],
+          },
           merecemovimiento: { type: 'boolean' },
           igualQue: { type: 'integer' },
         },
@@ -67,15 +70,24 @@ partido en tomas y devuelves una ficha de plano por toma.
 
 Reglas de este documental:
 
-- NO se generan imágenes fotorrealistas de personas reales identificables, ni se
-  presenta material generado como si fuera de archivo. Es el fallo que hunde la
-  credibilidad de un canal documental. Cuando una toma hable de una persona real,
-  resuélvela con: reconstrucción declaradamente estilizada, detalle (manos,
-  objetos, documentos), lugar sin la persona, mapa o esquema.
-- tipoImagen dice qué clase de plano es: "reconstruccion" (escena recreada y
-  declarada), "mapa", "esquema" (diagrama, línea de tiempo, corte), "recurso"
-  (paisaje, objeto, textura), "archivo" (solo si el guion dice que existe material
-  real de archivo con licencia).
+- ESTE DOCUMENTAL SE DRAMATIZA. Como los de plataforma: hay intérpretes, hay
+  escenas recreadas, se ve a gente haciendo cosas. La dramatización es lo NORMAL,
+  no el último recurso. Un documental de sesenta tomas de objetos y calles vacías
+  no es un documental: es un salvapantallas con voz en off.
+- Lo prohibido es distinto y muy concreto: que el intérprete se parezca a la
+  persona REAL del caso, y que la imagen pase por material de archivo auténtico.
+  Un intérprete anónimo recreando lo que pasó es legítimo y es lo que se espera.
+- Reparte: más o menos la mitad de las tomas llevan personas —dramatización— y la
+  otra mitad son lugares, detalles y documentos, que dan aire y ritmo. Ni todo
+  gente ni todo objetos.
+- Cuando pongas gente, DILO EN sujetos y descríbela en la descripción: qué hace,
+  cómo va vestida, dónde mira. «Una mujer joven» no basta; «una mujer joven de
+  unos treinta, abrigo oscuro, mirando el móvil bajo una farola» sí.
+- tipoImagen dice qué clase de plano es: "dramatizacion" (escena recreada CON
+  intérpretes; es la más habitual), "reconstruccion" (escena recreada sin gente:
+  el lugar de los hechos, un coche, una habitación), "mapa", "esquema" (diagrama,
+  línea de tiempo, corte), "recurso" (paisaje, objeto, textura), "archivo" (solo
+  si el guion dice que existe material real de archivo con licencia).
 - Fija el FORMATO y deja libre la PUESTA EN ESCENA. Decide tú el encuadre y la
   distancia; no pongas a todos los sujetos de espaldas ni a todos mirando a cámara.
   Varía.

@@ -122,8 +122,18 @@ export function componerInstruccion(toma, config, { conReferencias = false, trat
   const estilo = estiloPorId(config?.imagen?.estilo);
   const v = tratamiento?.identidadVisual;
 
+  // Quién sale en cuadro. NO ESTABA, y el director sí lo decidía: la ficha traía
+  // `sujetos` y nadie se lo contaba al generador de imágenes, así que aunque
+  // dijera «dos personas discutiendo en el portal», la instrucción solo llevaba la
+  // descripción y salía el portal vacío. Por eso casi todo eran objetos.
+  const gente = (p.sujetos || []).filter(Boolean);
+
   const partes = [
     p.descripcion,
+    gente.length
+      ? `EN CUADRO HAY PERSONAS: ${gente.join(', ')}. Se ven, hacen algo y ocupan el ` +
+        `plano; no es un lugar vacío. Son intérpretes de una dramatización.`
+      : '',
     `Encuadre: ${p.encuadre}.`,
     p.lugar ? `Lugar: ${p.lugar}.` : '',
     p.luz ? `Luz: ${p.luz}.` : '',

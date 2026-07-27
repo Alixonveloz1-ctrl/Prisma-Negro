@@ -145,6 +145,7 @@ async function funcionesPuras() {
     repartirPorTramos: dir.repartirPorTramos,
     actosDe: gui.actosDe,
     heredables: img.heredables,
+    componerInstruccion: img.componerInstruccion,
     planificarImagenes: img.planificar,
     contarPalabras: gui.contarPalabras,
     normalizar: cfg.normalizar,

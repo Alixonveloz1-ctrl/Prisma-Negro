@@ -87,6 +87,14 @@ export const estiloPorId = (id) =>
  * nuevo: quien escriba el séptimo estilo no tiene que acordarse de copiarla.
  */
 export const BARRERA_DOCUMENTAL =
-  'Sin rostros reconocibles de personas reales. Sin texto sobre la imagen, sin ' +
+  // Lo prohibido es PARECERSE A ALGUIEN REAL, no que salga gente.
+  //
+  // Antes esto decía «sin rostros reconocibles de personas reales» y el generador
+  // lo leía como «sin rostros»: salían objetos, manos y calles vacías, documental
+  // tras documental. Un documental de plataforma está lleno de dramatizaciones con
+  // intérpretes, y eso es legítimo justamente porque son intérpretes.
+  'Las personas que aparecen son INTÉRPRETES de una dramatización, no las personas ' +
+  'reales del caso: rostros anónimos, que no se parezcan a ninguna persona ' +
+  'identificable ni a ningún personaje conocido. Sin texto sobre la imagen, sin ' +
   'marcas de agua, sin logotipos. No imites material de archivo auténtico ni ' +
   'fotografía de prensa real.';
