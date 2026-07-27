@@ -272,23 +272,57 @@ export async function dirigir({ tomas, escenas, tema, config, tratamiento = null
         ? p.igualQue
         : null;
 
+    const plano = {
+      encuadre: p.encuadre,
+      movimientoCamara: p.movimientoCamara,
+      lugar: p.lugar,
+      luz: p.luz,
+      sujetos: p.sujetos || [],
+      descripcion: p.descripcion,
+    };
+
+    // SI EL PLANO CAMBIÓ, LA IMAGEN VIEJA YA NO ES DE ESTA TOMA.
+    //
+    // Al volver a dirigir, la ficha se sustituye pero `imagen: 'ok'` sobrevivía al
+    // spread. Quedaba una toma que dice tener imagen y cuya imagen es de otro
+    // plano: el documental sale con la foto equivocada y nada lo avisa. Se marca
+    // como ausente para que la fase de imagen la rehaga y para que la pantalla
+    // pueda decir cuántas quedaron desfasadas ANTES de gastar.
+    //
+    // Si el plano no cambió, no se toca nada: volver a dirigir no puede costar
+    // dinero por sí solo.
+    const movimiento = conMovimiento.has(t.i);
+    const cambio = huellaDeFicha(t.plano) !== huellaDeFicha(plano);
+    const cambioDeClase = !!t.movimiento !== movimiento;
+
     return {
       ...t,
-      plano: {
-        encuadre: p.encuadre,
-        movimientoCamara: p.movimientoCamara,
-        lugar: p.lugar,
-        luz: p.luz,
-        sujetos: p.sujetos || [],
-        descripcion: p.descripcion,
-      },
+      plano,
       tipoImagen: p.tipoImagen === 'archivo' ? 'archivo' : 'reconstruccion',
       claseVisual: p.tipoImagen,
-      movimiento: conMovimiento.has(t.i),
+      movimiento,
       reusa,
+      ...(cambio || cambioDeClase
+        ? {
+            imagen: reusa !== null || t.heredado ? t.imagen : null,
+            video: reusa !== null || t.heredadoVid ? t.video : null,
+            desfasada: true,
+          }
+        : { desfasada: false }),
     };
   });
 }
+
+/**
+ * La huella de una ficha de plano: lo que hace que la imagen sea LA IMAGEN de
+ * esta toma. Si cambia cualquiera de estas cosas, la imagen anterior ya no vale.
+ */
+const huellaDeFicha = (x) =>
+  !x
+    ? ''
+    : [x.lugar, x.encuadre, x.luz, x.descripcion, (x.sujetos || []).join('|')]
+        .map((v) => String(v || '').trim().toLowerCase())
+        .join(' · ');
 
 /** Una toma ya dirigida, en la forma que devuelve el modelo. */
 function fichaDe(t) {

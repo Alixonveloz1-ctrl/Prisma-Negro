@@ -883,4 +883,49 @@ export const invariantes = [
     romper: (ctx) =>
       editando(ctx, 'app/fases/narracion.js', (t) => t.replace('tiempos: r.tiempos,', '')),
   },
+
+  {
+    nombre: 'al-redirigir-la-imagen-vieja-no-pasa-por-buena',
+    dice: 'Al volver a dirigir, la ficha de plano se sustituye pero `imagen: ok` sobrevivía. Quedaba una toma que dice tener imagen y cuya imagen es de otro plano: el documental sale con la foto equivocada y nada lo avisa.',
+    comprobar(ctx) {
+      const dir = fuente(ctx, 'app/fases/direccion.js');
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      if (!/huellaDeFicha/.test(dir)) {
+        fallos.push('No se compara la ficha nueva con la vieja: no se sabría si cambió.');
+      }
+      // La huella tiene que incluir lo que hace que la imagen sea de ESTA toma.
+      const i = dir.indexOf('const huellaDeFicha');
+      const huella = dir.slice(i, dir.indexOf(';', dir.indexOf('join', i)));
+      for (const campo of ['lugar', 'encuadre', 'luz', 'descripcion', 'sujetos']) {
+        if (!huella.includes(campo)) {
+          fallos.push(`La huella del plano no mira «${campo}»: un cambio ahí pasaría desapercibido.`);
+        }
+      }
+      // Y al cambiar, la imagen se marca ausente.
+      if (!/desfasada: true/.test(dir)) fallos.push('Una toma que cambió de plano no se marca.');
+      // Y el «cambió» tiene que salir DE COMPARAR, no de una constante: dejarlo en
+      // falso conserva toda la comprobación escrita y no comprueba nada.
+      if (!/const cambio = huellaDeFicha\(t\.plano\) !== huellaDeFicha\(plano\);/.test(dir)) {
+        fallos.push('El «cambió de plano» no sale de comparar las dos fichas.');
+      }
+      if (!/imagen: reusa !== null \|\| t\.heredado \? t\.imagen : null/.test(dir)) {
+        fallos.push('La imagen desfasada sigue contando como buena y saldría en el montaje.');
+      }
+      // Pero volver a dirigir SIN cambios no puede costar dinero.
+      if (!/: \{ desfasada: false \}/.test(dir)) {
+        fallos.push('Volver a dirigir invalidaría imágenes que no cambiaron: se pagarían dos veces.');
+      }
+      // Y se dice en pantalla, con el número, ANTES de gastar.
+      if (!/desfasada\)\.length/.test(main)) {
+        fallos.push('No se dice cuántas imágenes quedaron desfasadas: se descubriría pagando.');
+      }
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'app/fases/direccion.js', (t) =>
+        t.replace('const cambio = huellaDeFicha(t.plano) !== huellaDeFicha(plano);', 'const cambio = false;'),
+      ),
+  },
 ];

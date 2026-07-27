@@ -897,7 +897,10 @@ accion(
       'tomas',
       sin.length
         ? `${sin.length} de ${tomas.length} tomas se quedaron sin plano (${sin.slice(0, 8).join(', ')}…). Vuelve a dirigir: solo se rehacen esas.`
-        : `Dirigidas ${tomas.length} tomas. ${tomas.filter((x) => x.movimiento).length} llevan movimiento.`,
+        : `Dirigidas ${tomas.length} tomas. ${tomas.filter((x) => x.movimiento).length} llevan clip. ` +
+          (tomas.filter((x) => x.desfasada).length
+            ? `${tomas.filter((x) => x.desfasada).length} cambiaron de plano, así que su imagen anterior ya no vale y hay que rehacerla.`
+            : 'Ninguna imagen anterior queda desfasada.'),
       sin.length ? 'malo' : 'bueno',
     );
   },
