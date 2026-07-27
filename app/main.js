@@ -12,10 +12,10 @@
 // Los pasos que todavía no tocan salen apagados, para que no haya que adivinar cuál
 // es el siguiente.
 
-import { llamar, ponerClave, ponerModeloTexto } from './api.js';
+import { llamar, ponerClave, ponerModeloTexto, ponerModelos } from './api.js';
 import * as estado from './estado.js';
 import { Cola } from './cola.js';
-import { pintarSelectorModelo, mejorModeloTexto, etiquetaModelo } from './config.js';
+import { mejorModeloTexto, etiquetaModelo, ordenarFamilia, equilibradoDe } from './config.js';
 import { segmentarVerificado } from '../comun/segmentar.mjs';
 import { TEMAS, EPOCAS, EPOCA_POR_DEFECTO, temaPorId, epocaPorId } from '../comun/temas.mjs';
 import { ESTILOS, estiloPorId } from '../comun/estilos.mjs';
@@ -176,6 +176,7 @@ async function arrancar() {
     ? await estado.cargarLocal(locales.sort((a, b) => b.modificado - a.modificado)[0].id)
     : estado.nuevoProyecto();
   ponerModeloTexto(P.config.texto.modelo);
+  ponerModelos({ imagen: P.config.imagenModelo.modelo, video: P.config.videoModelo.modelo });
   await guardar();
   pintarTodo();
   cargarVoces();
@@ -219,6 +220,40 @@ async function cargarModelos() {
     $('modelo-en-uso').textContent =
       `Escribe con: ${P.config.texto.modelo || r.enUso?.texto || '—'}` +
       (r.porSondeo ? ` · ${ids.length} encontrados preguntando uno a uno` : '');
+
+    // Imagen y clips: la misma historia, pero sin elección propia se coge el
+    // EQUILIBRADO, no el mejor. Entre gamas de una misma versión hay mucha
+    // diferencia de precio, y el generador de imagen se llama ochenta veces por
+    // documental —el de clips, doce—, así que ahí el más caro no es el sensato.
+    for (const [familia, selector, guardado] of [
+      ['imagen', 'm-imagen', 'imagenModelo'],
+      ['video', 'm-video', 'videoModelo'],
+    ]) {
+      const lista = ordenarFamilia((r.disponibles?.[familia] || []).map((m) => m.id));
+      if (!lista.length) continue;
+
+      const cfg = P.config[guardado];
+      if (!cfg.aMano) {
+        const eq = equilibradoDe(lista.map((m) => m.id));
+        if (eq && cfg.modelo !== eq) {
+          cfg.modelo = eq;
+          await guardar();
+        }
+      }
+      const s = $(selector);
+      s.innerHTML = '';
+      for (const m of lista) {
+        const o = document.createElement('option');
+        o.value = m.id;
+        o.textContent = m.etiqueta;
+        if (m.id === cfg.modelo) o.selected = true;
+        s.appendChild(o);
+      }
+    }
+    // Que la elección entre en vigor sin recargar.
+    ponerModelos({ imagen: P.config.imagenModelo.modelo, video: P.config.videoModelo.modelo });
+    P.config.imagen.modelo = P.config.imagenModelo.modelo || P.config.imagen.modelo;
+    P.config.movimiento.modelo = P.config.videoModelo.modelo || P.config.movimiento.modelo;
   } catch (e) {
     $('modelo-en-uso').textContent = `No se pudo leer el catálogo: ${e.message}`;
   }
@@ -1457,10 +1492,10 @@ accion(
 
 function pintarAjustes() {
   pintarEstilos();
-  // §7.3: la función que repinta un control DEVUELVE el valor con el que se quedó, y
-  // quien la llama lo ESCRIBE. Si no, la pantalla dice una cosa y el estado otra.
-  P.config.imagen.modelo = pintarSelectorModelo($('m-imagen'), 'imagen', P.config.imagen.modelo);
-  P.config.movimiento.modelo = pintarSelectorModelo($('m-video'), 'video', P.config.movimiento.modelo);
+  // Los selectores de imagen y clips los llena `cargarModelos` con lo que el
+  // proyecto tiene de verdad; aquí solo se refleja lo guardado.
+  P.config.imagen.modelo = P.config.imagenModelo.modelo || P.config.imagen.modelo;
+  P.config.movimiento.modelo = P.config.videoModelo.modelo || P.config.movimiento.modelo;
 
   const pon = (id, v, txt) => {
     $(id).value = v;
@@ -1491,8 +1526,14 @@ $('expresivas').addEventListener('change', async (e) => {
 accion(
   'b-ajustes',
   async () => {
-    P.config.imagen.modelo = $('m-imagen').value;
-    P.config.movimiento.modelo = $('m-video').value;
+    for (const [selector, guardado] of [['m-imagen', 'imagenModelo'], ['m-video', 'videoModelo']]) {
+      const v = $(selector).value;
+      if (v && v !== P.config[guardado].modelo) P.config[guardado].aMano = true;
+      if (v) P.config[guardado].modelo = v;
+    }
+    // Los campos viejos siguen alimentando a las fases hasta que todas lean el nuevo.
+    P.config.imagen.modelo = P.config.imagenModelo.modelo || P.config.imagen.modelo;
+    P.config.movimiento.modelo = P.config.videoModelo.modelo || P.config.movimiento.modelo;
     P.config.movimiento.proporcion = Number($('proporcion').value) / 100;
     P.config.segmentacion.segundosObjetivo = Number($('objetivo').value);
     P.config.narracion.velocidad = Number($('velocidad').value) / 100;
@@ -1513,6 +1554,7 @@ accion(
     // aquí y no dentro de una fase a medio generar.
     P = estado.sanear(P);
     ponerModeloTexto(P.config.texto.modelo);
+    ponerModelos({ imagen: P.config.imagenModelo.modelo, video: P.config.videoModelo.modelo });
     await guardar();
     pintarAjustes();
     cargarModelos();

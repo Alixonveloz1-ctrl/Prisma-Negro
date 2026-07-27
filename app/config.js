@@ -17,40 +17,15 @@
 import { PREDETERMINADO as SEGMENTACION } from '../comun/segmentar.mjs';
 import { ESTILOS, ESTILO_POR_DEFECTO } from '../comun/estilos.mjs';
 
-/**
- * Catálogo de modelos.
- *
- * Los retirados no se borran de la lista: se marcan, y el normalizador los
- * sustituye por su relevo. Si se borraran, un proyecto viejo cargaría con un valor
- * que no está en el desplegable y se quedaría en blanco.
- */
-export const MODELOS = {
-  texto: [
-    { id: 'gemini-2.5-pro', etiqueta: 'Texto — cuidadoso (guion, dirección)' },
-    { id: 'gemini-2.5-flash', etiqueta: 'Texto — rápido y barato' },
-    { id: 'gemini-1.5-pro', etiqueta: 'Texto — anterior', retirado: 'gemini-2.5-pro' },
-  ],
-  imagen: [
-    // §4.6: el modelo tiene que aceptar imágenes de referencia para que los sujetos
-    // y los lugares se parezcan entre tomas. No todos lo hacen, y la etiqueta lo
-    // dice en castellano llano: «acepta referencias» no significa nada para quien no
-    // haya leído el plano.
-    {
-      id: 'gemini-2.5-flash-image',
-      etiqueta: 'Mantiene el parecido entre tomas (recomendado)',
-      referencias: true,
-    },
-    {
-      id: 'imagen-4.0-generate-001',
-      etiqueta: 'Más detalle, pero cada toma sale distinta',
-      referencias: false,
-    },
-  ],
-  video: [
-    { id: 'veo-3.1-generate-preview', etiqueta: 'Clips de video — actual' },
-    { id: 'veo-3.0-generate-001', etiqueta: 'Clips de video — anterior', retirado: 'veo-3.1-generate-preview' },
-  ],
-};
+// Ya no hay catálogo de modelos escrito a mano.
+//
+// Lo hubo, y fue el fallo: la lista decía lo que yo creía el día que la escribí,
+// así que el director se quedó dos generaciones atrás sin que nadie lo notara y los
+// generadores de imagen y video ofrecían dos opciones con nombres que no decían ni
+// qué hacían ni cuánto costaban.
+//
+// Ahora se le pregunta al proyecto qué tiene —`modelos.catalogo`— y se ordena por
+// versión y por gama con `ordenarFamilia`, que está al final de este archivo.
 
 export const PREDETERMINADA = {
   version: 3,
@@ -62,6 +37,12 @@ export const PREDETERMINADA = {
     // El PRD pide 16:9 y 9:16. El vertical se monta desde la misma hoja.
     vertical: false,
   },
+
+  // Un modelo por familia, elegido de los que el proyecto TIENE de verdad. Vacío =
+  // lo elige la herramienta.
+  imagenModelo: { modelo: '', aMano: false },
+  videoModelo: { modelo: '', aMano: false },
+  vozModelo: { modelo: '', aMano: false },
 
   texto: {
     // El modelo que se está usando. Se elige de los que el proyecto TIENE de verdad.
@@ -101,7 +82,8 @@ export const PREDETERMINADA = {
   },
 
   imagen: {
-    modelo: 'gemini-2.5-flash-image',
+    // Vacío: lo pone el sondeo al proyecto. Escrito a mano envejece solo.
+    modelo: '',
     // §6: toda imagen que se envía se reduce antes. Las referencias, a ~1024 px de
     // lado: el codificador visual de los modelos trabaja por ahí y lo que sobra lo
     // tira él. Nunca hagas una excepción «porque este caso es especial»: esa
@@ -120,7 +102,8 @@ export const PREDETERMINADA = {
   },
 
   movimiento: {
-    modelo: 'veo-3.1-generate-preview',
+    // Vacío: lo pone el sondeo al proyecto.
+    modelo: '',
     // §4.7: es la fase MÁS CARA CON DIFERENCIA. La palanca principal del
     // presupuesto es qué proporción de tomas lleva movimiento.
     // §8.5: en documental, esa proporción baja.
@@ -174,13 +157,15 @@ function mezclar(base, encima) {
 export function normalizar(cruda) {
   const c = mezclar(PREDETERMINADA, cruda || {});
 
-  c.imagen.modelo = vigente('imagen', c.imagen.modelo);
-  c.movimiento.modelo = vigente('video', c.movimiento.modelo);
+  // Los de imagen y video vienen del sondeo, así que no se corrigen contra una
+  // lista: se respeta lo elegido y ya.
+  c.imagen.modelo = c.imagenModelo?.modelo || c.imagen.modelo;
+  c.movimiento.modelo = c.videoModelo?.modelo || c.movimiento.modelo;
 
   // Un modelo de imagen que no acepta referencias no puede sostener la coherencia
   // entre tomas (§4.6). Se avisa aquí, y la fase de imagen lo tiene en cuenta.
-  const fichaImg = MODELOS.imagen.find((m) => m.id === c.imagen.modelo);
-  c.imagen.aceptaReferencias = !!fichaImg?.referencias;
+  // Los modelos «...-image» de Gemini aceptan referencias; los «imagen-...» no.
+  c.imagen.aceptaReferencias = /gemini.*image/i.test(c.imagen.modelo || '');
 
   c.formato.ancho = entero(c.formato.ancho, 640, 3840, 1920);
   c.formato.alto = entero(c.formato.alto, 360, 2160, 1080);
@@ -224,14 +209,6 @@ export function normalizar(cruda) {
   return c;
 }
 
-/** Sustituye un modelo retirado por su relevo. Devuelve siempre un id vigente. */
-export function vigente(familia, id) {
-  const lista = MODELOS[familia] || [];
-  const ficha = lista.find((m) => m.id === id);
-  if (!ficha) return lista.find((m) => !m.retirado)?.id || id;
-  return ficha.retirado ? vigente(familia, ficha.retirado) : ficha.id;
-}
-
 function numero(v, min, max, porDefecto) {
   const n = Number(v);
   if (!Number.isFinite(n)) return porDefecto;
@@ -243,50 +220,35 @@ function entero(v, min, max, porDefecto) {
 }
 
 /**
- * Repinta un desplegable de modelos (§7.3).
+ * §7.3 sigue vivo aunque el selector de modelos ya no lo use: la función que repinta
+ * un control DEVUELVE el valor con el que se quedó, y quien la llama lo ESCRIBE.
+ * Un modelo retirado se corregía en el selector y el objeto de configuración
+ * conservaba el valor viejo — la pantalla decía una cosa y el estado otra.
  *
- * El error: un modelo retirado se corregía visualmente en el selector, pero el
- * objeto de configuración conservaba el valor viejo. La pantalla decía una cosa y
- * el estado otra.
- *
- * La lección: la función que repinta un control DEVUELVE el valor con el que se
- * quedó, y quien la llama lo ESCRIBE. Esta función no puede escribir en la config
- * ella sola —no la conoce— así que devolver es la única salida.
+ * Quien pinte un desplegable de estos tiene que seguir haciéndolo así.
  */
-export function pintarSelectorModelo(select, familia, idActual) {
-  const elegido = vigente(familia, idActual);
+export function pintarSelector(select, opciones, idActual) {
+  const elegido = opciones.some((o) => o.id === idActual) ? idActual : opciones[0]?.id || '';
   select.innerHTML = '';
-  for (const m of MODELOS[familia] || []) {
-    if (m.retirado) continue;
-    const o = document.createElement('option');
-    o.value = m.id;
-    o.textContent = m.etiqueta;
-    if (m.id === elegido) o.selected = true;
-    select.appendChild(o);
+  for (const o of opciones) {
+    const el = document.createElement('option');
+    el.value = o.id;
+    el.textContent = o.etiqueta;
+    if (o.id === elegido) el.selected = true;
+    select.appendChild(el);
   }
-  // Quien llama DEBE escribir esto en la configuración. Si no lo hace, vuelve el
-  // §7.3 exactamente igual que la primera vez.
+  // Quien llama DEBE escribir esto en la configuración.
   return elegido;
 }
 
-// ── Elegir el mejor modelo de texto ───────────────────────────────────────────
-//
-// «El director» es el modelo que lee el guion y decide: es donde más se nota la
-// calidad y donde menos hay que ahorrar. Fijar un identificador a mano envejece —el
-// que estaba puesto se quedó dos generaciones atrás sin que nadie lo notara—, así
-// que el mejor se elige AUTOMÁTICAMENTE de lo que el proyecto tiene de verdad.
-//
-// Se ordena por versión primero y por gama después: un Pro de la generación anterior
-// pierde contra un Pro de la nueva, y un Flash pierde contra un Pro de su misma
-// generación.
+// ── El mejor modelo de texto ──────────────────────────────────────────────────
 
 export function puntuarModelo(id) {
   const m = /gemini-(\d+)(?:[.-](\d+))?/i.exec(id || '');
   if (!m) return 0;
   const version = Number(m[1]) * 100 + Number(m[2] || 0);
   const gama = /flash-?lite/i.test(id) ? 1 : /flash/i.test(id) ? 2 : /pro/i.test(id) ? 3 : 0;
-  // Lo experimental empata con su versión pero pierde el desempate: si hay una
-  // estable de la misma generación, se prefiere la estable.
+  // Lo experimental empata con su versión pero pierde el desempate.
   const estable = /preview|exp/i.test(id) ? 0 : 1;
   return version * 100 + gama * 10 + estable;
 }
@@ -296,10 +258,7 @@ export function mejorModeloTexto(ids) {
   return [...(ids || [])].sort((a, b) => puntuarModelo(b) - puntuarModelo(a))[0] || '';
 }
 
-/**
- * La etiqueta que sale en el desplegable.
- * El mejor se marca, y el barato también: son las dos decisiones que se toman ahí.
- */
+/** La etiqueta del desplegable de texto. */
 export function etiquetaModelo(id, mejor) {
   const bonito = String(id)
     .replace(/^gemini-/, 'Gemini ')
@@ -309,4 +268,57 @@ export function etiquetaModelo(id, mejor) {
   if (/flash-?lite/i.test(id)) return `${bonito} — el más barato`;
   if (/flash/i.test(id)) return `${bonito} — rápido y barato`;
   return bonito;
+}
+
+// ── Gama de un modelo ─────────────────────────────────────────────────────────
+//
+// Entre los generadores de imagen y de video de una misma versión hay mucha
+// diferencia de precio, y el identificador no lo dice: «veo-3.1-lite-generate-001»
+// y «veo-3.1-generate-001» se parecen y cuestan cosas muy distintas. La etiqueta
+// tiene que decirlo, porque es la decisión que se toma en ese desplegable.
+
+export function gamaDe(id) {
+  const s = String(id).toLowerCase();
+  if (/-lite/.test(s)) return { nivel: 1, etiqueta: 'el más económico' };
+  if (/-fast/.test(s)) return { nivel: 2, etiqueta: 'equilibrado' };
+  if (/-ultra|-pro/.test(s)) return { nivel: 4, etiqueta: 'máxima calidad' };
+  if (/-flash/.test(s)) return { nivel: 2, etiqueta: 'rápido y barato' };
+  return { nivel: 3, etiqueta: 'calidad alta' };
+}
+
+export function versionDe(id) {
+  const m = /(\d+)(?:[.-](\d+))?/.exec(String(id).replace(/^[a-z-]+/i, '')) ;
+  return m ? Number(m[1]) * 100 + Number(m[2] || 0) : 0;
+}
+
+/**
+ * Ordena una familia: primero la versión, después la gama.
+ * Y etiqueta marcando la generación anterior, que es lo que uno quiere evitar sin
+ * darse cuenta.
+ */
+export function ordenarFamilia(ids) {
+  const maxVersion = Math.max(0, ...ids.map(versionDe));
+  // La gama más alta DENTRO de la versión más nueva es «máxima calidad», se llame
+  // «pro» o no lleve sufijo: en Veo la cara es la que no lleva apellido.
+  const topeGama = Math.max(0, ...ids.filter((i) => versionDe(i) === maxVersion).map((i) => gamaDe(i).nivel));
+  return [...ids]
+    .sort((a, b) => versionDe(b) - versionDe(a) || gamaDe(b).nivel - gamaDe(a).nivel)
+    .map((id) => {
+      const g = gamaDe(id);
+      const viejo = versionDe(id) < maxVersion;
+      if (!viejo && g.nivel === topeGama && topeGama >= 3) g.etiqueta = 'máxima calidad';
+      const bonito = id
+        .replace(/^veo-/, 'Veo ')
+        .replace(/^gemini-/, 'Gemini ')
+        .replace(/^imagen-/, 'Imagen ')
+        .replace(/-generate.*$|-preview$/i, '')
+        .replace(/-(lite|fast|pro|ultra|flash|image|tts)/gi, (_, w) => ' ' + w.replace(/^./, (c) => c.toUpperCase()));
+      return { id, etiqueta: `${bonito} — ${viejo ? 'generación anterior' : g.etiqueta}`, viejo, gama: g.nivel };
+    });
+}
+
+/** El equilibrado de una familia: la gama media de la versión más nueva. */
+export function equilibradoDe(ids) {
+  const nuevos = ordenarFamilia(ids).filter((m) => !m.viejo);
+  return (nuevos.find((m) => m.gama === 2) || nuevos[Math.floor(nuevos.length / 2)] || nuevos[0])?.id || '';
 }

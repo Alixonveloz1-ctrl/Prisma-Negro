@@ -274,45 +274,77 @@ export const invariantes = [
     dice: 'La función que repinta un control devuelve el valor con el que se quedó, para que quien la llama lo escriba en el estado (§7.3).',
     comprobar(ctx) {
       const t = fuente(ctx, 'app/config.js');
-      const i = t.indexOf('export function pintarSelectorModelo');
-      if (i < 0) return ['No existe pintarSelectorModelo.'];
+      const i = t.indexOf('export function pintarSelector');
+      if (i < 0) return ['No existe la función que repinta un selector.'];
       const cuerpo = t.slice(i, t.indexOf('\n}', i));
       return /return elegido;/.test(cuerpo)
         ? []
         : ['pintarSelectorModelo no devuelve el valor elegido: vuelve el §7.3.'];
     },
     romper: (ctx) =>
-      editando(ctx, 'app/config.js', (t) => t.replace('  return elegido;\n}', '}')),
+      editando(ctx, 'app/config.js', (t) => t.replace('  // Quien llama DEBE escribir esto en la configuración.\n  return elegido;\n}', '}')),
   },
 
   {
-    nombre: 'los-modelos-retirados-tienen-relevo',
-    dice: 'Un modelo retirado no se borra del catálogo: se marca y se sustituye. Si se borrara, un proyecto viejo cargaría un valor que no está en el desplegable.',
-    comprobar(ctx) {
+    nombre: 'ningun-modelo-escrito-a-mano',
+    dice: 'Ninguna familia de modelos se lista a mano. Una lista escrita dice lo que se creía el día que se escribió: dejó al director dos generaciones atrás y ofrecía dos generadores de imagen sin decir qué hacían ni cuánto costaban.',
+    async comprobar(ctx) {
+      const cfg = fuente(ctx, 'app/config.js');
       const fallos = [];
-      for (const [familia, lista] of Object.entries(ctx.modelos)) {
-        for (const m of lista) {
-          if (!m.retirado) continue;
-          if (!lista.some((x) => x.id === m.retirado)) {
-            fallos.push(`${familia}: ${m.id} apunta a un relevo que no existe (${m.retirado}).`);
-          }
-          if (lista.find((x) => x.id === m.retirado)?.retirado) {
-            fallos.push(`${familia}: ${m.id} se releva por otro modelo retirado.`);
-          }
-        }
-        if (!lista.some((m) => !m.retirado)) {
-          fallos.push(`${familia}: no queda ni un modelo vigente al que caer.`);
+
+      // Ni catálogo, ni valores por defecto de modelo escritos en la configuración.
+      if (/export const MODELOS\s*=/.test(cfg)) {
+        fallos.push('Vuelve a haber un catálogo de modelos escrito a mano en la configuración.');
+      }
+      for (const m of cfg.matchAll(/modelo:\s*'([a-z][\w.-]{6,})'/gi)) {
+        fallos.push(`La configuración fija el modelo «${m[1]}» a mano: envejece solo.`);
+      }
+
+      // Y el sondeo tiene que cubrir las cuatro familias que se eligen.
+      const prov = fuente(ctx, 'api/_lib/proveedor.js');
+      for (const f of ['texto', 'imagen', 'video', 'voz']) {
+        if (!new RegExp(`\\b${f}:\\s*\\[`).test(prov)) {
+          fallos.push(`El sondeo de modelos no tiene candidatos de «${f}».`);
         }
       }
       return fallos;
     },
-    romper: (ctx) => ({
-      ...ctx,
-      modelos: { ...ctx.modelos, imagen: [{ id: 'viejo', retirado: 'uno-que-no-existe' }] },
-    }),
+    romper: (ctx) =>
+      editando(ctx, 'app/config.js', (t) => t.replace('imagenModelo: { modelo:', "imagenModelo: { modelo: 'gemini-2.5-flash-image'")),
   },
 
-  // ── §7.12: ninguna escritura se ignora ────────────────────────────────────
+  {
+    nombre: 'el-sondeo-de-modelos-no-genera-nada',
+    dice: 'Preguntar qué modelos hay no puede costar dinero. Una imagen de prueba por candidato se pagaría cada vez que alguien abre los ajustes, y un video mucho más.',
+    comprobar(ctx) {
+      const prov = fuente(ctx, 'api/_lib/proveedor.js');
+      const i = prov.indexOf('async function probarCandidatos');
+      if (i < 0) return ['No existe el sondeo de modelos.'];
+      const cuerpo = prov.slice(i, prov.indexOf('\n}', i));
+      const fallos = [];
+
+      // El cuerpo de la petición tiene que ser inválido a propósito.
+      if (!/contents: \[\]|instances: \[\]/.test(cuerpo)) {
+        fallos.push('El sondeo manda una petición que podría generar de verdad.');
+      }
+      if (/parts: \[\{ text/.test(cuerpo)) {
+        fallos.push('El sondeo manda contenido real: eso genera y se paga.');
+      }
+      // Y tiene que distinguir «no existe» de «existe pero la petición está mal».
+      if (!/404/.test(cuerpo)) {
+        fallos.push('El sondeo no distingue el 404 del resto: no sabe si el modelo existe.');
+      }
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'api/_lib/proveedor.js', (t) =>
+        t.replace(
+          "const cuerpo = ruta === 'generateContent' ? { contents: [] } : { instances: [] };",
+          "const cuerpo = { contents: [{ role: 'user', parts: [{ text: 'ok' }] }] };",
+        ),
+      ),
+  },
+
   {
     nombre: 'ninguna-escritura-se-ignora',
     dice: 'Ningún valor de retorno de una escritura se ignora: las imágenes «se generaban» pero no estaban en ningún sitio (§7.12).',

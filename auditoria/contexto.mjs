@@ -97,7 +97,7 @@ export async function construirContexto() {
   const { construirHoja, guionFfmpeg, clavesDeLaHoja, componerManifiesto } = await import(
     '../comun/hoja.mjs'
   );
-  const { PREDETERMINADA, MODELOS } = await import('../app/config.js');
+  const { PREDETERMINADA } = await import('../app/config.js');
   const { NOMBRES } = await import('../api/_lib/entorno.js');
   const p = proyectoDePrueba();
   const hoja = construirHoja({ pieza: p.id, tomas: p.tomas, escenas: p.escenas });
@@ -115,7 +115,6 @@ export async function construirContexto() {
     // romper a propósito, que es la regla de oro del §9: una comprobación que nunca
     // ha fallado no está comprobando nada.
     config: structuredClone(PREDETERMINADA),
-    modelos: structuredClone(MODELOS),
     // La tabla de alias de variables de entorno. Entra por el contexto para que se
     // pueda sabotear: desde que la configuración se lee por tabla en vez de con
     // `process.env.X` literales, comprobar solo los literales no comprobaba nada.

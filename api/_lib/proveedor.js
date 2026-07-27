@@ -171,8 +171,8 @@ function extraerJson(texto) {
 
 const TOPE_REFERENCIA_BYTES = 1.2 * 1024 * 1024;
 
-export async function imagen({ instruccion, referencias = [], aspecto = '16:9' }) {
-  const modelo = process.env.MODELO_IMAGEN || 'gemini-2.5-flash-image';
+export async function imagen({ instruccion, referencias = [], aspecto = '16:9', modelo: pedido = '' }) {
+  const modelo = pedido || process.env.MODELO_IMAGEN || 'gemini-2.5-flash-image';
 
   for (const [i, ref] of referencias.entries()) {
     const bytes = Buffer.byteLength(ref.datos || '', 'base64');
@@ -224,8 +224,8 @@ export function duracionMasCercana(segundos) {
   );
 }
 
-export async function videoIniciar({ instruccion, fotograma, segundos = 6, aspecto = '16:9' }) {
-  const modelo = process.env.MODELO_VIDEO || 'veo-3.1-generate-preview';
+export async function videoIniciar({ instruccion, fotograma, segundos = 6, aspecto = '16:9', modelo: pedido = '' }) {
+  const modelo = pedido || process.env.MODELO_VIDEO || 'veo-3.1-generate-preview';
   const duracion = duracionMasCercana(segundos);
 
   const instancia = { prompt: instruccion };
@@ -540,13 +540,33 @@ function urlsDelCatalogo() {
 //
 // Que sobre un candidato no cuesta nada: un modelo que no existe contesta 404 al
 // instante. Que falte, sí cuesta. Así que la lista peca de larga a propósito.
-const CANDIDATOS_TEXTO = [
-  'gemini-3.1-pro', 'gemini-3.1-flash',
-  'gemini-3-pro', 'gemini-3-flash',
-  'gemini-3.0-pro', 'gemini-3.0-flash',
-  'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite',
-  'gemini-2.0-flash', 'gemini-2.0-flash-lite',
-];
+const CANDIDATOS = {
+  texto: [
+    'gemini-3.1-pro', 'gemini-3.1-flash',
+    'gemini-3-pro', 'gemini-3-flash',
+    'gemini-3.0-pro', 'gemini-3.0-flash',
+    'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite',
+    'gemini-2.0-flash', 'gemini-2.0-flash-lite',
+  ],
+  imagen: [
+    'gemini-3-pro-image-preview', 'gemini-3-pro-image',
+    'gemini-3-flash-image-preview', 'gemini-3-flash-image',
+    'gemini-2.5-flash-image', 'gemini-2.0-flash-preview-image-generation',
+    'imagen-4.0-ultra-generate-001', 'imagen-4.0-generate-001', 'imagen-4.0-fast-generate-001',
+    'imagen-3.0-generate-002',
+  ],
+  video: [
+    'veo-3.1-generate-preview', 'veo-3.1-fast-generate-preview', 'veo-3.1-lite-generate-preview',
+    'veo-3.1-generate-001', 'veo-3.1-fast-generate-001', 'veo-3.1-lite-generate-001',
+    'veo-3.0-generate-001', 'veo-3.0-fast-generate-001',
+    'veo-2.0-generate-001',
+  ],
+  voz: [
+    'gemini-3.1-flash-tts-preview', 'gemini-3-flash-tts-preview', 'gemini-3-flash-tts',
+    'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts',
+  ],
+  musica: ['lyria-002', 'lyria-realtime-exp'],
+};
 
 export async function modelosDisponibles() {
   const token = await tokenDeAcceso();
@@ -573,9 +593,11 @@ export async function modelosDisponibles() {
 
   // El listado no contesta. Se pregunta a los modelos uno a uno: es más lento pero
   // es la verdad, no una suposición.
-  const vivos = await probarCandidatos(token);
+  const familias = await Promise.all(
+    ['texto', 'imagen', 'video', 'voz', 'musica'].map(async (f) => [f, await probarCandidatos(token, f)]),
+  );
   return {
-    ...clasificar(vivos),
+    ...clasificar(familias.flatMap(([, ids]) => ids)),
     porSondeo: true,
     // Qué se intentó, para que el fallo se pueda arreglar en vez de solo verse.
     intentos,
@@ -583,36 +605,49 @@ export async function modelosDisponibles() {
 }
 
 /**
- * Pregunta a cada candidato si existe, con la petición más pequeña posible.
+ * Pregunta a cada candidato si existe, SIN GENERAR NADA.
  *
- * Un modelo que no está devuelve 404 al instante, así que sobrar candidatos no
- * cuesta. Todas van a la vez: en serie serían diez segundos y esto corre dentro de
- * una función con sesenta.
+ * Esto es lo importante: una imagen de prueba por candidato costaría dinero cada vez
+ * que alguien abre los ajustes, y un video de prueba costaría mucho. Así que se manda
+ * una petición deliberadamente INVÁLIDA y se mira el error:
+ *
+ *   404 / 403  → el modelo no existe o no lo tienes
+ *   400        → el modelo EXISTE y ha rechazado la petición por inválida
+ *   200 / 429  → existe
+ *
+ * Distinguir «no está» de «está pero le mandaste basura» es toda la prueba, y no
+ * cuesta un céntimo.
+ *
+ * Todas van a la vez: en serie serían treinta segundos y esto corre dentro de una
+ * función con sesenta.
  */
-async function probarCandidatos(token) {
+async function probarCandidatos(token, familia) {
+  // Cuerpos vacíos a propósito: válidos como JSON, inválidos como petición.
+  const ruta = familia === 'video' ? 'predictLongRunning' : familia === 'musica' ? 'predict' : 'generateContent';
+  const cuerpo = ruta === 'generateContent' ? { contents: [] } : { instances: [] };
+
   const uno = async (id) => {
     try {
-      const r = await fetch(`${base()}/${id}:generateContent`, {
+      const r = await fetch(`${base()}/${id}:${ruta}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: 'ok' }] }],
-          generationConfig: { maxOutputTokens: 1, temperature: 0 },
-        }),
+        body: JSON.stringify(cuerpo),
       });
-      // 200 es que existe y responde. 429 es que existe y está saturado —también
-      // cuenta—. 404 y 403 son que no lo tienes.
-      return r.ok || r.status === 429 ? id : null;
+      if (r.status === 404 || r.status === 403) return null;
+      // Cualquier otra cosa —incluido el 400 por petición inválida— significa que el
+      // modelo está ahí.
+      return id;
     } catch {
       return null;
     }
   };
-  return (await Promise.all(CANDIDATOS_TEXTO.map(uno))).filter(Boolean);
+  return (await Promise.all((CANDIDATOS[familia] || []).map(uno))).filter(Boolean);
 }
 
 function clasificar(ids) {
   const familia = (n) =>
     /veo/i.test(n) ? 'video'
+      : /-tts/i.test(n) ? 'voz'
       : /image|imagen/i.test(n) ? 'imagen'
       : /lyria|music/i.test(n) ? 'musica'
       : /gemini/i.test(n) ? 'texto'

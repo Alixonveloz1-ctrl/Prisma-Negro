@@ -117,6 +117,7 @@ async function despachar(modo, c) {
         instruccion: exigir(c, 'instruccion'),
         referencias: c.referencias || [],
         aspecto: c.aspecto,
+        modelo: c.modelo,
       });
       // Se sube en el mismo viaje: así el navegador nunca es dueño del original
       // (§1: el almacén es la única fuente de verdad) y no hay una imagen que
@@ -134,6 +135,7 @@ async function despachar(modo, c) {
         fotograma: c.fotograma,
         segundos: c.segundos,
         aspecto: c.aspecto,
+        modelo: c.modelo,
       });
 
     case 'video.consultar': {

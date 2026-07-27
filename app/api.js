@@ -11,7 +11,7 @@
 const PUERTA = '/api/ia';
 
 let claveAcceso = '';
-let modeloTexto = '';
+const modelos = { texto: '', imagen: '', video: '' };
 
 export function ponerClave(c) {
   claveAcceso = String(c || '');
@@ -25,8 +25,16 @@ export function ponerClave(c) {
  * modelo sin que nadie lo supiera.
  */
 export function ponerModeloTexto(m) {
-  modeloTexto = String(m || '');
+  modelos.texto = String(m || '');
 }
+
+/** Los modelos de imagen y de clips, por la misma razón que el de texto. */
+export function ponerModelos({ imagen, video }) {
+  if (imagen !== undefined) modelos.imagen = String(imagen || '');
+  if (video !== undefined) modelos.video = String(video || '');
+}
+
+const MODO_A_FAMILIA = { texto: 'texto', imagen: 'imagen', 'video.iniciar': 'video' };
 
 export function hayClave() {
   return !!claveAcceso;
@@ -68,7 +76,7 @@ export async function llamar(modo, datos = {}, { reintentos = 2, senal } = {}) {
         // que es exactamente el mensaje que menos ayuda a encontrarlo.
         body: JSON.stringify({
           modo,
-          ...(modo === 'texto' && modeloTexto ? { modelo: modeloTexto } : {}),
+          ...(modelos[MODO_A_FAMILIA[modo]] ? { modelo: modelos[MODO_A_FAMILIA[modo]] } : {}),
           ...datos,
           // Va la ÚLTIMA a propósito: ningún campo de carga útil puede pisarla.
           acceso: claveAcceso,
