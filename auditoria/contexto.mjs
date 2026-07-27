@@ -136,7 +136,9 @@ async function funcionesPuras() {
   const seg = await import('../comun/segmentar.mjs');
   const cla = await import('../comun/claves.mjs');
   const hoj = await import('../comun/hoja.mjs');
+  const cfg = await import('../app/config.js');
   return {
+    normalizar: cfg.normalizar,
     segmentar: seg.segmentar,
     verificarCobertura: seg.verificarCobertura,
     tomaDelFotograma: cla.tomaDelFotograma,

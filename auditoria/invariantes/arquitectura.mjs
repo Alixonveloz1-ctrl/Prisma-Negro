@@ -8,7 +8,7 @@
 // comprobando nada (§9) — en el proyecto de origen una de ellas medía el bloque de
 // código equivocado durante semanas y siempre pasaba.
 
-import { editando, conFuente, conConfig, conCatalogo } from '../contexto.mjs';
+import { editando, conFuente, conConfig, conCatalogo, conFuncion } from '../contexto.mjs';
 
 const fuente = (ctx, ruta) => ctx.fuentes.get(ruta) || '';
 const archivosDe = (ctx, prefijo) =>
@@ -570,6 +570,67 @@ export const invariantes = [
     },
     romper: (ctx) =>
       editando(ctx, 'api/_lib/salud.js', (t) => t.replace(/generateContent/g, 'noSeLlamaAsi')),
+  },
+
+  {
+    nombre: 'una-eleccion-automatica-vieja-no-clava-el-modelo',
+    dice: 'Una elección que hizo la herramienta —no la persona— no puede sobrevivir a un catálogo nuevo. El director se quedó clavado en Gemini 2.5 Pro con el 3.1 Pro ya en la lista: §7.2, el arreglo tapado por un valor guardado.',
+    async comprobar(ctx) {
+      // `normalizar` entra por el contexto para poder sustituirla por una averiada:
+      // importándola aquí, el sabotaje no la tocaba y la invariante salía ciega.
+      const { normalizar } = ctx.fn;
+      const { PREDETERMINADO } = await import('../../comun/modelos.mjs');
+      const fallos = [];
+
+      // Lo que había guardado de verdad antes del catálogo.
+      const viejo = normalizar({
+        texto: { modelo: 'gemini-2.5-pro', aMano: false },
+        imagenModelo: { modelo: 'gemini-2.5-flash-image', aMano: false },
+        videoModelo: { modelo: 'veo-3.1-fast-generate-preview', aMano: false },
+      });
+      for (const [campo, familia] of [
+        ['texto', 'texto'],
+        ['imagenModelo', 'imagen'],
+        ['videoModelo', 'video'],
+      ]) {
+        if (viejo[campo].modelo !== PREDETERMINADO[familia]) {
+          fallos.push(
+            `Una elección automática vieja de «${familia}» sobrevive: queda ${viejo[campo].modelo}.`,
+          );
+        }
+      }
+
+      // Pero una elección DE LA PERSONA se respeta, aunque sea vieja y aunque
+      // estuviera guardada como identificador de Vertex.
+      const suyo = normalizar({
+        texto: { modelo: 'gemini-2.5-pro', aMano: true },
+        imagenModelo: { modelo: 'gemini-3-pro-image-preview', aMano: true },
+      });
+      if (suyo.texto.modelo !== 'gemini-2.5-pro') {
+        fallos.push('Una elección hecha a mano se pierde al actualizar.');
+      }
+      if (suyo.imagenModelo.modelo !== 'nano-banana-pro') {
+        fallos.push(
+          `Una elección guardada como identificador de Vertex no se traduce: queda ${suyo.imagenModelo.modelo}.`,
+        );
+      }
+
+      // Y las referencias de imagen se miran contra las grafías, no contra la
+      // clave: si se miran contra la clave, se apagan solas y con ellas la
+      // coherencia de personas y lugares entre tomas (§4.6).
+      if (!viejo.imagen.aceptaReferencias) {
+        fallos.push('Con un Nano Banana elegido, la imagen dice que no acepta referencias.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba roto: sin mirar `aMano`, la elección automática vieja
+    // sobrevive y tapa el catálogo nuevo.
+    romper: (ctx) =>
+      conFuncion(ctx, 'normalizar', (cruda) => {
+        const c = ctx.fn.normalizar(cruda);
+        if (cruda?.texto?.modelo) c.texto = { modelo: cruda.texto.modelo };
+        return c;
+      }),
   },
 
   {

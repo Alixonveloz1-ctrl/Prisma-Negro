@@ -40,15 +40,19 @@ export const CATALOGO = {
       etiqueta: 'Gemini 3.1 Pro — el mejor director',
       ids: ['gemini-3.1-pro', 'gemini-3.1-pro-preview'],
     },
+    // Más nuevo que el anterior, pero de reparto limitado: hay cuentas que aún no
+    // lo tienen. Por eso está en la lista y NO es el predeterminado —un
+    // predeterminado que no existe en tu proyecto rompe el guion en la primera
+    // llamada, y eso no se arregla eligiendo bien: no llegas a elegir.
     {
-      clave: 'gemini-3.1-flash',
-      etiqueta: 'Gemini 3.1 Flash — rápido y barato',
-      ids: ['gemini-3.1-flash', 'gemini-3.1-flash-preview'],
+      clave: 'gemini-3.5-pro',
+      etiqueta: 'Gemini 3.5 Pro — el más nuevo',
+      ids: ['gemini-3.5-pro', 'gemini-3.5-pro-preview'],
     },
     {
-      clave: 'gemini-3-pro',
-      etiqueta: 'Gemini 3 Pro — generación anterior',
-      ids: ['gemini-3-pro', 'gemini-3-pro-preview'],
+      clave: 'gemini-3.6-flash',
+      etiqueta: 'Gemini 3.6 Flash — rápido y barato',
+      ids: ['gemini-3.6-flash', 'gemini-3.6-flash-preview'],
     },
     {
       clave: 'gemini-2.5-pro',
@@ -159,4 +163,17 @@ export function grafiasDe(familia, clave) {
 export function etiquetaDe(familia, clave) {
   const f = familiaDe(familia).find((x) => x.clave === clave || x.ids.includes(clave));
   return f ? f.etiqueta : clave || '';
+}
+
+/**
+ * La clave del catálogo a la que pertenece un valor guardado, o '' si no es de aquí.
+ *
+ * Sirve para traducir una configuración vieja: se guardaban identificadores de
+ * Vertex («veo-3.1-fast-generate-preview») y ahora se guarda la clave. Sin esto,
+ * una elección hecha a conciencia se perdería en silencio al actualizar.
+ */
+export function claveDe(familia, valor) {
+  if (!valor) return '';
+  const f = familiaDe(familia).find((x) => x.clave === valor || x.ids.includes(valor));
+  return f ? f.clave : '';
 }

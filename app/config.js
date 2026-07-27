@@ -16,7 +16,7 @@
 
 import { PREDETERMINADO as SEGMENTACION } from '../comun/segmentar.mjs';
 import { ESTILOS, ESTILO_POR_DEFECTO } from '../comun/estilos.mjs';
-import { PREDETERMINADO as MODELO } from '../comun/modelos.mjs';
+import { PREDETERMINADO as MODELO, claveDe, grafiasDe } from '../comun/modelos.mjs';
 
 // Los generadores viven en `comun/modelos.mjs`, en una tabla fija.
 //
@@ -144,18 +144,52 @@ function mezclar(base, encima) {
  * valores que estén fuera de rango. Es idempotente: normalizar dos veces da lo
  * mismo que normalizar una.
  */
+/**
+ * Qué generador queda elegido tras actualizar.
+ *
+ * Aquí vive un §7.2 de manual y por eso está explicado entero.
+ *
+ * Antes la herramienta elegía el modelo sola y anotaba `aMano: false` para decir
+ * «esto lo puse yo, no la persona». Al llegar el catálogo nuevo, esa elección
+ * automática —hecha con la información de entonces— seguía guardada y el
+ * desplegable la respetaba: el director se quedaba clavado en Gemini 2.5 Pro
+ * aunque el catálogo ya ofreciera el 3.1 Pro. El arreglo estaba puesto y no
+ * llegaba, tapado por un valor guardado. Exactamente el error del plano.
+ *
+ * La regla que lo resuelve: `aMano: false` significa que la persona nunca eligió
+ * eso, así que no hay nada que conservar y manda el predeterminado de hoy. Una
+ * elección de verdad se conserva siempre, y si estaba guardada como identificador
+ * de Vertex se traduce a su clave en vez de perderse.
+ */
+function eleccionDeGenerador(familia, guardado) {
+  if (guardado && guardado.aMano === false) return MODELO[familia];
+  return claveDe(familia, guardado?.modelo) || MODELO[familia];
+}
+
 export function normalizar(cruda) {
   const c = mezclar(PREDETERMINADA, cruda || {});
 
-  // Los de imagen y video vienen del sondeo, así que no se corrigen contra una
-  // lista: se respeta lo elegido y ya.
-  c.imagen.modelo = c.imagenModelo?.modelo || c.imagen.modelo;
-  c.movimiento.modelo = c.videoModelo?.modelo || c.movimiento.modelo;
+  // Las elecciones de generador, traducidas al catálogo actual.
+  for (const [familia, campo] of [
+    ['texto', 'texto'],
+    ['imagen', 'imagenModelo'],
+    ['video', 'videoModelo'],
+    ['voz', 'vozModelo'],
+  ]) {
+    c[campo] = { modelo: eleccionDeGenerador(familia, cruda?.[campo]) };
+  }
+
+  c.imagen.modelo = c.imagenModelo.modelo;
+  c.movimiento.modelo = c.videoModelo.modelo;
 
   // Un modelo de imagen que no acepta referencias no puede sostener la coherencia
-  // entre tomas (§4.6). Se avisa aquí, y la fase de imagen lo tiene en cuenta.
-  // Los modelos «...-image» de Gemini aceptan referencias; los «imagen-...» no.
-  c.imagen.aceptaReferencias = /gemini.*image/i.test(c.imagen.modelo || '');
+  // entre tomas (§4.6). Se mira contra las GRAFÍAS de la fila, no contra la clave:
+  // desde que se guarda «nano-banana-2» en vez de «gemini-3.1-flash-image», una
+  // comprobación sobre el texto de la clave decía que no acepta referencias y
+  // apagaba en silencio lo que mantiene iguales a las personas entre tomas.
+  c.imagen.aceptaReferencias = grafiasDe('imagen', c.imagen.modelo).some((id) =>
+    /gemini.*image/i.test(id),
+  );
 
   c.formato.ancho = entero(c.formato.ancho, 640, 3840, 1920);
   c.formato.alto = entero(c.formato.alto, 360, 2160, 1080);
