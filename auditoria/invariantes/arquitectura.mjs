@@ -286,6 +286,156 @@ export const invariantes = [
   },
 
   {
+    nombre: 'cada-modelo-se-pide-en-su-region',
+    dice: 'Los gemini-3* se sirven en «global» y el resto en su región. Equivocarse NO da «región equivocada»: da 404, que se lee como «no tienes ese modelo». Es lo que hizo creer que solo había un generador de imagen habiendo tres.',
+    async comprobar(ctx) {
+      const { regionDe, hostDe, REGION_GLOBAL } = await import('../../comun/modelos.mjs');
+      const fallos = [];
+
+      const casos = [
+        ['gemini-3-pro-image', REGION_GLOBAL],
+        ['gemini-3.1-flash-image', REGION_GLOBAL],
+        ['gemini-3.1-pro-preview', REGION_GLOBAL],
+        ['gemini-2.5-flash-image', 'us-central1'],
+        ['gemini-2.5-pro', 'us-central1'],
+        ['veo-3.1-fast-generate-001', 'us-central1'],
+        ['lyria-002', 'us-central1'],
+      ];
+      for (const [id, esperada] of casos) {
+        const sale = regionDe(id, 'us-central1');
+        if (sale !== esperada) fallos.push(`«${id}» se pide en ${sale} y va en ${esperada}.`);
+      }
+      // Y el host de «global» NO lleva prefijo de región.
+      if (hostDe(REGION_GLOBAL) !== 'aiplatform.googleapis.com') {
+        fallos.push(`El host de global es ${hostDe(REGION_GLOBAL)} y debería ir sin prefijo.`);
+      }
+      if (!/^us-central1-/.test(hostDe('us-central1'))) {
+        fallos.push('El host de una región concreta va sin prefijo.');
+      }
+
+      // Y ninguna llamada puede seguir usando una sola región para todo.
+      const prov = fuente(ctx, 'api/_lib/proveedor.js');
+      if (/\$\{base\(\)\}/.test(prov)) {
+        fallos.push('Queda una llamada con la región fija para todos los modelos.');
+      }
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'api/_lib/proveedor.js', (t) =>
+        t.replace(/rutaDe\(id\)/g, '`${base()}/${id}`'),
+      ),
+  },
+
+  {
+    nombre: 'el-clip-no-vuelve-dentro-de-la-respuesta',
+    dice: 'Veo tiene que escribir el clip en el almacén, no devolverlo en base64: un clip de ocho segundos a 1080p no cabe en los 4,5 MB de la función (§7.1). Sin storageUri, la fase de clips no funciona.',
+    comprobar(ctx) {
+      const prov = fuente(ctx, 'api/_lib/proveedor.js');
+      const ia = fuente(ctx, 'api/ia.js');
+      const mov = fuente(ctx, 'app/fases/movimiento.js');
+      const fallos = [];
+
+      // Se busca la ASIGNACIÓN, no la palabra: el comentario que explica por qué
+      // hace falta storageUri contiene «storageUri», así que buscar la palabra
+      // daba por bueno un archivo al que se le había quitado la línea.
+      if (!/storageUri: carpetaGs/.test(prov)) {
+        fallos.push('El arranque de video no pide storageUri: el clip volvería en base64.');
+      }
+      if (!/carpetaGs: c\.guardarEn/.test(ia)) {
+        fallos.push('La puerta no le dice a Veo dónde escribir.');
+      }
+      // Y la carpeta sale de la clave, así que el navegador tiene que mandarla YA
+      // al arrancar, no solo al consultar.
+      const i = mov.indexOf("'video.iniciar'");
+      if (i < 0 || !/guardarEn/.test(mov.slice(i, i + 700))) {
+        fallos.push('El arranque del clip no manda la clave: sin ella no hay carpeta donde escribir.');
+      }
+      // Y al terminar, el clip se copia a su clave sin pasar por la función.
+      if (!/copiarDesdeGs/.test(ia)) fallos.push('El clip no se lleva a su clave definitiva.');
+      if (!/rewriteTo/.test(fuente(ctx, 'api/_lib/almacen.js'))) {
+        fallos.push('La copia atraviesa la función en vez de hacerla el almacén.');
+      }
+      return fallos;
+    },
+    // Se rompe quitando storageUri: es exactamente el estado en el que el clip
+    // vuelve en base64 y no cabe en la respuesta.
+    romper: (ctx) =>
+      editando(ctx, 'api/_lib/proveedor.js', (t) =>
+        t.replace('...(carpetaGs ? { storageUri: carpetaGs } : {}),', ''),
+      ),
+  },
+
+  {
+    nombre: 'la-peticion-de-imagen-encaja-con-su-familia',
+    dice: 'La familia 3 exige responseModalities ["TEXT","IMAGE"] y acepta imageSize; el 2.5 solo acepta ["IMAGE"] y rechaza imageSize. Con el valor equivocado la petición falla y el error no dice por qué.',
+    comprobar(ctx) {
+      const { modalidadesDe, admiteTamanoImagen } = ctx.fn;
+      const fallos = [];
+
+      // Y la petición tiene que PREGUNTARLO, no llevar un valor fijo: con un
+      // literal, media familia de generadores falla y el error no dice por qué.
+      const src = fuente(ctx, 'api/_lib/proveedor.js');
+      if (!/responseModalities: modalidadesDe\(id\)/.test(src)) {
+        fallos.push('Las modalidades de la petición de imagen están fijas en vez de salir del modelo.');
+      }
+      if (!/admiteTamanoImagen\(id\)/.test(src)) {
+        fallos.push('El tamaño de imagen se manda sin mirar si el modelo lo acepta.');
+      }
+
+      if (modalidadesDe('gemini-3-pro-image').join() !== 'TEXT,IMAGE') {
+        fallos.push('A la familia 3 no se le piden las dos modalidades.');
+      }
+      if (modalidadesDe('gemini-2.5-flash-image').join() !== 'IMAGE') {
+        fallos.push('Al 2.5 se le piden modalidades que no acepta.');
+      }
+      if (!admiteTamanoImagen('gemini-3.1-flash-image') || admiteTamanoImagen('gemini-2.5-flash-image')) {
+        fallos.push('El tamaño de imagen se manda a quien no lo acepta, o no a quien sí.');
+      }
+
+      // Y el texto va ANTES que las referencias.
+      const prov = fuente(ctx, 'api/_lib/proveedor.js');
+      const i = prov.indexOf('const partes = [');
+      const bloque = prov.slice(i, prov.indexOf('];', i));
+      if (bloque.indexOf('text: instruccion') > bloque.indexOf('inlineData')) {
+        fallos.push('Las referencias van antes que la instrucción: es al revés.');
+      }
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'api/_lib/proveedor.js', (t) =>
+        t.replace('responseModalities: modalidadesDe(id),', "responseModalities: ['IMAGE'],"),
+      ),
+  },
+
+  {
+    nombre: 'la-duracion-del-clip-es-de-las-que-el-modelo-acepta',
+    dice: 'Las duraciones son listas CERRADAS y distintas por generador —Veo 2 admite 5 y 7, los 3.1 no—. Pedir una que no está no se redondea solo: se rechaza la petición. Y en un empate se coge la mayor, porque sobrar se recorta y faltar se ve congelado.',
+    comprobar(ctx) {
+      const { duracionValida } = ctx.fn;
+      const fallos = [];
+      const casos = [
+        ['veo-3.1-fast', 5, 6],
+        ['veo-3.1-fast', 6, 6],
+        ['veo-3.1-lite', 7, 8],
+        ['veo-3.1', 20, 8],
+        ['veo-2', 5, 5],
+        ['veo-2', 7, 7],
+      ];
+      for (const [clave, pide, esperado] of casos) {
+        const sale = duracionValida(clave, pide);
+        if (sale !== esperado) fallos.push(`Para ${pide} s en ${clave} sale ${sale} y debería ser ${esperado}.`);
+      }
+      return fallos;
+    },
+    // Se rompe como se rompería de verdad: olvidando que cada generador tiene su
+    // lista y usando la de los 3.1 para todos.
+    romper: (ctx) =>
+      conFuncion(ctx, 'duracionValida', (_clave, segundos) =>
+        [4, 6, 8].reduce((a, b) => (Math.abs(b - segundos) < Math.abs(a - segundos) ? b : a)),
+      ),
+  },
+
+  {
     nombre: 'cada-generador-sale-una-sola-vez',
     dice: 'Dos filas del catálogo no pueden llamarse igual ni compartir un identificador. El desplegable de clips enseñaba «Veo 3.1 Fast» dos veces porque Vertex publica el mismo modelo con dos grafías y las dos entraban como opciones distintas.',
     comprobar(ctx) {

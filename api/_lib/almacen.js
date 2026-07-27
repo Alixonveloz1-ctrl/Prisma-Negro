@@ -243,3 +243,42 @@ export function rutaGs(clave) {
 export function rutaGsCarpeta(prefijoClave) {
   return `gs://${bucket()}/${prefijo()}${prefijoClave}`;
 }
+
+/**
+ * Trae a su clave definitiva un objeto que otro escribió en el almacén.
+ *
+ * Veo no escribe donde uno le dice: escribe DENTRO de la carpeta que se le da, y
+ * el nombre del archivo lo pone él. Así que el clip aparece en un sitio que la
+ * herramienta no eligió, y hay que moverlo a su clave para que el resto del
+ * sistema —la hoja, el manifiesto, el montador— lo encuentre donde siempre.
+ *
+ * Se copia con `rewriteTo`, que es una operación del propio almacén: el archivo
+ * no pasa por esta función. Un clip de varios megas atravesando una función
+ * serverless con 4,5 MB de tope es justo lo que `storageUri` vino a evitar.
+ */
+export async function copiarDesdeGs(uriGs, clave) {
+  const m = /^gs:\/\/([^/]+)\/(.+)$/.exec(String(uriGs || ''));
+  if (!m) throw new Error(`No es una ruta del almacén: ${uriGs}`);
+  const [, origenBucket, origenObjeto] = m;
+  const destino = rutaDe(clave);
+
+  const url =
+    `${RAIZ}/storage/v1/b/${encodeURIComponent(origenBucket)}/o/${encodeURIComponent(origenObjeto)}` +
+    `/rewriteTo/b/${encodeURIComponent(bucket())}/o/${encodeURIComponent(destino)}`;
+
+  // `rewrite` puede necesitar varias vueltas con archivos grandes: mientras
+  // devuelve un testigo, no ha terminado. Ignorarlo deja el clip a medias y el
+  // montaje falla luego con un archivo corrupto, lejos de aquí.
+  let testigo = '';
+  for (let vuelta = 0; vuelta < 20; vuelta++) {
+    const r = await fetch(testigo ? `${url}?rewriteToken=${encodeURIComponent(testigo)}` : url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${await tokenDeAcceso()}`, 'Content-Length': '0' },
+    });
+    if (!r.ok) throw await fallo(r, `copiar «${origenObjeto}» a «${clave}»`);
+    const d = await r.json().catch(() => ({}));
+    if (d.done !== false) return { clave, ruta: destino, bytes: Number(d.resource?.size || 0) };
+    testigo = d.rewriteToken;
+  }
+  throw new Error(`La copia de «${clave}» no terminó tras 20 vueltas.`);
+}

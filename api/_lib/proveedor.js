@@ -18,7 +18,10 @@ import { valor as valorEntorno } from './entorno.js';
 import { escribirWav } from '../../comun/audio.mjs';
 // El catálogo de generadores. Fijo y escrito a mano a propósito: ver la cabecera
 // de ese archivo, que cuenta los dos fallos que tuvo sondearlo.
-import { CATALOGO, PREDETERMINADO, grafiasDe, etiquetaDe } from '../../comun/modelos.mjs';
+import {
+  CATALOGO, PREDETERMINADO, grafiasDe, etiquetaDe,
+  regionDe, hostDe, modalidadesDe, admiteTamanoImagen, duracionValida,
+} from '../../comun/modelos.mjs';
 
 // §6: los generadores de video tienen listas CERRADAS de duración. Se pide la más
 // cercana a lo que dura la locución y se congela el último fotograma para el resto.
@@ -32,8 +35,17 @@ function region() {
   return valorEntorno('regionIA', 'us-central1');
 }
 
-function base() {
-  return `https://${region()}-aiplatform.googleapis.com/v1/projects/${proyecto()}/locations/${region()}/publishers/google/models`;
+/**
+ * La dirección de UN modelo concreto, en SU región.
+ *
+ * No hay una «región del proyecto»: los `gemini-3*` se sirven en `global` y el
+ * resto en la región configurada. Con una sola región para todos, la mitad del
+ * catálogo contesta 404 —y un 404 se lee como «no tienes ese modelo», que es
+ * exactamente la conclusión equivocada a la que llegó la herramienta—.
+ */
+function rutaDe(id) {
+  const r = regionDe(id, region());
+  return `https://${hostDe(r)}/v1/projects/${proyecto()}/locations/${r}/publishers/google/models/${id}`;
 }
 
 /**
@@ -85,7 +97,13 @@ async function pedir(url, cuerpo) {
   const hacer = (t) =>
     fetch(url, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${t}`,
+        'Content-Type': 'application/json',
+        // A qué proyecto se le apunta la cuota. Sin esto, algunas llamadas se
+        // rechazan con un error de permisos que no habla de cuotas.
+        'X-Goog-User-Project': proyecto(),
+      },
       body: JSON.stringify(cuerpo),
     });
 
@@ -123,7 +141,7 @@ export async function texto({
   sistema,
   esquema,
   temperatura = 0.7,
-  maxTokens = 8192,
+  maxTokens = 32768,
   buscarEnInternet = false,
   modelo: pedido = '',
 }) {
@@ -149,15 +167,26 @@ export async function texto({
   if (buscarEnInternet) cuerpo.tools = [{ googleSearch: {} }];
 
   const datos = await conGrafias('texto', eleccion, (id) =>
-    pedir(`${base()}/${id}:generateContent`, cuerpo),
+    pedir(`${rutaDe(id)}:generateContent`, cuerpo),
   );
   const candidato = datos?.candidates?.[0];
   const partes = candidato?.content?.parts || [];
   const salida = partes.map((p) => p.text || '').join('');
 
   if (!salida.trim()) {
+    // Un bloqueo de los filtros llega como 200 SIN texto, con el motivo en
+    // `promptFeedback`. Sin mirarlo ahí, en pantalla parece un fallo de red y uno
+    // se pone a revisar la conexión en vez de la instrucción.
+    const bloqueo = datos?.promptFeedback?.blockReason;
+    if (bloqueo) {
+      throw new Error(
+        `Los filtros de seguridad bloquearon la petición (${bloqueo}). ` +
+          'No es un fallo pasajero: reintentarlo da lo mismo. Hay que reformular el texto.',
+      );
+    }
     const motivo = candidato?.finishReason || 'sin motivo declarado';
-    throw new Error(`El modelo de texto no devolvió nada (${motivo}).`);
+    const cortado = motivo === 'MAX_TOKENS' ? ' — se quedó sin espacio de respuesta' : '';
+    throw new Error(`El modelo de texto no devolvió nada (${motivo}${cortado}).`);
   }
 
   // Las fuentes que el modelo consultó de verdad. En un documental esto no es un
@@ -231,19 +260,30 @@ export async function imagen({ instruccion, referencias = [], aspecto = '16:9', 
     }
   }
 
+  // EL TEXTO PRIMERO Y LAS REFERENCIAS DESPUÉS. En ese orden, no al revés: es
+  // como está en producción y no es indiferente —el modelo lee la instrucción y
+  // luego mira las imágenes a la luz de ella—.
   const partes = [
+    { text: instruccion },
     ...referencias.map((r) => ({
       inlineData: { mimeType: r.tipo || 'image/jpeg', data: r.datos },
     })),
-    { text: instruccion },
   ];
 
   const datos = await conGrafias('imagen', eleccion, (id) =>
-    pedir(`${base()}/${id}:generateContent`, {
+    pedir(`${rutaDe(id)}:generateContent`, {
       contents: [{ role: 'user', parts }],
       generationConfig: {
-        responseModalities: ['IMAGE'],
-        imageConfig: { aspectRatio: aspecto },
+        // La familia 3 EXIGE ['TEXT','IMAGE']; el 2.5 solo acepta ['IMAGE']. Con
+        // el valor equivocado la petición falla y el error no dice que sea esto.
+        responseModalities: modalidadesDe(id),
+        imageConfig: {
+          aspectRatio: aspecto,
+          // `imageSize` solo lo acepta la familia 3. Mandárselo al 2.5 —que además
+          // entrega siempre en torno a 1K— es un error de petición.
+          ...(admiteTamanoImagen(id) ? { imageSize: '2K' } : {}),
+        },
+        temperature: 1.0,
       },
     }),
   );
@@ -267,28 +307,55 @@ export async function imagen({ instruccion, referencias = [], aspecto = '16:9', 
 // el censor lo borraría y la consulta siguiente fallaría con un error
 // incomprensible (§6). Por eso se cifra.
 
-export function duracionMasCercana(segundos) {
-  return DURACIONES_VIDEO.reduce((a, b) =>
-    Math.abs(b - segundos) < Math.abs(a - segundos) ? b : a,
-  );
+export function duracionMasCercana(segundos, clave = PREDETERMINADO.video) {
+  return duracionValida(clave, segundos);
 }
 
-export async function videoIniciar({ instruccion, fotograma, segundos = 6, aspecto = '16:9', modelo: pedido = '' }) {
+export async function videoIniciar({
+  instruccion,
+  fotograma,
+  segundos = 6,
+  aspecto = '16:9',
+  modelo: pedido = '',
+  carpetaGs = '',
+  conAudio = false,
+  negativo = '',
+}) {
   const eleccion = pedido || process.env.MODELO_VIDEO || PREDETERMINADO.video;
-  const duracion = duracionMasCercana(segundos);
+  // Cada generador tiene su lista CERRADA de duraciones y no son la misma: Veo 2
+  // admite 5 y 7, los 3.1 no. Pedir una que no está en la lista no se redondea
+  // solo, se rechaza la petición.
+  const duracion = duracionValida(eleccion, segundos);
 
   const instancia = { prompt: instruccion };
   if (fotograma) {
     instancia.image = {
       bytesBase64Encoded: fotograma.datos,
-      mimeType: fotograma.tipo || 'image/png',
+      mimeType: fotograma.tipo || 'image/jpeg',
     };
   }
 
   const datos = await conGrafias('video', eleccion, (id) =>
-    pedir(`${base()}/${id}:predictLongRunning`, {
+    pedir(`${rutaDe(id)}:predictLongRunning`, {
       instances: [instancia],
-      parameters: { durationSeconds: duracion, aspectRatio: aspecto, sampleCount: 1 },
+      parameters: {
+        durationSeconds: duracion,
+        aspectRatio: aspecto,
+        sampleCount: 1,
+        resolution: '1080p',
+        // El ambiente sonoro de Veo encarece el segundo y puede pisar la
+        // narración, que es la que manda en un documental.
+        generateAudio: !!conAudio,
+        personGeneration: 'allow_adult',
+        ...(negativo ? { negativePrompt: negativo } : {}),
+        // SIN ESTO EL CLIP VUELVE EN BASE64 Y NO CABE.
+        //
+        // Un clip de 8 s a 1080p son varios megas; la respuesta de la función
+        // tiene un tope de 4,5 MB. Con `storageUri`, Veo escribe el clip
+        // directamente en el almacén y solo vuelve una referencia. No es una
+        // optimización: sin esto, la fase de clips no funciona (§7.1).
+        ...(carpetaGs ? { storageUri: carpetaGs } : {}),
+      },
     }),
   );
 
@@ -309,18 +376,39 @@ export async function videoConsultar(referencia) {
   if (!enLaOperacion) {
     throw new Error('El identificador de la operación de video no dice con qué modelo se arrancó.');
   }
-  const datos = await pedir(`${base()}/${enLaOperacion[1]}:fetchPredictOperation`, {
-    operationName: nombre,
-  });
+  // Y la REGIÓN también sale de ahí. El nombre de la operación trae la suya
+  // dentro; consultarla en otra da 404, que se lee como «esa operación no
+  // existe» cuando lo que pasa es que se está preguntando en el sitio
+  // equivocado. El recurso es el nombre cortado antes de «/operations/».
+  const laRegion = /\/locations\/([^/]+)\//.exec(nombre)?.[1] || regionDe(enLaOperacion[1], region());
+  const recurso = nombre.split('/operations/')[0];
+  const datos = await pedir(
+    `https://${hostDe(laRegion)}/v1/${recurso}:fetchPredictOperation`,
+    { operationName: nombre },
+  );
 
   if (!datos.done) return { listo: false };
   if (datos.error) {
     throw new Error(`El generador de video falló: ${datos.error.message || 'sin mensaje'}`);
   }
 
+  // El filtro de seguridad tiene su propio caso: «terminó y no hay video» y
+  // «terminó y el video se filtró» son cosas distintas, y la segunda no se
+  // arregla reintentando.
+  const filtrado = datos?.response?.raiMediaFilteredReasons;
+  if (filtrado?.length) {
+    throw new Error(`El generador de video descartó el clip por sus filtros: ${filtrado.join('; ')}`);
+  }
+
   const muestras =
     datos?.response?.videos || datos?.response?.generatedSamples || datos?.response?.predictions || [];
   const primera = muestras[0];
+
+  // Con `storageUri` el clip ya está en el almacén y solo vuelve su ruta. Es el
+  // camino normal; el base64 queda como respaldo para clips que quepan.
+  const uri = primera?.gcsUri || primera?.video?.gcsUri || primera?.videoUri;
+  if (uri) return { listo: true, uriGs: uri, tipo: 'video/mp4' };
+
   const b64 =
     primera?.bytesBase64Encoded || primera?.video?.bytesBase64Encoded || primera?.videoBytes;
   if (!b64) throw new Error('El generador de video terminó pero no devolvió video.');
@@ -529,7 +617,7 @@ export async function vozGemini({ texto: t, nombreVoz, estilo = '', modelo: pedi
   const brief = estilo || 'Narra en tono documental, sobrio y parejo, ritmo constante, sin dramatizar.';
 
   const datos = await conGrafias('voz', eleccion, (id) =>
-    pedir(`${base()}/${id}:generateContent`, {
+    pedir(`${rutaDe(id)}:generateContent`, {
       contents: [{ role: 'user', parts: [{ text: `${brief}\n\n${t}` }] }],
       generationConfig: {
         responseModalities: ['AUDIO'],
@@ -563,7 +651,7 @@ export async function vozGemini({ texto: t, nombreVoz, estilo = '', modelo: pedi
 export async function musica({ instruccion, segundos = 30 }) {
   const eleccion = process.env.MODELO_MUSICA || PREDETERMINADO.musica;
   const datos = await conGrafias('musica', eleccion, (id) =>
-    pedir(`${base()}/${id}:predict`, {
+    pedir(`${rutaDe(id)}:predict`, {
       instances: [{ prompt: instruccion }],
       parameters: { sample_count: 1, duration_seconds: Math.min(Math.max(segundos, 10), 120) },
     }),

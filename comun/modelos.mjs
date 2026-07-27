@@ -38,26 +38,17 @@ export const CATALOGO = {
     {
       clave: 'gemini-3.1-pro',
       etiqueta: 'Gemini 3.1 Pro — el mejor director',
-      ids: ['gemini-3.1-pro', 'gemini-3.1-pro-preview'],
-    },
-    // Más nuevo que el anterior, pero de reparto limitado: hay cuentas que aún no
-    // lo tienen. Por eso está en la lista y NO es el predeterminado —un
-    // predeterminado que no existe en tu proyecto rompe el guion en la primera
-    // llamada, y eso no se arregla eligiendo bien: no llegas a elegir.
-    {
-      clave: 'gemini-3.5-pro',
-      etiqueta: 'Gemini 3.5 Pro — el más nuevo',
-      ids: ['gemini-3.5-pro', 'gemini-3.5-pro-preview'],
-    },
-    {
-      clave: 'gemini-3.6-flash',
-      etiqueta: 'Gemini 3.6 Flash — rápido y barato',
-      ids: ['gemini-3.6-flash', 'gemini-3.6-flash-preview'],
+      ids: ['gemini-3.1-pro-preview', 'gemini-3.1-pro'],
     },
     {
       clave: 'gemini-2.5-pro',
-      etiqueta: 'Gemini 2.5 Pro — generación anterior',
+      etiqueta: 'Gemini 2.5 Pro — alternativa estable',
       ids: ['gemini-2.5-pro'],
+    },
+    {
+      clave: 'gemini-2.5-flash',
+      etiqueta: 'Gemini 2.5 Flash — rápido y barato',
+      ids: ['gemini-2.5-flash'],
     },
   ],
 
@@ -89,22 +80,28 @@ export const CATALOGO = {
     {
       clave: 'veo-3.1-lite',
       etiqueta: 'Veo 3.1 Lite — el más económico',
-      ids: ['veo-3.1-lite-generate-preview', 'veo-3.1-lite-generate-001'],
+      ids: ['veo-3.1-lite-generate-001', 'veo-3.1-lite-generate-preview'],
+      duraciones: [4, 6, 8],
     },
     {
       clave: 'veo-3.1-fast',
       etiqueta: 'Veo 3.1 Fast — equilibrado',
       ids: ['veo-3.1-fast-generate-001', 'veo-3.1-fast-generate-preview'],
+      duraciones: [4, 6, 8],
     },
     {
       clave: 'veo-3.1',
       etiqueta: 'Veo 3.1 — máxima calidad',
       ids: ['veo-3.1-generate-001', 'veo-3.1-generate-preview'],
+      duraciones: [4, 6, 8],
     },
     {
       clave: 'veo-2',
       etiqueta: 'Veo 2 — generación anterior',
       ids: ['veo-2.0-generate-001'],
+      // Veo 2 admite duraciones que los 3.1 no. Pedir una que no está en la lista
+      // no se redondea solo: la petición se rechaza.
+      duraciones: [5, 6, 7, 8],
     },
   ],
 
@@ -176,4 +173,61 @@ export function claveDe(familia, valor) {
   if (!valor) return '';
   const f = familiaDe(familia).find((x) => x.clave === valor || x.ids.includes(valor));
   return f ? f.clave : '';
+}
+
+// ── Dónde vive cada modelo ────────────────────────────────────────────────────
+//
+// ESTO ES LA CAUSA DE CASI TODO LO QUE PARECÍA OTRA COSA.
+//
+// Los modelos `gemini-3*` se sirven en la región `global`, con el host sin
+// prefijo. El resto viven en una región concreta, con el host prefijado. Y
+// cuando te equivocas de región, Vertex NO dice «región equivocada»: dice 404.
+//
+// Un 404 se lee como «ese modelo no existe en tu cuenta». Por eso el sondeo
+// concluyó que solo había un generador de imagen: estaba preguntando por los tres
+// en us-central1, y los dos de la familia 3 solo contestan en global. Existían,
+// estaban contratados, y la herramienta los daba por ausentes.
+
+export const REGION_GLOBAL = 'global';
+
+/** La región en la que hay que pedir este modelo. */
+export function regionDe(id, regionPorDefecto = 'us-central1') {
+  return /^gemini-3/i.test(String(id)) ? REGION_GLOBAL : regionPorDefecto;
+}
+
+/** El host de esa región. `global` no lleva prefijo. */
+export function hostDe(region) {
+  return region === REGION_GLOBAL
+    ? 'aiplatform.googleapis.com'
+    : `${region}-aiplatform.googleapis.com`;
+}
+
+/**
+ * Las modalidades de respuesta que acepta un generador de imagen.
+ *
+ * La familia 3 EXIGE ['TEXT','IMAGE']; el 2.5 solo acepta ['IMAGE']. Con el valor
+ * equivocado la petición falla, y el mensaje no dice que sea por esto.
+ */
+export function modalidadesDe(id) {
+  return /^gemini-3/i.test(String(id)) ? ['TEXT', 'IMAGE'] : ['IMAGE'];
+}
+
+/** `imageSize` solo lo acepta la familia 3. Mandárselo al 2.5 es un error. */
+export const admiteTamanoImagen = (id) => /^gemini-3/i.test(String(id));
+
+/**
+ * La duración válida más cercana, para el generador de clips elegido.
+ *
+ * En un EMPATE se coge la MAYOR: entre 4 y 6 para una toma de 5, vale más sobrar
+ * un segundo —que el montaje recorta— que faltar uno, que se ve como imagen
+ * congelada. Por encima del máximo se pide el máximo.
+ */
+export function duracionValida(clave, segundos) {
+  const fila = familiaDe('video').find((f) => f.clave === clave || f.ids.includes(clave));
+  const lista = fila?.duraciones || [4, 6, 8];
+  return lista.reduce((a, b) => {
+    const da = Math.abs(a - segundos);
+    const db = Math.abs(b - segundos);
+    return db < da || (db === da && b > a) ? b : a;
+  });
 }

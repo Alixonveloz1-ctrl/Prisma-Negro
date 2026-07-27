@@ -136,15 +136,22 @@ async function despachar(modo, c) {
         segundos: c.segundos,
         aspecto: c.aspecto,
         modelo: c.modelo,
+        conAudio: !!c.conAudio,
+        negativo: c.negativo,
+        // Veo escribe el clip aquí en vez de devolverlo en la respuesta. Sin esto
+        // vuelve en base64 y no cabe en los 4,5 MB de la función (§7.1).
+        carpetaGs: c.guardarEn ? almacen.rutaGsCarpeta(`${c.guardarEn}.crudo/`) : '',
       });
 
     case 'video.consultar': {
       const r = await proveedor.videoConsultar(exigir(c, 'operacion'));
-      if (r.listo && c.guardarEn) {
-        const g = await almacen.subir(c.guardarEn, Buffer.from(r.datos, 'base64'), r.tipo);
-        return { listo: true, guardado: g, referencia: almacen.referenciaDe(c.guardarEn) };
-      }
-      return r;
+      if (!r.listo || !c.guardarEn) return r;
+
+      // Dos formas de terminar, un solo resultado: el clip en su clave.
+      const g = r.uriGs
+        ? await almacen.copiarDesdeGs(r.uriGs, c.guardarEn)
+        : await almacen.subir(c.guardarEn, Buffer.from(r.datos, 'base64'), r.tipo);
+      return { listo: true, guardado: g, referencia: almacen.referenciaDe(c.guardarEn) };
     }
 
     case 'voz': {

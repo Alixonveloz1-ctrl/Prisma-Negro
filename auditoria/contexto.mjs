@@ -137,8 +137,13 @@ async function funcionesPuras() {
   const cla = await import('../comun/claves.mjs');
   const hoj = await import('../comun/hoja.mjs');
   const cfg = await import('../app/config.js');
+  const mod = await import('../comun/modelos.mjs');
   return {
     normalizar: cfg.normalizar,
+    duracionValida: mod.duracionValida,
+    regionDe: mod.regionDe,
+    modalidadesDe: mod.modalidadesDe,
+    admiteTamanoImagen: mod.admiteTamanoImagen,
     segmentar: seg.segmentar,
     verificarCobertura: seg.verificarCobertura,
     tomaDelFotograma: cla.tomaDelFotograma,
@@ -165,11 +170,26 @@ export function conFuente(ctx, ruta, contenido) {
   return { ...ctx, fuentes };
 }
 
-/** Aplica una transformación al contenido de un archivo. */
+/**
+ * Aplica una transformación al contenido de un archivo.
+ *
+ * Si la transformación NO CAMBIA NADA, esto revienta en vez de seguir. Es una
+ * lección pagada: un sabotaje escrito con una expresión que ya no encajaba —el
+ * código había cambiado de forma— dejaba el sistema intacto, la invariante pasaba
+ * como es lógico, y salía marcada como «ciega». El mensaje culpaba a la
+ * invariante cuando la rota era la forma de romperla. Media hora buscando en el
+ * sitio equivocado, dos veces.
+ */
 export function editando(ctx, ruta, transformar) {
   const actual = ctx.fuentes.get(ruta);
   if (actual === undefined) throw new Error(`La auditoría no encuentra ${ruta} para romperlo.`);
-  return conFuente(ctx, ruta, transformar(actual));
+  const roto = transformar(actual);
+  if (roto === actual) {
+    throw new Error(
+      `El sabotaje sobre ${ruta} no cambió nada: la forma de romperlo ya no encaja con el código.`,
+    );
+  }
+  return conFuente(ctx, ruta, roto);
 }
 
 /** Copia del contexto con el catálogo de generadores modificado, para `--romper`. */

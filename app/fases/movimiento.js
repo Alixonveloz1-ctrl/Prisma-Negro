@@ -16,24 +16,25 @@ import { llamar, esperarOperacion } from '../api.js';
 import { claveToma } from '../../comun/claves.mjs';
 import { reducirFotogramaDePartida } from '../imagenes.js';
 import { fotogramaDe } from './imagen.js';
+import { duracionValida, PREDETERMINADO } from '../../comun/modelos.mjs';
 
-export const DURACIONES = [4, 6, 8];
-
-export const duracionMasCercana = (s) =>
-  DURACIONES.reduce((a, b) => (Math.abs(b - s) < Math.abs(a - s) ? b : a));
+// Las duraciones válidas dependen del generador elegido —Veo 2 admite 5 y 7, los
+// 3.1 no— y en un EMPATE se coge la MAYOR: vale más sobrar un segundo, que el
+// montaje recorta, que faltar uno, que se ve como imagen congelada.
+export const duracionMasCercana = (s, clave = PREDETERMINADO.video) => duracionValida(clave, s);
 
 export function planificar(tomas, { soloLasQueFaltan = true } = {}) {
   return tomas.filter((t) => t.movimiento && (soloLasQueFaltan ? t.video !== 'ok' : true));
 }
 
 /** Cuánto va a costar esta fase, en clips. Se enseña ANTES de gastar. */
-export function resumen(tomas) {
+export function resumen(tomas, clave) {
   const con = tomas.filter((t) => t.movimiento);
   return {
     clips: con.length,
     faltan: planificar(tomas).length,
     proporcion: tomas.length ? +(con.length / tomas.length).toFixed(2) : 0,
-    segundos: con.reduce((s, t) => s + duracionMasCercana(t.segundos || 6), 0),
+    segundos: con.reduce((s, t) => s + duracionMasCercana(t.segundos || 6, clave), 0),
   };
 }
 
@@ -70,8 +71,11 @@ export async function generarClip({ toma, tomas, pieza, config, senal, aviso }) 
     {
       instruccion,
       fotograma,
-      segundos: duracionMasCercana(toma.segundos || 6),
+      segundos: duracionMasCercana(toma.segundos || 6, config.videoModelo?.modelo),
       aspecto: config.formato.vertical ? '9:16' : '16:9',
+      // La misma clave que en la consulta: de ella sale la carpeta donde Veo
+      // escribe el clip en vez de devolverlo en la respuesta.
+      guardarEn: claveToma(pieza, toma.i, 'vid'),
     },
     { senal },
   );
