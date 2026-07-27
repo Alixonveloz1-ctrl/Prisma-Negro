@@ -205,6 +205,26 @@ input[type=range]{padding:0;accent-color:var(--violeta-2);border:none;background
 @media (max-width:520px){.rejilla-filtros{grid-template-columns:1fr}}
 .rejilla-filtros label{margin-top:0}
 
+/* ── Visor de la previa ─────────────────────────────────────────────────── */
+.visor{
+  position:relative;aspect-ratio:16/9;background:#06070C;border-radius:var(--r-m);
+  overflow:hidden;border:1px solid var(--linea);
+}
+.visor img{width:100%;height:100%;object-fit:contain;display:block}
+.visor-vacio{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  color:var(--tinta-3);font-size:13px;text-align:center;padding:20px;
+}
+.tiras{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px;margin-top:12px}
+.tira{
+  border:1px solid var(--linea);border-radius:10px;overflow:hidden;background:var(--fondo-2);
+  cursor:pointer;padding:0;font:inherit;color:inherit;text-align:left;position:relative;
+}
+.tira.activa{border-color:var(--violeta);box-shadow:0 0 0 2px var(--violeta-suave)}
+.tira img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#0B0C12}
+.tira .sin{width:100%;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;color:var(--rojo);font-size:10.5px}
+.tira .pie{padding:5px 7px 7px;font-size:10.5px;color:var(--tinta-3);display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+
 /* ── Interruptor ────────────────────────────────────────────────────────── */
 .interruptor{display:flex;align-items:center;gap:9px;margin:12px 0 0;text-transform:none;letter-spacing:0;font-size:13.5px;color:var(--tinta-2);font-weight:500;cursor:pointer}
 .interruptor input{width:18px;height:18px;flex:none;accent-color:var(--violeta-2);margin:0}
@@ -273,10 +293,14 @@ nav.abajo{
   display:flex;justify-content:space-around;
 }
 nav.abajo button{
-  appearance:none;background:none;border:none;cursor:pointer;flex:1;min-width:0;
+  appearance:none;background:none;border:none;cursor:pointer;flex:1 1 0;min-width:0;
   display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 2px;
   color:var(--tinta-3);font:inherit;font-size:9.5px;font-weight:700;
-  letter-spacing:.05em;text-transform:uppercase;position:relative;transition:var(--tr);
+  letter-spacing:.04em;text-transform:uppercase;position:relative;transition:var(--tr);
+}
+/* Cinturón y tirantes: aunque una etiqueta crezca, no puede pisar a la de al lado. */
+nav.abajo button span{
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;
 }
 nav.abajo button.on{color:var(--violeta-2)}
 nav.abajo button.on::after{content:'';position:absolute;top:-7px;width:30px;height:3px;border-radius:0 0 3px 3px;background:var(--violeta-2)}
@@ -548,6 +572,26 @@ nav.abajo button svg{width:22px;height:22px}
           <div id="aviso-tomas"></div>
         </div>
         <div class="panel"><h2>Lista <span class="cuenta" id="cuenta-tomas"></span></h2><div class="tomas" id="lista-tomas"></div></div>
+      </section>
+
+      <!-- VISTA PREVIA -->
+      <section id="v-previa" class="vista oculto">
+        <div class="saludo"><h1>Vista previa</h1><p>Las imágenes con su voz, antes de montar.</p></div>
+        <div class="panel">
+          <div class="visor">
+            <img id="previa-imagen" alt="">
+            <div id="previa-vacio" class="visor-vacio">Prepara la previa para ver el documental.</div>
+          </div>
+          <audio id="previa-audio" style="display:none"></audio>
+          <p class="nota chica" id="previa-pie" style="margin-top:10px;min-height:2.6em"></p>
+          <div class="fila-btn" style="margin-top:12px">
+            <button class="btn primario" id="b-preparar-previa">Preparar</button>
+            <button class="btn" id="b-reproducir">Reproducir</button>
+            <button class="btn fantasma" id="b-parar-previa">Parar</button>
+          </div>
+          <div id="aviso-previa"></div>
+        </div>
+        <div class="panel"><h2>Tomas <span class="cuenta" id="cuenta-previa"></span></h2><div class="tiras" id="tiras"></div></div>
       </section>
 
       <!-- AJUSTES -->

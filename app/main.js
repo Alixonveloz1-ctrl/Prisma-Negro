@@ -29,6 +29,7 @@ import * as musica from './fases/musica.js';
 import * as miniatura from './fases/miniatura.js';
 import * as metadatos from './fases/metadatos.js';
 import * as montajeFase from './fases/montaje.js';
+import * as previa from './previa.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -42,14 +43,22 @@ const ICONO = {
   investigacion: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
   guion: '<path d="M4 4h11l5 5v11H4z"/><path d="M8 13h8M8 17h5"/>',
   tomas: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M10 9l5 3-5 3z"/>',
+  previa: '<path d="M2 6a2 2 0 012-2h11a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2z"/><path d="M17 9l5-3v12l-5-3"/>',
   ajustes: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.2 2.2M16.9 16.9l2.2 2.2M19.1 4.9l-2.2 2.2M7.1 16.9l-2.2 2.2"/>',
 };
+// Nombre largo para la barra lateral, corto para la de abajo.
+//
+// Con seis pestañas en 390 px, «Investigación» no cabe: las etiquetas se pisaban
+// unas con otras y se leía «INICIOINVESTIGACIÓNGUION». La anchura es una invariante,
+// no un detalle de estilo (§7.13), así que el nombre corto es parte de la definición
+// de la vista y no un apaño de CSS.
 const VISTAS = [
-  ['inicio', 'Inicio'],
-  ['investigacion', 'Investigación'],
-  ['guion', 'Guion'],
-  ['tomas', 'Tomas'],
-  ['ajustes', 'Ajustes'],
+  ['inicio', 'Inicio', 'Inicio'],
+  ['investigacion', 'Investigación', 'Fichas'],
+  ['guion', 'Guion', 'Guion'],
+  ['tomas', 'Tomas', 'Tomas'],
+  ['previa', 'Previa', 'Previa'],
+  ['ajustes', 'Ajustes', 'Ajustes'],
 ];
 
 let P = null;
@@ -219,11 +228,11 @@ function pintarNavegacion() {
   lat.innerHTML = '';
   mov.innerHTML = '';
 
-  for (const [id, nombre] of VISTAS) {
+  for (const [id, nombre, corto] of VISTAS) {
     const svg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONO[id]}</svg>`;
     for (const [caja, contenido] of [
       [lat, `${svg}<span>${nombre}</span>`],
-      [mov, `${svg}${nombre}`],
+      [mov, `${svg}<span>${corto}</span>`],
     ]) {
       const b = document.createElement('button');
       b.innerHTML = contenido;
@@ -877,6 +886,103 @@ function informar(r, que) {
     return registro('paso4', r.fallos.map((f) => `· ${f.error}`));
   }
   avisar('paso4', `${que}: ${r.hechas} de ${r.total}, sin fallos.`, 'bueno');
+}
+
+// ── Vista previa ──────────────────────────────────────────────────────────────
+//
+// Antes de gastar en montaje, ver y oír lo que hay. No cuesta nada: todo el material
+// está pagado y en el almacén, esto solo lo baja y lo reproduce.
+
+let piezasPrevia = [];
+let reproductor = null;
+
+function asegurarReproductor() {
+  if (reproductor) return reproductor;
+  reproductor = previa.reproductor({
+    lienzo: $('previa-imagen'),
+    audio: $('previa-audio'),
+    alCambiar: (p, k, total) => {
+      $('previa-vacio').style.display = 'none';
+      $('previa-pie').textContent =
+        `Toma ${p.i + 1} de ${total} · escena ${p.escena} · ${(p.segundos || 0).toFixed(1)}s` +
+        (p.reusaDe !== null ? ` · reusa la ${p.reusaDe + 1}` : '') +
+        (p.falta.length ? ` · FALTA ${p.falta.join(' y ')}` : '') +
+        `\n${p.texto}`;
+      document.querySelectorAll('.tira').forEach((e, n) => e.classList.toggle('activa', n === k));
+      document.querySelectorAll('.tira')[k]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    },
+  });
+  return reproductor;
+}
+
+accion(
+  'b-preparar-previa',
+  async () => {
+    const tomas = pieza().tomas;
+    if (!tomas.length) throw new Error('Todavía no hay tomas.');
+
+    // Por tandas y avisando: bajar ochenta tomas de golpe deja la pantalla parada un
+    // minuto sin decir nada y parece que se colgó.
+    piezasPrevia = [];
+    for (let desde = 0; desde < tomas.length; desde += 12) {
+      const tanda = await previa.preparar({
+        tomas,
+        pieza: P.id,
+        desde,
+        cuantas: 12,
+        alAvanzar: (n, de) =>
+          avisar('previa', `Bajando material… ${desde + n} de ${tomas.length}`),
+      });
+      piezasPrevia.push(...tanda);
+      pintarTiras();
+    }
+
+    asegurarReproductor().cargar(piezasPrevia);
+    const faltan = piezasPrevia.filter((p) => p.falta.length);
+    avisar(
+      'previa',
+      faltan.length
+        ? `${piezasPrevia.length} tomas. A ${faltan.length} les falta algo: ${faltan.slice(0, 6).map((p) => `#${p.i + 1} (${p.falta.join('+')})`).join(', ')}`
+        : `${piezasPrevia.length} tomas, todas completas. Dale a Reproducir.`,
+      faltan.length ? 'malo' : 'bueno',
+    );
+  },
+  'previa',
+);
+
+accion(
+  'b-reproducir',
+  async () => {
+    if (!piezasPrevia.length) throw new Error('Prepara la previa primero.');
+    asegurarReproductor().reproducir(reproductor.indice);
+  },
+  'previa',
+);
+
+$('b-parar-previa').addEventListener('click', () => reproductor?.parar());
+
+function pintarTiras() {
+  $('cuenta-previa').textContent = piezasPrevia.length ? `${piezasPrevia.length}` : '';
+  const caja = $('tiras');
+  caja.innerHTML = '';
+  piezasPrevia.forEach((p, k) => {
+    const b = document.createElement('button');
+    b.className = 'tira';
+    b.innerHTML =
+      (p.imagen && !p.movimiento
+        ? `<img src="${URL.createObjectURL(p.imagen)}" alt="">`
+        : p.imagen
+          ? `<div class="sin" style="color:var(--violeta-2)">clip</div>`
+          : `<div class="sin">sin imagen</div>`) +
+      `<div class="pie">#${p.i + 1}` +
+      (p.audio ? '' : ' <span class="pastilla p-falta">sin voz</span>') +
+      (p.corteForzado ? ' <span class="pastilla p-aviso">corte</span>' : '') +
+      `</div>`;
+    // Tocar una tira lleva el visor a esa toma: revisar es saltar a lo que sospechas,
+    // no verlo entero de nuevo.
+    b.onclick = () => asegurarReproductor().irA(k);
+    caja.appendChild(b);
+  });
 }
 
 // ── Producción automática ─────────────────────────────────────────────────────

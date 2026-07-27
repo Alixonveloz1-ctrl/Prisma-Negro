@@ -617,6 +617,40 @@ export const invariantes = [
   },
 
   {
+    nombre: 'la-contrasena-no-comparte-nombre-con-ningun-campo',
+    dice: 'El campo de la contraseña no puede llamarse igual que ningún campo de carga útil, y va el último al componer el cuerpo: si no, un dato lo pisa y el error dice «contraseña incorrecta», que es lo que menos ayuda a encontrarlo.',
+    comprobar(ctx) {
+      const api = fuente(ctx, 'api/ia.js');
+      const cliente = fuente(ctx, 'app/api.js');
+      const fallos = [];
+
+      // Cómo se llama el campo de autenticación en el servidor.
+      const campo = api.match(/cuerpo\.(\w+)\s*!==\s*esperada/)?.[1];
+      if (!campo) return ['No se encuentra la comprobación de contraseña en la puerta.'];
+
+      // Ningún modo puede exigir un campo que se llame igual.
+      if (new RegExp(`exigir\\(c, '${campo}'\\)`).test(api)) {
+        fallos.push(`Un modo exige el campo «${campo}», que es el de la contraseña: uno pisa al otro.`);
+      }
+      // Y el cliente tiene que ponerlo DESPUÉS de la carga útil.
+      const cuerpo = cliente.slice(cliente.indexOf('body: JSON.stringify('), cliente.indexOf('signal: senal'));
+      const posDatos = cuerpo.indexOf('...datos');
+      const posCampo = cuerpo.indexOf(`${campo}:`);
+      if (posCampo < 0) fallos.push(`El cliente no manda el campo «${campo}».`);
+      else if (posDatos >= 0 && posCampo < posDatos) {
+        fallos.push(`El cliente pone «${campo}» antes de la carga útil: cualquier campo homónimo lo pisa.`);
+      }
+      return fallos;
+    },
+    // El sabotaje es el bug tal cual pasó: la contraseña antes de los datos.
+    romper: (ctx) =>
+      editando(ctx, 'app/api.js', (t) =>
+        t
+          .replace(/\.\.\.datos,\n\s*\/\/ Va la ÚLTIMA[^\n]*\n\s*acceso: claveAcceso,/, 'acceso: claveAcceso,\n          ...datos,'),
+      ),
+  },
+
+  {
     nombre: 'los-fallos-se-explican-con-palabras',
     dice: 'El usuario no lee registros de la nube desde el teléfono: cualquier fallo se explica en pantalla, con palabras (§1).',
     comprobar(ctx) {

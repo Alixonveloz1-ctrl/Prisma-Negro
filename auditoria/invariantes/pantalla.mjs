@@ -132,6 +132,50 @@ export const invariantes = [
   },
 
   {
+    nombre: 'las-pestanas-caben-en-la-barra-de-abajo',
+    dice: 'Con seis pestañas en 390 px cada una tiene ~65 px. Un nombre largo se sale y pisa al de al lado: se leía «INICIOINVESTIGACIÓNGUION» (§7.13).',
+    async comprobar(ctx) {
+      const js = ctx.fuentes.get('app/main.js') || '';
+      const fallos = [];
+
+      // Cada vista necesita nombre corto además del largo.
+      const bloque = js.slice(js.indexOf('const VISTAS'), js.indexOf('];', js.indexOf('const VISTAS')));
+      const filas = [...bloque.matchAll(/\['([\w-]+)',\s*'([^']+)'(?:,\s*'([^']+)')?\]/g)];
+      if (!filas.length) return ['No se encuentra la lista de vistas.'];
+
+      const ANCHO_MOVIL = 390;
+      const porPestana = ANCHO_MOVIL / filas.length;
+      // A 9,5 px en versalitas con espaciado, un carácter ronda los 7 px.
+      const TOPE = Math.floor((porPestana - 6) / 7);
+
+      for (const [, id, largo, corto] of filas) {
+        if (!corto) fallos.push(`La vista «${id}» no tiene nombre corto para la barra de abajo.`);
+        else if (corto.length > TOPE) {
+          fallos.push(`«${corto}» (${corto.length}) no cabe en ${Math.round(porPestana)} px: máximo ${TOPE} caracteres.`);
+        }
+      }
+
+      // Y la salvaguarda de CSS, por si un día se añade una pestaña más.
+      const html = ctx.fuentes.get('index.html') || '';
+      if (!/nav\.abajo button span\{[^}]*text-overflow:ellipsis/.test(html.replace(/\s+/g, ''))
+        && !/nav\.abajo button span\{[\s\S]{0,200}?text-overflow:ellipsis/.test(html)) {
+        fallos.push('Las etiquetas de la barra de abajo no se recortan si crecen.');
+      }
+      return fallos;
+    },
+    romper(ctx) {
+      const js = ctx.fuentes.get('app/main.js');
+      return {
+        ...ctx,
+        fuentes: new Map(ctx.fuentes).set(
+          'app/main.js',
+          js.replace("['investigacion', 'Investigación', 'Fichas']", "['investigacion', 'Investigación', 'Investigación']"),
+        ),
+      };
+    },
+  },
+
+  {
     nombre: 'la-navegacion-se-define-una-sola-vez',
     dice: 'La barra lateral y la de abajo salen de la misma lista. Con dos listas, una acaba teniendo una pestaña que la otra no.',
     comprobar(ctx) {

@@ -61,8 +61,13 @@ export default async function handler(req, res) {
         error: 'Falta CLAVE_ACCESO en el entorno. Sin ella la herramienta queda abierta a cualquiera.',
       });
     }
-    if (cuerpo.clave !== esperada) {
-      return res.status(401).json({ ok: false, error: 'Clave de acceso incorrecta.' });
+    // `acceso`, no `clave`: los modos del almacén usan `clave` para la clave del
+    // material, y con el mismo nombre una pisaba a la otra.
+    if (cuerpo.acceso !== esperada) {
+      return res.status(401).json({
+        ok: false,
+        error: 'Contraseña incorrecta. Es la de CLAVE_ACCESO en las variables de entorno.',
+      });
     }
   }
 

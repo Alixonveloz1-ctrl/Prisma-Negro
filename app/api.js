@@ -59,11 +59,19 @@ export async function llamar(modo, datos = {}, { reintentos = 2, senal } = {}) {
       r = await fetch(PUERTA, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // El campo de la contraseña se llama `acceso`, NO `clave`.
+        //
+        // «Clave» significa las dos cosas en español —contraseña y clave de
+        // material— y los modos del almacén mandan la clave de la toma en un campo
+        // llamado `clave`. Al componer el cuerpo, `...datos` pisaba la contraseña con
+        // «p01/t000/audio» y el servidor contestaba «clave de acceso incorrecta»,
+        // que es exactamente el mensaje que menos ayuda a encontrarlo.
         body: JSON.stringify({
           modo,
-          clave: claveAcceso,
           ...(modo === 'texto' && modeloTexto ? { modelo: modeloTexto } : {}),
           ...datos,
+          // Va la ÚLTIMA a propósito: ningún campo de carga útil puede pisarla.
+          acceso: claveAcceso,
         }),
         signal: senal,
       });
