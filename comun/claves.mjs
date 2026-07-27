@@ -114,6 +114,16 @@ export function tomaDelFotograma(toma, tomas) {
 }
 
 /** La clave del fotograma que le toca a una toma, con la reutilización ya resuelta. */
+export function claveClip(pieza, toma, tomas) {
+  // Un clip heredado de otra pieza: la clave viene entera.
+  if (toma.heredadoVid) return toma.heredadoVid;
+  // Y si no, la del clip de su dueña. La cadena se resuelve con el mismo ayudante
+  // que los fotogramas: «se ve igual que aquella» significa lo mismo para una
+  // imagen fija que para un clip, y quien decide cuál de las dos cosas es, es el
+  // campo `movimiento` de la toma.
+  return claveToma(pieza, tomaDelFotograma(toma, tomas).i, 'vid');
+}
+
 export function claveFotograma(pieza, toma, tomas) {
   // Una toma heredada apunta a la imagen de OTRA PIEZA: es una continuación que
   // reutiliza un plano del caso anterior. La clave ya viene entera —lleva su pieza

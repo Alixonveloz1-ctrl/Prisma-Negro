@@ -68,19 +68,35 @@ export function planificar(tomas, { soloLasQueFaltan = true } = {}) {
  * ─────────────────────────────────────────────────────────────────────────────
  */
 export function heredables(tomas, piezasAnteriores) {
-  const antes = new Map();
+  // Dos bancos separados: uno de fotogramas y otro de CLIPS. Un clip no sirve
+  // como imagen fija ni al revés, así que se buscan por su lado. Y el de clips es
+  // el que más ahorra: un clip cuesta muchas veces lo que una imagen.
+  const imagenes = new Map();
+  const clips = new Map();
   for (const z of piezasAnteriores) {
     for (const t of z.tomas || []) {
-      if (t.imagen !== 'ok' || !t.plano) continue;
+      if (!t.plano) continue;
       const k = huellaDePlano(t);
-      if (k && !antes.has(k)) antes.set(k, { pieza: z.id, i: t.i, titulo: z.titulo });
+      if (!k) continue;
+      const de = { pieza: z.id, i: t.i, titulo: z.titulo };
+      if (t.video === 'ok' && t.movimiento && !clips.has(k)) clips.set(k, de);
+      if (t.imagen === 'ok' && !t.movimiento && !imagenes.has(k)) imagenes.set(k, de);
     }
   }
+
   const salida = [];
   for (const t of tomas) {
-    if (t.heredado || t.imagen === 'ok' || !t.plano) continue;
-    const c = antes.get(huellaDePlano(t));
-    if (c) salida.push({ i: t.i, de: c });
+    if (!t.plano) continue;
+    const k = huellaDePlano(t);
+    if (t.movimiento) {
+      if (t.heredadoVid || t.video === 'ok') continue;
+      const c = clips.get(k);
+      if (c) salida.push({ i: t.i, de: c, tipo: 'vid' });
+    } else {
+      if (t.heredado || t.imagen === 'ok') continue;
+      const c = imagenes.get(k);
+      if (c) salida.push({ i: t.i, de: c, tipo: 'img' });
+    }
   }
   return salida;
 }

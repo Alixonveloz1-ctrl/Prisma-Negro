@@ -9,7 +9,7 @@
 //
 // Cada regla del §5 viene de un defecto AUDIBLE. Las anotaciones dicen cuál.
 
-import { claveFotograma, claveToma, nombreLocal } from './claves.mjs';
+import { claveFotograma, claveClip, claveToma, nombreLocal } from './claves.mjs';
 
 export const PREDETERMINADO = {
   fps: 30,
@@ -48,11 +48,15 @@ export function construirHoja({ pieza, tomas, escenas = [], config = {} }) {
       escena: t.escena ?? 0,
       inicio: q(reloj, c.fps),
       duracion: dur,
-      // El origen visual: el clip si la toma lleva movimiento, y si no el
-      // fotograma CON LA REUTILIZACIÓN YA RESUELTA — nadie mira `reusa` aguas
-      // abajo, ni debe.
+      // El origen visual, CON LA REUTILIZACIÓN YA RESUELTA en los dos casos —
+      // nadie mira `reusa` aguas abajo, ni debe.
+      //
+      // El clip también se reutiliza. Antes esta línea componía siempre
+      // `claveToma(pieza, t.i, 'vid')`: cada toma con movimiento pagaba su propio
+      // clip aunque fuera el mismo plano que otra. Y el clip es la fase más cara
+      // con diferencia, así que era justo donde más dolía.
       archivo: t.movimiento
-        ? claveToma(pieza, t.i, 'vid')
+        ? claveClip(pieza, t, tomas)
         : claveFotograma(pieza, t, tomas),
       audio: claveToma(pieza, t.i, 'audio'),
       movimiento: !!t.movimiento,

@@ -158,6 +158,7 @@ async function funcionesPuras() {
     tomaDelFotograma: cla.tomaDelFotograma,
     claveFotograma: cla.claveFotograma,
     construirHoja: hoj.construirHoja,
+    componerManifiesto: hoj.componerManifiesto,
   };
 }
 

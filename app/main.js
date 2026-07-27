@@ -826,8 +826,11 @@ function pintarTomas() {
   // todavía no monetiza: un documental de 63 tomas puede costar 39 imágenes si el
   // director ha repetido bien sus motivos y hay banco de otros casos.
   const repiteDentro = t.filter((x) => x.reusa !== null && x.reusa !== undefined).length;
-  const delBanco = t.filter((x) => x.heredado).length;
+  const delBanco = t.filter((x) => x.heredado || x.heredadoVid).length;
   const seGeneran = t.filter((x) => !x.movimiento && x.reusa == null && !x.heredado).length;
+  const clipsQueSePagan = t.filter(
+    (x) => x.movimiento && x.reusa == null && !x.heredadoVid,
+  ).length;
 
   $('cifras-tomas').innerHTML = [
     ['tomas', t.length],
@@ -836,7 +839,8 @@ function pintarTomas() {
     ['imágenes que se pagan', seGeneran],
     ['repiten un motivo', repiteDentro],
     ['vienen del banco', delBanco],
-    ['clips de video', t.filter((x) => x.movimiento).length],
+    ['clips que se pagan', clipsQueSePagan],
+    ['tomas con clip', t.filter((x) => x.movimiento).length],
     ['falta narrar', falta.narracion],
     ['faltan imágenes', falta.imagen],
     ['llamadas de voz', narracion.resumen(t, P.config).llamadas],
@@ -846,9 +850,10 @@ function pintarTomas() {
 
   const ahorradas = repiteDentro + delBanco;
   $('ahorro-tomas').textContent = ahorradas
-    ? `De ${t.length} tomas se pagan ${seGeneran} imágenes: ${repiteDentro} repiten un motivo ` +
-      `del propio documental y ${delBanco} salen del banco de otros casos. ` +
-      `${Math.round((ahorradas / t.length) * 100)}% menos de imágenes que tomas.`
+    ? `De ${t.length} tomas se pagan ${seGeneran} imágenes y ${clipsQueSePagan} clips: ` +
+      `${repiteDentro} tomas repiten un motivo del propio documental y ${delBanco} salen ` +
+      `del banco de otros casos. ${Math.round((ahorradas / t.length) * 100)}% del material ` +
+      `no se vuelve a pagar.`
     : t.length
       ? `Ninguna toma reutiliza nada todavía: se pagarían ${seGeneran} imágenes para ${t.length} tomas.`
       : '';
@@ -1387,7 +1392,11 @@ function pintarContinuacion() {
   // de planos genéricos —una comisaría, patrullas, un pasillo de juzgado— no es de
   // ningún caso en particular.
   const otras = P.piezas.filter((x) => x.id !== z.id && (x.tomas || []).some((t) => t.imagen === 'ok'));
-  const candidatas = z.tomas.filter((t) => t.plano && !t.heredado && t.imagen !== 'ok').length;
+  const candidatas = z.tomas.filter(
+    (t) =>
+      t.plano &&
+      (t.movimiento ? !t.heredadoVid && t.video !== 'ok' : !t.heredado && t.imagen !== 'ok'),
+  ).length;
   const puede = otras.length > 0 && candidatas > 0;
   $('b-reutilizar').classList.toggle('oculto', !puede);
   if (puede) {
@@ -1496,9 +1505,13 @@ accion(
         'bueno',
       );
     }
-    for (const { i, de } of puede) {
+    for (const { i, de, tipo } of puede) {
       const t = z.tomas.find((x) => x.i === i);
-      if (t) {
+      if (!t) continue;
+      if (tipo === 'vid') {
+        t.heredadoVid = claveToma(de.pieza, de.i, 'vid');
+        t.video = 'ok';
+      } else {
         t.heredado = claveToma(de.pieza, de.i, 'img');
         t.imagen = 'ok';
       }
@@ -1507,7 +1520,9 @@ accion(
     pintarTodo();
     avisar(
       'tomas',
-      `${puede.length} tomas reutilizan una imagen ya generada ` +
+      `${puede.length} tomas reutilizan material ya generado: ` +
+        `${puede.filter((x) => x.tipo === 'vid').length} clips y ` +
+        `${puede.filter((x) => x.tipo !== 'vid').length} imágenes ` +
         `(${[...new Set(puede.map((x) => x.de.titulo))].join(', ')}). Esas ya no se pagan.`,
       'bueno',
     );

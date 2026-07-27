@@ -24,7 +24,15 @@ import { duracionValida, PREDETERMINADO } from '../../comun/modelos.mjs';
 export const duracionMasCercana = (s, clave = PREDETERMINADO.video) => duracionValida(clave, s);
 
 export function planificar(tomas, { soloLasQueFaltan = true } = {}) {
-  return tomas.filter((t) => t.movimiento && (soloLasQueFaltan ? t.video !== 'ok' : true));
+  return tomas.filter((t) => {
+    if (!t.movimiento) return false;
+    // Heredado de otra pieza o repitiendo un motivo de esta: el clip ya existe y
+    // ya está pagado. Ni con «rehacer todo» se vuelve a generar —es justo lo que
+    // hace que un motivo animado pueda volver cinco veces por el precio de uno—.
+    if (t.heredadoVid) return false;
+    if (t.reusa !== null && t.reusa !== undefined) return false;
+    return soloLasQueFaltan ? t.video !== 'ok' : true;
+  });
 }
 
 /** Cuánto va a costar esta fase, en clips. Se enseña ANTES de gastar. */

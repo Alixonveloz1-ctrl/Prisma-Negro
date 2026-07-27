@@ -221,6 +221,27 @@ export async function dirigir({ tomas, escenas, tema, config, tratamiento = null
   const quieren = tomas.filter((t) => planos.get(t.i)?.merecemovimiento).map((t) => t.i);
   const conMovimiento = new Set(repartirPorTramos(quieren, cupo, tomas.length));
 
+  // UN MOTIVO ANIMADO VUELVE GRATIS.
+  //
+  // Si la toma 8 lleva clip y la 27 repite ese mismo plano, la 27 usa EL MISMO
+  // clip: no cuesta nada y no gasta cupo. Es exactamente lo que hacen los
+  // documentales de plataforma con la patrulla llegando a la casa o la cámara de
+  // vigilancia —la misma toma vuelve cuatro o cinco veces a lo largo de la hora—.
+  //
+  // Se propaga hacia delante y en orden, así que una cadena (30 repite a 20, 20
+  // repite a 8) se resuelve entera en una pasada: `igualQue` siempre mira atrás.
+  for (const t of tomas) {
+    const dueña = planos.get(t.i)?.igualQue;
+    if (
+      Number.isInteger(dueña) &&
+      t.i - dueña >= SEPARACION_MINIMA &&
+      conMovimiento.has(dueña) &&
+      !conMovimiento.has(t.i)
+    ) {
+      conMovimiento.add(t.i);
+    }
+  }
+
   return tomas.map((t) => {
     const p = planos.get(t.i);
     if (!p) {
@@ -236,11 +257,18 @@ export async function dirigir({ tomas, escenas, tema, config, tratamiento = null
     // documental; el mismo plano dos veces en veinte segundos es un error de
     // montaje. La regla está en la instrucción del director, pero pedirla no basta:
     // aquí se cumple, porque el que mira el resultado eres tú y no él.
+    // Y las dos tomas tienen que ser de la misma clase: un clip no se puede
+    // reutilizar como imagen fija ni al revés. Antes esto excluía del todo a las
+    // tomas con movimiento —`!conMovimiento.has(t.i)`— y por eso ningún clip se
+    // reutilizaba nunca.
+    const mismaClase =
+      Number.isInteger(p.igualQue) && conMovimiento.has(t.i) === conMovimiento.has(p.igualQue);
+
     const reusa =
       Number.isInteger(p.igualQue) &&
       p.igualQue >= 0 &&
       t.i - p.igualQue >= SEPARACION_MINIMA &&
-      !conMovimiento.has(t.i)
+      mismaClase
         ? p.igualQue
         : null;
 

@@ -737,4 +737,95 @@ export const invariantes = [
         t.replace('const otras = P.piezas.filter((x) => x.id !== z.id);', 'const otras = estado.ascendencia(P, z);'),
       ),
   },
+
+  {
+    nombre: 'los-clips-tambien-se-reutilizan',
+    dice: 'El clip es la fase MÁS CARA con diferencia, y era la única que no reutilizaba nada: la hoja componía siempre la clave del clip propio de cada toma, así que un motivo animado que vuelve cinco veces se pagaba cinco veces.',
+    async comprobar(ctx) {
+      const { construirHoja, componerManifiesto } = ctx.fn;
+      const { planificar } = await import('../../app/fases/movimiento.js');
+      const fallos = [];
+      const plano = {
+        encuadre: 'plano general', movimientoCamara: 'acercamiento lento',
+        lugar: 'la casa', luz: 'noche', sujetos: [], descripcion: 'd',
+      };
+      // Un motivo animado que vuelve dos veces, y un clip heredado de otra pieza.
+      const tomas = Array.from({ length: 24 }, (_, i) => ({
+        i, escena: 0, texto: 'x', segundos: 5, medida: true, plano,
+        tipoImagen: 'reconstruccion',
+        movimiento: [2, 5, 10, 20].includes(i),
+        reusa: i === 10 ? 2 : i === 20 ? 10 : null,
+        heredadoVid: i === 5 ? 'p00/t003/vid' : undefined,
+      }));
+      const hoja = construirHoja({ pieza: 'p01', tomas, escenas: [{ n: 0, titulo: 'A' }] });
+      const archivoDe = (i) => hoja.tomas.find((f) => f.i === i)?.archivo;
+
+      if (archivoDe(10) !== archivoDe(2)) {
+        fallos.push(`La toma 10 repite el plano de la 2 y abre ${archivoDe(10)}: paga un clip de más.`);
+      }
+      // Y la cadena entera: 20 repite a 10, que repite a 2.
+      if (archivoDe(20) !== archivoDe(2)) {
+        fallos.push(`Una cadena de repeticiones no se resuelve: la toma 20 abre ${archivoDe(20)}.`);
+      }
+      if (archivoDe(5) !== 'p00/t003/vid') {
+        fallos.push(`Un clip heredado de otra pieza no llega a la hoja: la toma 5 abre ${archivoDe(5)}.`);
+      }
+
+      // El manifiesto no baja el mismo clip cuatro veces.
+      const clips = componerManifiesto(hoja, (c) => c).split('\n').filter((l) => l.includes('/vid'));
+      if (clips.length !== 2) {
+        fallos.push(`El manifiesto trae ${clips.length} clips para 4 tomas animadas; deberían ser 2.`);
+      }
+
+      // Y la fase no vuelve a generar lo que ya está.
+      const aGenerar = planificar(tomas, { soloLasQueFaltan: false }).map((t) => t.i);
+      for (const i of [5, 10, 20]) {
+        if (aGenerar.includes(i)) fallos.push(`La toma ${i} reutiliza un clip y aun así se regeneraría.`);
+      }
+      if (!aGenerar.includes(2)) fallos.push('La toma que sí tiene clip propio no se generaría.');
+      return fallos;
+    },
+    // Se rompe como estaba: la hoja componiendo siempre el clip propio de cada
+    // toma. Va por el contexto porque la invariante usa `construirHoja` de ahí, y
+    // editar la fuente no la alcanzaría.
+    romper: (ctx) =>
+      conFuncion(ctx, 'construirHoja', (args) => {
+        const h = ctx.fn.construirHoja(args);
+        return {
+          ...h,
+          tomas: h.tomas.map((f) =>
+            f.movimiento
+              ? { ...f, archivo: `${args.pieza}/t${String(f.i).padStart(3, '0')}/vid` }
+              : f,
+          ),
+        };
+      }),
+  },
+
+  {
+    nombre: 'un-motivo-animado-vuelve-sin-gastar-cupo',
+    dice: 'Si la toma 8 lleva clip y la 27 repite ese mismo plano, la 27 usa el MISMO clip: no cuesta nada. Sin esto, o la 27 paga otro clip o se queda como imagen fija y se pierde el motivo.',
+    comprobar(ctx) {
+      const dir = fuente(ctx, 'app/fases/direccion.js');
+      const fallos = [];
+      // La propagación del movimiento a las repeticiones.
+      if (!/conMovimiento\.has\(dueña\)/.test(dir)) {
+        fallos.push('Una toma que repite un plano animado no hereda el movimiento: se queda fija.');
+      }
+      // Y `reusa` tiene que admitir tomas con movimiento, no excluirlas.
+      const i = dir.indexOf('const reusa =');
+      const bloque = dir.slice(i, dir.indexOf(';', i));
+      if (/!conMovimiento\.has\(t\.i\)/.test(bloque)) {
+        fallos.push('Las tomas con movimiento siguen excluidas de la reutilización: ningún clip se repetiría.');
+      }
+      if (!/mismaClase/.test(bloque)) {
+        fallos.push('No se comprueba que las dos tomas sean de la misma clase: un clip no vale como imagen fija.');
+      }
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'app/fases/direccion.js', (t) =>
+        t.replace('conMovimiento.has(dueña) &&', 'false &&'),
+      ),
+  },
 ];
