@@ -102,6 +102,9 @@ function piezaVacia(id, titulo) {
     escenas: [],
     metadatos: null,
     montaje: null,
+    // El tratamiento del director: de él beben el guion, la dirección de arte, la
+    // música y la miniatura. Se guarda con la pieza porque es de la pieza.
+    tratamiento: null,
   };
 }
 

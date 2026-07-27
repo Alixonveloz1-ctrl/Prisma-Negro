@@ -11,9 +11,21 @@
 const PUERTA = '/api/ia';
 
 let claveAcceso = '';
+let modeloTexto = '';
 
 export function ponerClave(c) {
   claveAcceso = String(c || '');
+}
+
+/**
+ * El modelo de texto que quiere este proyecto.
+ *
+ * Se pone una vez al cargar y viaja solo en cada llamada de texto. Si cada fase
+ * tuviera que acordarse de pasarlo, alguna se olvidaría y esa correría con otro
+ * modelo sin que nadie lo supiera.
+ */
+export function ponerModeloTexto(m) {
+  modeloTexto = String(m || '');
 }
 
 export function hayClave() {
@@ -47,7 +59,12 @@ export async function llamar(modo, datos = {}, { reintentos = 2, senal } = {}) {
       r = await fetch(PUERTA, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modo, clave: claveAcceso, ...datos }),
+        body: JSON.stringify({
+          modo,
+          clave: claveAcceso,
+          ...(modo === 'texto' && modeloTexto ? { modelo: modeloTexto } : {}),
+          ...datos,
+        }),
         signal: senal,
       });
     } catch (e) {

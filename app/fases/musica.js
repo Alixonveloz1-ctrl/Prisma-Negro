@@ -9,6 +9,7 @@
 // genera el material.
 
 import { llamar } from '../api.js';
+import { comoInstruccion } from './director.js';
 import { claveMusica } from '../../comun/claves.mjs';
 
 export function planificar(escenas, tomas, config, { soloLasQueFaltan = true } = {}) {
@@ -33,13 +34,16 @@ export function planificar(escenas, tomas, config, { soloLasQueFaltan = true } =
  * la ficha de escena ya lleva el lugar, la luz y el tono. Una llamada más costaría
  * dinero para decir lo mismo.
  */
-export function atmosferaDe(escena, tomas) {
+export function atmosferaDe(escena, tomas, tratamiento = null) {
   const suyas = tomas.filter((t) => t.escena === escena.n && t.plano);
   const lugares = [...new Set(suyas.map((t) => t.plano.lugar).filter(Boolean))].slice(0, 2);
   const luces = [...new Set(suyas.map((t) => t.plano.luz).filter(Boolean))].slice(0, 2);
 
   return [
     'Música instrumental de documental, sin voces, sin percusión marcada.',
+    // Lo que pidió el director para toda la pieza. Sin esto cada escena suena a un
+    // documental distinto.
+    tratamiento ? comoInstruccion(tratamiento, { para: 'musica' }) : '',
     escena.titulo ? `Escena: ${escena.titulo}.` : '',
     lugares.length ? `Ambiente: ${lugares.join(', ')}.` : '',
     luces.length ? `Luz: ${luces.join(', ')}.` : '',
@@ -53,13 +57,13 @@ export function atmosferaDe(escena, tomas) {
     .join(' ');
 }
 
-export async function generarMusicaDeEscena({ escena, tomas, pieza, senal }) {
+export async function generarMusicaDeEscena({ escena, tomas, pieza, tratamiento = null, senal }) {
   const clave = claveMusica(pieza, escena.n);
 
   const r = await llamar(
     'musica',
     {
-      instruccion: atmosferaDe(escena, tomas),
+      instruccion: atmosferaDe(escena, tomas, tratamiento),
       // Se genera algo más corta que la escena a propósito: el montaje la repite si
       // hace falta (`-stream_loop`). Un lecho sin melodía protagonista se repite sin
       // que se note, y pagar dos minutos de música para una escena de dos minutos es

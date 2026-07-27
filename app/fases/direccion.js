@@ -13,6 +13,7 @@
 // veces.
 
 import { llamar } from '../api.js';
+import { comoInstruccion } from './director.js';
 
 const ESQUEMA = {
   type: 'object',
@@ -75,7 +76,7 @@ Reglas de este documental:
   ni adjetivos de opinión. Nombra la luz, la hora del día, la textura, el color.`;
 
 /** Una llamada por pieza. Devuelve las tomas con `plano`, `movimiento` y `reusa`. */
-export async function dirigir({ tomas, escenas, tema, config, senal }) {
+export async function dirigir({ tomas, escenas, tema, config, tratamiento = null, senal }) {
   if (!tomas?.length) throw new Error('No hay tomas que dirigir. Segmenta el guion primero.');
 
   const proporcion = config?.movimiento?.proporcion ?? 0.15;
@@ -87,6 +88,9 @@ export async function dirigir({ tomas, escenas, tema, config, senal }) {
       sistema: SISTEMA,
       instruccion:
         `Documental sobre: ${tema}\n` +
+        // La identidad visual la decide el director UNA vez y la sostienen las 134
+        // tomas. Sin esto cada toma inventa su propia paleta.
+        (tratamiento ? comoInstruccion(tratamiento, { para: 'direccion' }) + '\n\n' : '') +
         `Escenas: ${escenas.map((e) => `[${e.n}] ${e.titulo || 'sin título'}`).join(', ')}\n` +
         `Tomas: ${tomas.length}. Cupo de tomas con movimiento: ${cupo} como mucho.\n\n` +
         tomas.map((t) => `(${t.i}) [escena ${t.escena}] ${t.texto}`).join('\n') +

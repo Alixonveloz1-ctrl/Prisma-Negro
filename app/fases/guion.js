@@ -12,6 +12,7 @@
 //   - Una línea en blanco es una frontera dura entre tomas.
 
 import { llamar } from '../api.js';
+import { comoInstruccion } from './director.js';
 
 // Cuánto pesa cada tipo de fuente. Un dato de una sentencia y uno de un blog no
 // valen lo mismo, y el guion tiene que apoyarse antes en el primero.
@@ -40,7 +41,7 @@ artículo leído en voz alta: escribes para el oído.
  * Genera el guion a partir de las fichas (§8.1: el guion se genera A PARTIR DE las
  * fichas, no al revés).
  */
-export async function escribirGuion({ tema, angulo = '', fichas, minutos = 10, senal }) {
+export async function escribirGuion({ tema, angulo = '', fichas, minutos = 10, tratamiento = null, senal }) {
   if (!fichas?.length) {
     throw new Error(
       'No hay fichas. El guion se escribe a partir de la investigación: sin fichas ' +
@@ -59,6 +60,9 @@ export async function escribirGuion({ tema, angulo = '', fichas, minutos = 10, s
         `Tema: ${tema}\n` +
         (angulo ? `Ángulo: ${angulo}\n` : '') +
         `Duración objetivo: ${minutos} minutos (~${palabras} palabras).\n\n` +
+        // El tratamiento del director manda: estructura, tono, apertura y cierre. Sin
+        // esto el guion es una enumeración de fichas ordenadas por fecha.
+        (tratamiento ? comoInstruccion(tratamiento, { para: 'guion' }) + '\n\n' : '') +
         `FICHAS DISPONIBLES:\n` +
         // Las fichas van ORDENADAS por solidez de la fuente. El modelo se apoya en
         // lo primero que lee, así que lo primero tiene que ser lo mejor sostenido:

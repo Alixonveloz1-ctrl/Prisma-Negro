@@ -52,6 +52,11 @@ export const PREDETERMINADA = {
     vertical: false,
   },
 
+  // Vacío = el que tenga el servidor en MODELO_TEXTO. Se elige en Ajustes de una
+  // lista de los que el proyecto de la nube TIENE de verdad, no de una escrita a
+  // mano que envejece sola.
+  texto: { modelo: '' },
+
   segmentacion: { ...SEGMENTACION },
 
   narracion: {

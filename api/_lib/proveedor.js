@@ -75,8 +75,12 @@ export async function texto({
   temperatura = 0.7,
   maxTokens = 8192,
   buscarEnInternet = false,
+  modelo: pedido = '',
 }) {
-  const modelo = process.env.MODELO_TEXTO || 'gemini-2.5-pro';
+  // El proyecto puede fijar su modelo; si no, manda el del entorno. Poder cambiarlo
+  // desde la pantalla evita tener que tocar variables de entorno y redesplegar solo
+  // para probar un modelo nuevo.
+  const modelo = pedido || process.env.MODELO_TEXTO || 'gemini-2.5-pro';
 
   // Con búsqueda en internet NO se pide salida estructurada: la herramienta de
   // búsqueda y el esquema de respuesta no conviven en todas las versiones del
@@ -362,3 +366,48 @@ export async function musica({ instruccion, segundos = 30 }) {
   if (!b64) throw new Error('El modelo de música no devolvió audio.');
   return { datos: b64, tipo: p?.mimeType || 'audio/wav' };
 }
+
+// ── Catálogo de modelos ───────────────────────────────────────────────────────
+//
+// Qué modelos tiene DE VERDAD este proyecto, preguntándoselo al proveedor en vez de
+// llevar una lista escrita a mano que envejece sola. Una lista escrita a mano acaba
+// ofreciendo modelos retirados y escondiendo los nuevos, y el usuario no tiene forma
+// de saber cuál de las dos cosas le está pasando.
+
+export async function modelosDisponibles() {
+  const token = await tokenDeAcceso();
+  const r = await fetch(
+    `https://${region()}-aiplatform.googleapis.com/v1/publishers/google/models?pageSize=200`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  const datos = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(`No se pudo leer el catálogo de modelos: ${datos?.error?.message || r.status}`);
+
+  const familia = (n) =>
+    /veo/i.test(n) ? 'video' : /image|imagen/i.test(n) ? 'imagen' : /lyria|music/i.test(n) ? 'musica' : /gemini/i.test(n) ? 'texto' : null;
+
+  const salida = {};
+  for (const m of datos.publisherModels || []) {
+    const id = String(m.name || '').split('/').pop();
+    if (!id) continue;
+    const f = familia(id);
+    if (!f) continue;
+    // Fuera lo experimental y lo que ya no admite peticiones: ofrecer un modelo que
+    // va a fallar es peor que no ofrecerlo.
+    if (/-tuning|embedding|@00/i.test(id)) continue;
+    (salida[f] ||= []).push({ id, etiqueta: id, version: m.versionId || '' });
+  }
+  // Los más nuevos primero: es lo que casi siempre se quiere.
+  for (const f of Object.keys(salida)) {
+    salida[f].sort((a, b) => b.id.localeCompare(a.id, 'en', { numeric: true }));
+  }
+  return salida;
+}
+
+/** Cuál se está usando ahora mismo, para poder enseñarlo al lado del selector. */
+export const modelosEnUso = () => ({
+  texto: process.env.MODELO_TEXTO || 'gemini-2.5-pro',
+  imagen: process.env.MODELO_IMAGEN || 'gemini-2.5-flash-image',
+  video: process.env.MODELO_VIDEO || 'veo-3.1-generate-preview',
+  musica: process.env.MODELO_MUSICA || 'lyria-002',
+});

@@ -12,7 +12,7 @@
 // Los pasos que todavía no tocan salen apagados, para que no haya que adivinar cuál
 // es el siguiente.
 
-import { llamar, ponerClave } from './api.js';
+import { llamar, ponerClave, ponerModeloTexto } from './api.js';
 import * as estado from './estado.js';
 import { Cola } from './cola.js';
 import { pintarSelectorModelo } from './config.js';
@@ -21,6 +21,7 @@ import { TEMAS, EPOCAS, EPOCA_POR_DEFECTO, temaPorId, epocaPorId } from '../comu
 import * as investigacion from './fases/investigacion.js';
 import * as guionFase from './fases/guion.js';
 import * as direccion from './fases/direccion.js';
+import * as director from './fases/director.js';
 import * as narracion from './fases/narracion.js';
 import * as imagenFase from './fases/imagen.js';
 import * as movimiento from './fases/movimiento.js';
@@ -53,7 +54,7 @@ const VISTAS = [
 
 let P = null;
 let casos = [];
-const cola = new Cola({ alProgresar: pintarProgreso, alAviso: (m) => avisar('paso3', m) });
+const cola = new Cola({ alProgresar: pintarProgreso, alAviso: (m) => avisar('paso4', m) });
 // Una cola aparte para la investigación: su progreso va en el paso 2 y puede
 // solaparse con una generación en marcha sin pisarle la barra.
 const colaInvestiga = new Cola({
@@ -90,7 +91,7 @@ function pintarProgreso({ fase, hechas, total, estado: e, fallos }) {
   $('b-detener').disabled = e === 'termina' || e === 'detenida';
 }
 
-function accion(boton, hacer, donde = 'paso3') {
+function accion(boton, hacer, donde = 'paso4') {
   const b = $(boton);
   b?.addEventListener('click', async () => {
     b.disabled = true;
@@ -163,9 +164,36 @@ async function arrancar() {
   P = locales.length
     ? await estado.cargarLocal(locales.sort((a, b) => b.modificado - a.modificado)[0].id)
     : estado.nuevoProyecto();
+  ponerModeloTexto(P.config.texto.modelo);
   await guardar();
   pintarTodo();
   cargarVoces();
+  cargarModelos();
+}
+
+/**
+ * Los modelos que este proyecto tiene DE VERDAD, preguntándoselo al proveedor.
+ *
+ * Una lista escrita a mano acaba ofreciendo modelos retirados y escondiendo los
+ * nuevos, y desde la pantalla no hay forma de saber cuál de las dos cosas pasa.
+ */
+async function cargarModelos() {
+  try {
+    const r = await llamar('modelos.catalogo');
+    const sel = $('m-texto');
+    sel.innerHTML = '<option value="">El del servidor</option>';
+    for (const m of r.disponibles?.texto || []) {
+      const o = document.createElement('option');
+      o.value = m.id;
+      o.textContent = m.id;
+      if (m.id === P.config.texto.modelo) o.selected = true;
+      sel.appendChild(o);
+    }
+    $('modelo-en-uso').textContent =
+      `Ahora mismo escribe con: ${P.config.texto.modelo || r.enUso?.texto || 'el del servidor'}`;
+  } catch (e) {
+    $('modelo-en-uso').textContent = `No se pudo leer el catálogo: ${e.message}`;
+  }
 }
 
 function pintarNavegacion() {
@@ -241,6 +269,7 @@ function pintarTodo() {
   pintarCasoElegido();
   pintarFichas();
   pintarReparto();
+  pintarTratamiento();
   pintarTomas();
   pintarAjustes();
   pintarPasos();
@@ -262,21 +291,29 @@ function pintarPasos() {
     montado: !!pieza().montaje,
   };
 
+  hay.fichas = P.fichas.length > 0;
+  hay.tratamiento = !!pieza().tratamiento;
+
   const marcar = (n, hecho, listo) => {
     const el = $(`paso${n}`);
+    if (!el) return;
     el.classList.toggle('hecho', hecho);
     el.classList.toggle('espera', !listo && !hecho);
   };
   marcar(1, hay.caso, true);
-  marcar(2, hay.guion, hay.caso);
-  marcar(3, hay.generado, hay.guion);
-  marcar(4, hay.montado, hay.generado);
-  marcar(5, false, hay.montado);
+  marcar(2, hay.fichas, hay.caso);
+  marcar(3, hay.guion, hay.fichas);
+  marcar(4, hay.generado, hay.guion);
+  marcar(5, hay.montado, hay.generado);
+  marcar(6, false, hay.montado);
 
-  $('b-generar-guion').disabled = !hay.caso;
+  $('b-investigar-fondo').disabled = !hay.caso;
+  $('b-dirigir-pieza').disabled = !hay.fichas;
+  $('b-generar-guion').disabled = !hay.tratamiento;
   for (const b of ['b-narrar', 'b-imagenes', 'b-movimiento', 'b-musica']) $(b).disabled = !hay.guion;
   $('b-montar').disabled = !hay.generado;
   $('b-revisar').disabled = !hay.guion;
+  $('b-producir').disabled = !hay.caso;
 }
 
 // ── Paso 1: buscar casos y elegir uno ─────────────────────────────────────────
@@ -476,7 +513,60 @@ function pintarReparto() {
     : '';
 }
 
-/** El paso 2 del flujo: fichas y guion de una vez, que es como se usa. */
+/**
+ * El director decide la pieza. Una sola llamada, y de ella beben el guion, la
+ * dirección de arte, la música y la miniatura.
+ */
+accion(
+  'b-dirigir-pieza',
+  async () => {
+    const tr = await director.dirigirPieza({
+      caso: P.caso,
+      fichas: P.fichas,
+      minutos: Number($('minutos').value) || 10,
+    });
+    pieza().tratamiento = tr;
+
+    // El ritmo que pide el director entra en la configuración: es él quien sabe si
+    // esta pieza va lenta o va nerviosa. El tope de gasto sigue siendo del usuario.
+    P.config.segmentacion.segundosObjetivo = tr.ritmo.segundosPorToma;
+    P.config.movimiento.proporcion = tr.ritmo.proporcionMovimiento;
+    P = estado.sanear(P);
+
+    await guardar();
+    pintarTratamiento();
+    pintarAjustes();
+    pintarPasos();
+    avisar('paso3', `Dirigido: ${tr.estructura.length} actos. Ya puedes generar el guion.`, 'bueno');
+  },
+  'paso3',
+);
+
+function pintarTratamiento() {
+  const tr = pieza().tratamiento;
+  const caja = $('tratamiento');
+  if (!caja) return;
+  caja.innerHTML = tr
+    ? `<div class="ficha" style="margin-top:13px">` +
+      `<p><b>${escapar(tr.premisa)}</b></p>` +
+      `<p style="margin-top:6px;color:var(--tinta-2)">${escapar(tr.hilo)}</p>` +
+      `<div class="cita">Abre: ${escapar(tr.aperturaEnFrio)}</div>` +
+      `<div class="reparto">` +
+      tr.estructura.map((a) => `<span class="pastilla">${a.acto}. ${escapar(a.titulo)}</span>`).join('') +
+      `</div>` +
+      (tr.identidadVisual
+        ? `<p class="nota chica" style="margin-top:9px">${escapar(tr.identidadVisual.paleta)} · ${escapar(tr.identidadVisual.luz)}</p>`
+        : '') +
+      (tr.cuidado?.length
+        ? `<div class="aviso" style="margin-top:10px"><b>Cuidado en este caso:</b>` +
+          tr.cuidado.map((c) => `<span class="comoarreglar">· ${escapar(c)}</span>`).join('') +
+          `</div>`
+        : '') +
+      `</div>`
+    : '';
+}
+
+/** El guion, ya con el tratamiento del director dentro. */
 accion(
   'b-generar-guion',
   async () => {
@@ -487,11 +577,13 @@ accion(
           'escribe a partir de ellas, y sin fichas sería opinión, no documental.',
       );
     }
-    avisar('paso2', `${P.fichas.length} fichas. Escribiendo el guion…`);
+    if (!pieza().tratamiento) throw new Error('Dirige la pieza primero: el guion sale del tratamiento.');
+    avisar('paso3', `${P.fichas.length} fichas. Escribiendo el guion…`);
     const texto = await guionFase.escribirGuion({
       tema: P.tema,
       fichas: P.fichas,
       minutos: Number($('minutos').value) || 10,
+      tratamiento: pieza().tratamiento,
     });
     pieza().guion = texto;
     $('guion').value = texto;
@@ -518,6 +610,7 @@ accion(
       tema: P.tema,
       fichas: P.fichas,
       minutos: Number($('minutos').value) || 10,
+      tratamiento: pieza().tratamiento,
     });
     pieza().guion = texto;
     $('guion').value = texto;
@@ -624,6 +717,7 @@ accion(
       escenas: pieza().escenas,
       tema: P.tema,
       config: P.config,
+      tratamiento: pieza().tratamiento,
     });
     pieza().tomas = tomas;
     await guardar();
@@ -642,17 +736,21 @@ accion(
 
 // ── Paso 3: las fases que gastan ──────────────────────────────────────────────
 
-$('b-detener').addEventListener('click', () => cola.detener());
+$('b-detener').addEventListener('click', () => {
+  cola.detener();
+  colaInvestiga.detener();
+});
 
 /** Dirige si hace falta: sin ficha de plano no hay ni imagen ni clip. */
 async function asegurarDireccion() {
   if (pieza().tomas.every((t) => t.plano)) return;
-  avisar('paso3', 'Falta la dirección de arte. Se hace sola, en una llamada…');
+  avisar('paso4', 'Falta la dirección de arte. Se hace sola, en una llamada…');
   pieza().tomas = await direccion.dirigir({
     tomas: pieza().tomas,
     escenas: pieza().escenas,
     tema: P.tema,
     config: P.config,
+    tratamiento: pieza().tratamiento,
   });
   await guardar();
   pintarTomas();
@@ -668,7 +766,7 @@ const guardaToma = async (nueva) => {
 
 accion('b-narrar', async () => {
   const bloques = narracion.planificar(pieza().tomas, P.config);
-  if (!bloques.length) return avisar('paso3', 'Ya está toda la narración.', 'bueno');
+  if (!bloques.length) return avisar('paso4', 'Ya está toda la narración.', 'bueno');
 
   // §4.5: el progreso se cuenta en LLAMADAS, no en tomas.
   const r = await cola.ejecutar(
@@ -687,7 +785,7 @@ accion('b-narrar', async () => {
 accion('b-imagenes', async () => {
   await asegurarDireccion();
   const pendientes = imagenFase.planificar(pieza().tomas);
-  if (!pendientes.length) return avisar('paso3', 'Ya están todas las imágenes.', 'bueno');
+  if (!pendientes.length) return avisar('paso4', 'Ya están todas las imágenes.', 'bueno');
 
   const r = await cola.ejecutar(
     'imágenes',
@@ -702,7 +800,7 @@ accion('b-imagenes', async () => {
 accion('b-movimiento', async () => {
   await asegurarDireccion();
   const pendientes = movimiento.planificar(pieza().tomas);
-  if (!pendientes.length) return avisar('paso3', 'No falta ningún clip.', 'bueno');
+  if (!pendientes.length) return avisar('paso4', 'No falta ningún clip.', 'bueno');
   if (!confirm(`Son ${pendientes.length} clips y es la fase más cara con diferencia. ¿Sigo?`)) return;
 
   const r = await cola.ejecutar(
@@ -724,12 +822,12 @@ accion('b-movimiento', async () => {
 
 accion('b-musica', async () => {
   const pendientes = musica.planificar(pieza().escenas, pieza().tomas, P.config);
-  if (!pendientes.length) return avisar('paso3', 'La música ya está, o está apagada.', 'bueno');
+  if (!pendientes.length) return avisar('paso4', 'La música ya está, o está apagada.', 'bueno');
 
   const r = await cola.ejecutar(
     'música',
     pendientes,
-    (escena, _i, senal) => musica.generarMusicaDeEscena({ escena, tomas: pieza().tomas, pieza: P.id, senal }),
+    (escena, _i, senal) => musica.generarMusicaDeEscena({ escena, tomas: pieza().tomas, pieza: P.id, tratamiento: pieza().tratamiento, senal }),
     {
       alTerminarUno: async (res) => {
         const e = pieza().escenas.find((x) => x.n === res.n);
@@ -744,23 +842,104 @@ accion('b-musica', async () => {
 function informar(r, que) {
   pintarPasos();
   if (r.detenida) {
-    return avisar('paso3', `${que}: detenido en ${r.hechas} de ${r.total}. Lo hecho está guardado.`);
+    return avisar('paso4', `${que}: detenido en ${r.hechas} de ${r.total}. Lo hecho está guardado.`);
   }
   if (r.fallos.length) {
-    avisar('paso3', `${que}: ${r.fallos.length} de ${r.total} fallaron. Vuelve a darle: solo repite lo que falta.`, 'malo');
-    return registro('paso3', r.fallos.map((f) => `· ${f.error}`));
+    avisar('paso4', `${que}: ${r.fallos.length} de ${r.total} fallaron. Vuelve a darle: solo repite lo que falta.`, 'malo');
+    return registro('paso4', r.fallos.map((f) => `· ${f.error}`));
   }
-  avisar('paso3', `${que}: ${r.hechas} de ${r.total}, sin fallos.`, 'bueno');
+  avisar('paso4', `${que}: ${r.hechas} de ${r.total}, sin fallos.`, 'bueno');
 }
 
-// ── Paso 4: montaje ───────────────────────────────────────────────────────────
+// ── Producción automática ─────────────────────────────────────────────────────
+//
+// Encadena todo desde el caso ya elegido hasta el video montado.
+//
+// NO se salta ninguna regla del §4: cada fase sigue generando por separado, sigue
+// cobrando solo lo que genera, sigue teniendo modo «solo las que faltan» y sigue
+// escribiendo cada unidad antes de pasar a la siguiente. Detener a mitad deja el
+// trabajo hecho guardado, y volver a darle retoma donde se quedó en vez de repetir
+// —y volver a pagar— lo que ya está.
+//
+// Lo único que añade es no tener que estar delante tocando botones en orden.
+
+const PASOS_AUTO = [
+  {
+    nombre: 'investigación',
+    hace_falta: () => !P.fichas.length,
+    hacer: () => $('b-investigar-fondo').click(),
+  },
+  { nombre: 'dirección', hace_falta: () => !pieza().tratamiento, hacer: () => $('b-dirigir-pieza').click() },
+  { nombre: 'guion', hace_falta: () => !pieza().tomas.length, hacer: () => $('b-generar-guion').click() },
+  { nombre: 'narración', hace_falta: () => narracion.planificar(pieza().tomas, P.config).length, hacer: () => $('b-narrar').click() },
+  { nombre: 'imágenes', hace_falta: () => imagenFase.planificar(pieza().tomas).length, hacer: () => $('b-imagenes').click() },
+  { nombre: 'música', hace_falta: () => musica.planificar(pieza().escenas, pieza().tomas, P.config).length, hacer: () => $('b-musica').click() },
+  { nombre: 'montaje', hace_falta: () => !pieza().montaje, hacer: () => $('b-montar').click() },
+];
+
+accion(
+  'b-producir',
+  async () => {
+    if (!P.caso) throw new Error('Elige un caso primero, en el paso 1.');
+
+    // Los clips de movimiento NO entran aquí a propósito: son la fase más cara con
+    // diferencia (§4.7) y arrancarlos sin preguntar es la forma de despertarse con
+    // la cuota gastada. Se lanzan a mano desde el paso 4.
+    const pendientes = PASOS_AUTO.filter((s) => s.hace_falta());
+    if (!pendientes.length) {
+      return avisar('auto', 'Ya está todo hecho. Solo queda bajarlo en el paso 6.', 'bueno');
+    }
+    if (!confirm(`Se van a hacer ${pendientes.length} fases: ${pendientes.map((s) => s.nombre).join(', ')}.\n\nLos clips de movimiento no entran: esos se lanzan a mano.\n\n¿Sigo?`)) return;
+
+    for (const [i, paso] of pendientes.entries()) {
+      if (cola.senal?.aborted || colaInvestiga.senal?.aborted) break;
+      avisar('auto', `${i + 1} de ${pendientes.length} · ${paso.nombre}…`);
+
+      // Se pulsa el mismo botón que pulsaría una persona: así la fase automática y
+      // la manual no pueden divergir. Si un día una de las dos se arregla, la otra
+      // se arregla con ella.
+      paso.hacer();
+      await esperarAQueTermine(paso);
+
+      // Si la fase no dejó lo que tenía que dejar, se para y se dice cuál: seguir
+      // encadenando sobre un hueco produce un fallo mucho más adelante y sin pista.
+      if (paso.hace_falta() && paso.nombre !== 'montaje') {
+        return avisar('auto', `Se paró en «${paso.nombre}»: no quedó terminado. Mira ese paso y vuelve a darle.`, 'malo');
+      }
+    }
+    pintarPasos();
+    avisar('auto', 'Producción terminada. Baja el video en el paso 6.', 'bueno');
+  },
+  'auto',
+);
+
+/** Espera a que la fase deje de trabajar. Sondea el estado, no adivina el tiempo. */
+function esperarAQueTermine(paso) {
+  return new Promise((res) => {
+    let quieto = 0;
+    const t = setInterval(() => {
+      const trabajando = cola.corriendo || colaInvestiga.corriendo || $('b-montar').disabled;
+      if (trabajando) {
+        quieto = 0;
+        return;
+      }
+      // Dos vueltas quieto: una sola podría caer en el hueco entre dos llamadas.
+      if (++quieto >= 2) {
+        clearInterval(t);
+        res();
+      }
+    }, 700);
+  });
+}
+
+// ── Paso 5: montaje ───────────────────────────────────────────────────────────
 
 accion(
   'b-revisar',
   async () => {
     const r = await montajeFase.revisar({ pieza: pieza(), config: P.config });
     avisar(
-      'paso4',
+      'paso5',
       r.completo
         ? `Todo listo: ${r.total} materiales, ${(r.duracion / 60).toFixed(1)} minutos.`
         : `Faltan ${r.faltan.length} de ${r.total} materiales.`,
@@ -769,7 +948,7 @@ accion(
     if (!r.completo) registro('paso4', r.faltan);
     if (r.avisos.length) registro('paso4', r.avisos);
   },
-  'paso4',
+  'paso5',
 );
 
 accion(
@@ -796,7 +975,7 @@ accion(
       registro('paso4', r.registro);
     }
   },
-  'paso4',
+  'paso5',
 );
 
 // ── Paso 5: exportar ──────────────────────────────────────────────────────────
@@ -884,14 +1063,17 @@ accion(
     P.config.marca.texto = $('marca-texto').value.trim();
     P.config.formato.vertical = $('vertical').value === '1';
     if ($('voz').value) P.config.narracion.nombreVoz = $('voz').value;
+    P.config.texto.modelo = $('m-texto').value;
     P.titulo = $('titulo').value.trim() || P.titulo;
 
     // Se vuelve a sanear para que los valores nuevos pasen por el normalizador: el
     // mismo camino que usan las tres cargas, así un valor fuera de rango se corrige
     // aquí y no dentro de una fase a medio generar.
     P = estado.sanear(P);
+    ponerModeloTexto(P.config.texto.modelo);
     await guardar();
     pintarAjustes();
+    cargarModelos();
     avisar('proyecto', 'Ajustes guardados.', 'bueno');
   },
   'proyecto',

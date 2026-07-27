@@ -352,6 +352,21 @@ nav.abajo button svg{width:22px;height:22px}
           <p>De un caso real a un video terminado, sin salir de aquí.</p>
         </div>
 
+        <div class="panel" id="panel-auto">
+          <h2>Producción automática</h2>
+          <p class="nota">Elige un caso y esto hace el resto sin parar: investigación, dirección, guion, narración, imágenes, música y montaje.</p>
+          <div class="fila-btn" style="margin-top:13px">
+            <button class="btn primario grande" id="b-producir">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9z"/></svg>
+              Producir el documental entero
+            </button>
+          </div>
+          <div class="fila-btn" style="margin-top:9px">
+            <button class="btn peligro chico" id="b-detener">Detener</button>
+          </div>
+          <div id="aviso-auto"></div>
+        </div>
+
         <!-- 1 · Investigación -->
         <div class="paso" id="paso1">
           <div class="paso-cab">
@@ -382,24 +397,20 @@ nav.abajo button svg{width:22px;height:22px}
           <div id="aviso-paso1"></div>
         </div>
 
-        <!-- 2 · Guion -->
+        <!-- 2 · Investigación a fondo -->
         <div class="paso espera" id="paso2">
           <div class="paso-cab">
             <div class="paso-n">2</div>
             <div class="paso-txt">
-              <h3>Investigación a fondo y guion</h3>
-              <p>Seis búsquedas sobre el caso —cronología, fuentes oficiales, prensa, lo discutido, cifras y qué pasó después— y el guion sale de ahí.</p>
+              <h3>Investigación a fondo</h3>
+              <p>Seis búsquedas sobre el caso: cronología, fuentes oficiales, prensa, lo discutido, cifras y qué pasó después.</p>
             </div>
-          </div>
-          <div class="fila-btn" style="margin-top:13px">
-            <button class="btn primario" id="b-investigar-fondo">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/><path d="M11 8v6M8 11h6"/></svg>
-              Investigar a fondo
-            </button>
-            <button class="btn" id="b-generar-guion">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h11l5 5v11H4z"/><path d="M8 13h8M8 17h5"/></svg>
-              Generar guion
-            </button>
+            <div class="paso-acc">
+              <button class="btn primario" id="b-investigar-fondo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/><path d="M11 8v6M8 11h6"/></svg>
+                Investigar a fondo
+              </button>
+            </div>
           </div>
           <div class="barra"><i id="barra2"></i></div>
           <p class="nota chica" id="progreso2" style="margin-top:8px"></p>
@@ -407,10 +418,30 @@ nav.abajo button svg{width:22px;height:22px}
           <div id="aviso-paso2"></div>
         </div>
 
-        <!-- 3 · Generación -->
+        <!-- 3 · Dirección y guion -->
         <div class="paso espera" id="paso3">
           <div class="paso-cab">
             <div class="paso-n">3</div>
+            <div class="paso-txt">
+              <h3>Dirección y guion</h3>
+              <p>Un director de documentales decide la pieza —hilo, tono, estructura, identidad visual— y el guion sale de ahí.</p>
+            </div>
+            <div class="paso-acc">
+              <button class="btn primario" id="b-dirigir-pieza">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18v13H3z"/><path d="M7 7L4 3M13 7l-3-4M19 7l-3-4"/></svg>
+                Dirigir
+              </button>
+              <button class="btn" id="b-generar-guion">Guion</button>
+            </div>
+          </div>
+          <div id="tratamiento"></div>
+          <div id="aviso-paso3"></div>
+        </div>
+
+        <!-- 4 · Generación -->
+        <div class="paso espera" id="paso4">
+          <div class="paso-cab">
+            <div class="paso-n">4</div>
             <div class="paso-txt">
               <h3>Generación de contenido</h3>
               <p>Narración, imágenes, movimiento y música. Cada una por separado.</p>
@@ -424,16 +455,13 @@ nav.abajo button svg{width:22px;height:22px}
           </div>
           <div class="barra"><i id="barra"></i></div>
           <p class="nota chica" id="progreso" style="margin-top:8px"></p>
-          <div class="fila-btn" style="margin-top:10px">
-            <button class="btn peligro chico" id="b-detener" disabled>Detener</button>
-          </div>
-          <div id="aviso-paso3"></div>
+          <div id="aviso-paso4"></div>
         </div>
 
-        <!-- 4 · Montaje -->
-        <div class="paso espera" id="paso4">
+        <!-- 5 · Montaje -->
+        <div class="paso espera" id="paso5">
           <div class="paso-cab">
-            <div class="paso-n">4</div>
+            <div class="paso-n">5</div>
             <div class="paso-txt">
               <h3>Montaje</h3>
               <p>Se comprueba que está todo antes de arrancar, y se monta en la nube.</p>
@@ -443,13 +471,13 @@ nav.abajo button svg{width:22px;height:22px}
               <button class="btn" id="b-montar">Montar</button>
             </div>
           </div>
-          <div id="aviso-paso4"></div>
+          <div id="aviso-paso5"></div>
         </div>
 
-        <!-- 5 · Exportar -->
-        <div class="paso espera" id="paso5">
+        <!-- 6 · Exportar -->
+        <div class="paso espera" id="paso6">
           <div class="paso-cab">
-            <div class="paso-n">5</div>
+            <div class="paso-n">6</div>
             <div class="paso-txt">
               <h3>Exportar</h3>
               <p>Video final, miniatura, título, descripción con tiempos reales y fuentes.</p>
@@ -459,7 +487,7 @@ nav.abajo button svg{width:22px;height:22px}
               <button class="btn" id="b-bajar" disabled>Bajar video</button>
             </div>
           </div>
-          <div id="aviso-paso5"></div>
+          <div id="aviso-paso6"></div>
         </div>
 
         <p class="pie">
@@ -528,6 +556,13 @@ nav.abajo button svg{width:22px;height:22px}
           <p class="nota chica" style="margin-top:7px">Para narración larga conviene una voz de entrega fija: las expresivas cambian de tono en cada llamada.</p>
           <label for="velocidad">Velocidad · <b id="v-velocidad">0.96</b></label>
           <input id="velocidad" type="range" min="70" max="130" value="96">
+        </div>
+        <div class="panel">
+          <h2>Modelo de texto</h2>
+          <p class="nota chica">Es el que escribe la investigación, el tratamiento del director y el guion. La lista sale de lo que tu proyecto de la nube tiene de verdad.</p>
+          <label for="m-texto">Modelo</label>
+          <select id="m-texto"></select>
+          <p class="nota chica" id="modelo-en-uso" style="margin-top:7px"></p>
         </div>
         <div class="panel">
           <h2>Imagen y movimiento</h2>

@@ -104,6 +104,7 @@ async function despachar(modo, c) {
         maxTokens: c.maxTokens,
         // Busca en internet de verdad y devuelve además las fuentes consultadas.
         buscarEnInternet: !!c.buscarEnInternet,
+        modelo: c.modelo,
       });
 
     case 'imagen': {
@@ -151,6 +152,9 @@ async function despachar(modo, c) {
       // ~2,1 MB: cabe en la respuesta. Bloques más largos no, y por eso son de 45 s.
       return a;
     }
+
+    case 'modelos.catalogo':
+      return { disponibles: await proveedor.modelosDisponibles(), enUso: proveedor.modelosEnUso() };
 
     case 'voz.catalogo':
       return { voces: await proveedor.vocesDisponibles(c.idioma || 'es') };
