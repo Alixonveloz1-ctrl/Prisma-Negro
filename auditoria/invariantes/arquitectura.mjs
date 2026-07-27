@@ -329,6 +329,38 @@ export const invariantes = [
   },
 
   {
+    nombre: 'ninguna-imagen-vuelve-dentro-de-la-respuesta',
+    dice: 'Una imagen de 2K en base64 ocupa nueve megas y el tope de la respuesta es 4,5. Pedirla de vuelta en la misma llamada la tiraba con «la respuesta ocupa 9.14 MB» DESPUÉS de haberla generado y pagado. Se baja del almacén, por trozos.',
+    comprobar(ctx) {
+      const fallos = [];
+
+      // Ni el navegador la pide, ni la puerta sabe devolverla.
+      for (const [ruta, texto] of ctx.fuentes) {
+        if (ruta.startsWith('auditoria/') || ruta === 'app/material.js') continue;
+        if (/devolver:\s*true/.test(texto)) fallos.push(`${ruta} pide la imagen de vuelta en la respuesta.`);
+        if (ruta === 'api/ia.js' && /c\.devolver/.test(texto)) {
+          fallos.push('La puerta todavía sabe devolver la imagen: alguien volverá a pedirla.');
+        }
+      }
+
+      // Y hay UN solo descargador por trozos, que es el que todos usan.
+      const mat = fuente(ctx, 'app/material.js');
+      if (!/export async function material/.test(mat)) fallos.push('No hay descargador común.');
+      if (!/r\.hasta \+ 1|desde = r\.hasta/.test(mat)) fallos.push('El descargador no va por trozos.');
+      for (const ruta of ['app/fases/imagen.js', 'app/fases/miniatura.js', 'app/previa.js']) {
+        if (!/from '\.\.?\/(\.\.\/)?material\.js'|from '\.\/material\.js'/.test(fuente(ctx, ruta))) {
+          fallos.push(`${ruta} no usa el descargador común.`);
+        }
+      }
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'app/fases/imagen.js', (t) =>
+        t.replace('guardarEn: clave,\n    },', 'guardarEn: clave,\n      devolver: true,\n    },'),
+      ),
+  },
+
+  {
     nombre: 'todas-las-puertas-del-proveedor-se-pueden-llamar',
     dice: 'La generación de imágenes nunca funcionó: la variable se llamaba «partes» y la petición decía «parts». Setenta y seis invariantes no lo cazaron porque todas MIRAN el código, y un identificador mal escrito se ve igual de bien que uno correcto. Lo único que lo caza es llamar a la función.',
     async comprobar(ctx) {
@@ -593,15 +625,32 @@ export const invariantes = [
         // `guardado.bytes` en algún sitio no prueba nada: la fase de imagen lo
         // nombraba en el valor de retorno y la comprobación pasaba con la guarda
         // borrada. Lo cazó `--romper`.
-        if (!/if \(!\w+\.guardado\?\.bytes\)[\s\S]{0,200}?throw new Error/.test(texto)) {
+        // Y se cuentan: UNA guarda para tres subidas deja dos sin mirar. Con solo
+        // «hay al menos una», borrar la primera dejaba pasar el archivo entero
+        // porque las otras seguían ahí. Lo cazó `--romper`, otra vez.
+        // `guardarEn` en un arranque de video NO es una subida: le dice a Veo dónde
+        // escribir, y quien confirma es la consulta posterior. Contarlo pedía una
+        // guarda para algo que todavía no ha escrito nada.
+        const subidas =
+          (texto.match(/guardarEn:|'subir',/g) || []).length -
+          (texto.match(/'video\.iniciar'/g) || []).length;
+        const guardas = (texto.match(/if \(!\w+\.guardado\?\.bytes\)/g) || []).length;
+        if (!guardas) {
           fallos.push(`${ruta} sube material y no lanza si el almacén no lo confirma.`);
+        } else if (guardas < subidas) {
+          fallos.push(`${ruta} tiene ${subidas} subidas y solo ${guardas} comprobadas.`);
+        }
+        if (!/if \(!\w+\.guardado\?\.bytes\)[\s\S]{0,200}?throw new Error/.test(texto)) {
+          fallos.push(`${ruta} mira si el almacén confirmó, pero no lanza cuando no.`);
         }
       }
       return fallos;
     },
+    // Se anulan TODAS las guardas, no solo la primera: borrar una sola dejaba el
+    // archivo pasando por las otras.
     romper: (ctx) =>
       editando(ctx, 'app/fases/imagen.js', (t) =>
-        t.replace(/if \(!r\.guardado\?\.bytes\) \{[\s\S]*?\n  \}/, ''),
+        t.replace(/if \(!\w+\.guardado\?\.bytes\)/g, 'if (false)'),
       ),
   },
 

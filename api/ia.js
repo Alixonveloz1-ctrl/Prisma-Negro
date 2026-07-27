@@ -122,9 +122,15 @@ async function despachar(modo, c) {
       // Se sube en el mismo viaje: así el navegador nunca es dueño del original
       // (§1: el almacén es la única fuente de verdad) y no hay una imagen que
       // «se generó» pero no está en ningún sitio (§7.12).
+      //
+      // Y NO se devuelve la imagen en esta misma respuesta. Se hacía —había un
+      // campo `devolver`— y una imagen de 2K en base64 ocupa nueve megas contra un
+      // tope de 4,5: la imagen se generaba bien, se guardaba bien, y el viaje de
+      // vuelta la tiraba con «la respuesta ocupa 9.14 MB». Se baja del almacén por
+      // trozos, que es para lo que existe el modo `bajar`.
       if (c.guardarEn) {
         const r = await almacen.subir(c.guardarEn, Buffer.from(img.datos, 'base64'), img.tipo);
-        return { guardado: r, referencia: almacen.referenciaDe(c.guardarEn), ...(c.devolver ? img : {}) };
+        return { guardado: r, referencia: almacen.referenciaDe(c.guardarEn) };
       }
       return img;
     }

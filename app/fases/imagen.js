@@ -22,6 +22,7 @@ import { claveToma, tomaDelFotograma } from '../../comun/claves.mjs';
 import { reducirReferencias, deBase64 } from '../imagenes.js';
 import { estiloPorId, ESTILOS, BARRERA_DOCUMENTAL } from '../../comun/estilos.mjs';
 import * as local from '../local.js';
+import { material } from '../material.js';
 
 // El estilo ya no vive aquí: sale del catálogo y se elige en Ajustes. Escrito
 // dentro de la fase, no había forma de saber cuál era sin generar ochenta imágenes.
@@ -186,7 +187,6 @@ export async function generarImagen({ toma, tomas, pieza, config, tratamiento = 
       // Se sube en el mismo viaje: así no hay imágenes que «se generaron» pero no
       // están en ningún sitio (§7.12).
       guardarEn: clave,
-      devolver: true,
     },
     { senal },
   );
@@ -197,11 +197,9 @@ export async function generarImagen({ toma, tomas, pieza, config, tratamiento = 
     throw new Error(`La imagen de la toma ${toma.i} se generó pero el almacén no la confirmó.`);
   }
 
-  // La copia local sirve de referencia para las tomas siguientes sin volver a
-  // bajarla (§1: el navegador tiene una copia, no el original).
-  if (r.datos) {
-    await local.guardarMaterial(clave, deBase64(r.datos, r.tipo || 'image/png'));
-  }
+  // Y AHORA se baja, del almacén y por trozos. NO se pide de vuelta en la misma
+  // respuesta: una imagen de 2K en base64 ocupa nueve megas y el tope es 4,5.
+  await material(clave, 'image/png', { senal });
 
   return { ...toma, imagen: 'ok', bytesImagen: r.guardado.bytes };
 }
@@ -313,12 +311,11 @@ export async function muestrarioDeEstilos({
         instruccion,
         aspecto: config.formato.vertical ? '9:16' : '16:9',
         guardarEn: clave,
-        devolver: true,
       },
       { senal },
     );
-    const blob = r.datos ? deBase64(r.datos, r.tipo || 'image/png') : null;
-    if (blob) await local.guardarMaterial(clave, blob);
+    if (!r.guardado?.bytes) throw new Error(`La muestra de «${estilo.nombre}» no llegó al almacén.`);
+    const blob = await material(clave, 'image/png', { senal });
     salida.push({ estilo, blob, clave, deLaToma, instruccion, reusada: false });
     alAvanzar?.(n + 1, ESTILOS.length);
   }
@@ -352,21 +349,22 @@ export async function probarEstilo({ tomas = [], config, tratamiento = null, sen
   };
 
   const instruccion = componerInstruccion(toma, config, { tratamiento });
+  const clave = `${config.__pieza || 'p01'}/prueba/img`;
   const r = await llamar(
     'imagen',
     {
       instruccion,
       aspecto: config.formato.vertical ? '9:16' : '16:9',
       // A una clave de prueba, para no pisar la imagen de ninguna toma.
-      guardarEn: `${config.__pieza || 'p01'}/prueba/img`,
-      devolver: true,
+      guardarEn: clave,
     },
     { senal },
   );
+  if (!r.guardado?.bytes) throw new Error('La imagen de prueba no llegó al almacén.');
 
   return {
     instruccion,
-    blob: r.datos ? deBase64(r.datos, r.tipo || 'image/png') : null,
+    blob: await material(clave, 'image/png', { senal }),
     deLaToma: conPlano ? conPlano.i : null,
   };
 }

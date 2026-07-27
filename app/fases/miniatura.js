@@ -23,6 +23,7 @@ import { claveMiniatura, clavePortada } from '../../comun/claves.mjs';
 import { reducirReferencias, deBase64 } from '../imagenes.js';
 import { dibujarMarca, marcarImagen } from '../marca.js';
 import * as local from '../local.js';
+import { material } from '../material.js';
 
 /**
  * Compone la instrucción de una imagen con texto incrustado.
@@ -72,7 +73,6 @@ export async function generarMiniatura({ pieza, lineas, atmosfera, config, refer
       // Toda imagen que se envía se reduce antes (§6). Sin excepciones.
       referencias: await reducirReferencias(referencias, config.imagen.ladoReferencia, 2),
       aspecto: '16:9',
-      devolver: true,
       guardarEn: claveMiniatura(pieza),
     },
     { senal },
@@ -80,7 +80,8 @@ export async function generarMiniatura({ pieza, lineas, atmosfera, config, refer
 
   if (!r.guardado?.bytes) throw new Error('La miniatura se generó pero el almacén no la confirmó.');
 
-  let blob = deBase64(r.datos, r.tipo || 'image/png');
+  // Del almacén y por trozos: pedirla de vuelta en la misma respuesta no cabe.
+  let blob = await material(claveMiniatura(pieza), 'image/png', { senal });
 
   // La marca la dibuja el navegador, no el modelo.
   if (config.marca.activa && config.marca.texto) {
@@ -91,11 +92,15 @@ export async function generarMiniatura({ pieza, lineas, atmosfera, config, refer
     });
     const marcada = await marcarImagen(blob, marca);
     blob = marcada.blob;
-    await llamar(
+    const s = await llamar(
       'subir',
       { clave: claveMiniatura(pieza), datos: marcada.datos, tipo: 'image/png' },
       { senal },
     );
+    // §7.12: el valor de retorno de una escritura no se ignora. Sin esto, la
+    // miniatura con marca podía no subirse y en pantalla quedaba la de sin marca,
+    // que se parece lo bastante como para no notarlo hasta publicarla.
+    if (!s.guardado?.bytes) throw new Error('La miniatura con la marca no llegó al almacén.');
   }
 
   await local.guardarMaterial(claveMiniatura(pieza), blob);
@@ -108,14 +113,12 @@ export async function generarPortada({ pieza, lineas, atmosfera, config, senal }
     {
       instruccion: componerInstruccion({ lineas, atmosfera, formato: 'portada' }),
       aspecto: '9:16',
-      devolver: true,
       guardarEn: clavePortada(pieza),
     },
     { senal },
   );
   if (!r.guardado?.bytes) throw new Error('La portada se generó pero el almacén no la confirmó.');
-  const blob = deBase64(r.datos, r.tipo || 'image/png');
-  await local.guardarMaterial(clavePortada(pieza), blob);
+  const blob = await material(clavePortada(pieza), 'image/png', { senal });
   return { clave: clavePortada(pieza), blob };
 }
 

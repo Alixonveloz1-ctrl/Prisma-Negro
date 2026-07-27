@@ -358,8 +358,11 @@ export const invariantes = [
       if (!/claveMuestra\(pieza, estilo\.id\)/.test(cuerpo)) {
         fallos.push('Las muestras comparten clave: cada una borraría la anterior.');
       }
-      // Guardadas: volver a la pantalla no puede volver a cobrar seis imágenes.
-      if (!/local\.guardarMaterial/.test(cuerpo)) fallos.push('Las muestras no se guardan: se pagarían cada vez.');
+      // Guardadas: volver a la pantalla no puede volver a cobrar seis imágenes. Se
+      // consigue bajándolas con el descargador común, que deja copia local.
+      if (!/await material\(clave/.test(cuerpo)) {
+        fallos.push('Las muestras no se bajan con el descargador común: no quedaría copia y se pagarían cada vez.');
+      }
       if (!/muestrasGuardadas/.test(main)) fallos.push('La pantalla no enseña las muestras ya pagadas.');
 
       // Y elegir una tiene que ESCRIBIR la elección (§7.3).
