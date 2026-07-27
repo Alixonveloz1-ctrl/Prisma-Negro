@@ -2,18 +2,32 @@
 //
 //   «Un modelo de texto lee el guion y devuelve, EN JSON ESTRUCTURADO, una ficha de
 //    plano por toma. Aquí se decide encuadre, movimiento de cámara, luz, quién
-//    aparece. Es UNA LLAMADA POR PIEZA, no por toma: mucho más barato y mucho más
-//    coherente.»
+//    aparece.»
 //
-// Lo de la coherencia no es un extra: si se pide plano a plano, el modelo no sabe
-// que la toma 40 pasa en el mismo sitio que la 12, y cada una sale de un lugar
-// distinto. Con una sola llamada, ve el guion entero.
+// ─────────────────────────────────────────────────────────────────────────────
+// POR LOTES DE DIECIOCHO. NI UNA A UNA NI TODAS DE GOLPE.
 //
-// Aquí también se decide `reusa` (§3): dos tomas con el mismo plano no se pagan dos
-// veces.
+// El plano decía «una llamada por pieza» y así estaba escrito. Con un guion de
+// cuarenta y ocho tomas, el modelo devolvía CINCO fichas. Al reintentar, seis.
+//
+// No era un error: la respuesta se corta cuando no cabe, y una respuesta cortada
+// NO da error —da un JSON más corto—. Aquí eso significaba cuarenta y dos tomas
+// sin plano, y ni un mensaje que dijera por qué.
+//
+// Una a una tampoco vale: sale carísimo y el modelo no sabe que la toma 40 pasa
+// en el mismo sitio que la 12, así que cada una inventa su propio lugar y se
+// pierde la reutilización de fotogramas (§3), que es de donde sale el ahorro.
+//
+// Dieciocho es donde cabe la respuesta y todavía se ve contexto suficiente. Y
+// para que no se note la costura entre lotes, a cada uno se le pasa el último
+// plano del anterior como «de dónde venimos».
+// ─────────────────────────────────────────────────────────────────────────────
 
 import { llamar } from '../api.js';
 import { comoInstruccion } from './director.js';
+
+/** Tomas por llamada. Ver la cabecera: ni una ni todas. */
+export const POR_LOTE = 18;
 
 const ESQUEMA = {
   type: 'object',
@@ -75,43 +89,102 @@ Reglas de este documental:
 - La descripción es para un generador de imágenes: concreta, visual, sin metáforas
   ni adjetivos de opinión. Nombra la luz, la hora del día, la textura, el color.`;
 
-/** Una llamada por pieza. Devuelve las tomas con `plano`, `movimiento` y `reusa`. */
-export async function dirigir({ tomas, escenas, tema, config, tratamiento = null, senal }) {
+/**
+ * Dirige todas las tomas, por lotes, y devuelve las tomas con `plano`,
+ * `movimiento` y `reusa`.
+ *
+ * `alAvanzar(hechas, total)` permite que la pantalla diga por dónde va: son
+ * varias llamadas y algunas tardan.
+ */
+export async function dirigir({ tomas, escenas, tema, config, tratamiento = null, senal, alAvanzar }) {
   if (!tomas?.length) throw new Error('No hay tomas que dirigir. Segmenta el guion primero.');
 
   const proporcion = config?.movimiento?.proporcion ?? 0.15;
   const cupo = Math.max(0, Math.round(tomas.length * proporcion));
 
-  const r = await llamar(
-    'texto',
-    {
-      sistema: SISTEMA,
-      instruccion:
-        `Documental sobre: ${tema}\n` +
-        // La identidad visual la decide el director UNA vez y la sostienen las 134
-        // tomas. Sin esto cada toma inventa su propia paleta.
-        (tratamiento ? comoInstruccion(tratamiento, { para: 'direccion' }) + '\n\n' : '') +
-        `Escenas: ${escenas.map((e) => `[${e.n}] ${e.titulo || 'sin título'}`).join(', ')}\n` +
-        `Tomas: ${tomas.length}. Cupo de tomas con movimiento: ${cupo} como mucho.\n\n` +
-        tomas.map((t) => `(${t.i}) [escena ${t.escena}] ${t.texto}`).join('\n') +
-        `\n\nDevuelve una ficha de plano por cada una de las ${tomas.length} tomas, ` +
-        `con el índice i exacto.`,
-      esquema: ESQUEMA,
-      temperatura: 0.6,
-      maxTokens: Math.min(32768, 400 + tomas.length * 180),
-    },
-    { senal },
-  );
+  // Lo que ya está dirigido se conserva. Volver a dirigir después de que un lote
+  // fallara no puede cobrar los lotes que sí salieron (§4): se saltan enteros.
+  // Lo que ya está dirigido se conserva. Volver a dirigir después de que un lote
+  // fallara no puede cobrar los lotes que sí salieron (§4): se saltan enteros.
+  const planos = new Map();
+  for (const t of tomas) if (t.plano) planos.set(t.i, fichaDe(t));
+  let ultimo = null;
 
-  const planos = new Map((r.json?.planos || []).map((p) => [p.i, p]));
+  /** Pide las fichas de un grupo de tomas y las guarda. */
+  const pedir = async (grupo) => {
+    const r = await llamar(
+      'texto',
+      {
+        sistema: SISTEMA,
+        instruccion:
+          `Documental sobre: ${tema}\n` +
+          // La identidad visual la decide el director UNA vez y la sostienen todas
+          // las tomas. Sin esto cada lote inventa su propia paleta.
+          (tratamiento ? comoInstruccion(tratamiento, { para: 'direccion' }) + '\n\n' : '') +
+          `Escenas: ${escenas.map((e) => `[${e.n}] ${e.titulo || 'sin título'}`).join(', ')}\n` +
+          `Este documental tiene ${tomas.length} tomas en total; ahora dirigimos de la ` +
+          `${grupo[0].i} a la ${grupo[grupo.length - 1].i}.\n` +
+          // La costura entre lotes: sin esto, cada dieciocho tomas cambia el sitio
+          // y la luz sin motivo, y se nota al montarlo.
+          (ultimo
+            ? `Venimos de: ${ultimo.lugar}, ${ultimo.encuadre}, ${ultimo.luz}. ` +
+              `Sigue de ahí salvo que el texto pida otra cosa.\n`
+            : '') +
+          `\n` +
+          grupo.map((t) => `(${t.i}) [escena ${t.escena}] ${t.texto}`).join('\n') +
+          `\n\nDevuelve una ficha por cada una de estas ${grupo.length} tomas, con el ` +
+          `índice i exacto tal y como aparece entre paréntesis.`,
+        esquema: ESQUEMA,
+        temperatura: 0.6,
+        maxTokens: 32768,
+      },
+      { senal },
+    );
+    for (const p of r.json?.planos || []) {
+      if (grupo.some((t) => t.i === p.i)) planos.set(p.i, p);
+    }
+  };
+
+  /**
+   * Pide un grupo y, si vuelve incompleto, LO PARTE EN DOS Y REINTENTA.
+   *
+   * Una respuesta corta no es un error del modelo: es que no cabía. La respuesta
+   * correcta a «no cabe» es pedir menos, no pedir otra vez lo mismo —que fue justo
+   * lo que pasó cuando el usuario reintentó a mano: cinco fichas, luego seis—.
+   *
+   * Se para a las dos particiones. Si a grupos de cuatro o cinco sigue sin venir,
+   * el problema ya no es el tamaño y esas tomas se quedan marcadas sin plano, que
+   * la pantalla cuenta y se puede repetir solo eso.
+   */
+  const completar = async (grupo, particiones = 0) => {
+    if (!grupo.length) return;
+    await pedir(grupo);
+    const faltan = grupo.filter((t) => !planos.has(t.i));
+    if (!faltan.length || particiones >= 2) return;
+    const mitad = Math.ceil(faltan.length / 2);
+    await completar(faltan.slice(0, mitad), particiones + 1);
+    await completar(faltan.slice(mitad), particiones + 1);
+  };
+
+  for (let desde = 0; desde < tomas.length; desde += POR_LOTE) {
+    if (senal?.aborted) throw new Error('Detenido.');
+    const lote = tomas.slice(desde, desde + POR_LOTE);
+
+    if (!lote.every((t) => planos.has(t.i))) await completar(lote);
+
+    ultimo = planos.get(lote[lote.length - 1].i) || ultimo;
+    alAvanzar?.(Math.min(desde + POR_LOTE, tomas.length), tomas.length);
+  }
 
   // El modelo propuso; aquí se decide. El cupo de movimiento es del presupuesto, no
-  // suyo: se ordenan los candidatos y se corta (§4.7).
-  const candidatos = tomas
-    .map((t) => ({ i: t.i, quiere: !!planos.get(t.i)?.merecemovimiento }))
-    .filter((x) => x.quiere)
-    .map((x) => x.i);
-  const conMovimiento = new Set(candidatos.slice(0, cupo));
+  // suyo (§4.7).
+  //
+  // Y se reparte POR TRAMOS, no cogiendo los primeros del cupo. Es una lección
+  // pagada: ordenando por índice, el cupo se llenaba con las tomas del principio y
+  // el último tercio del documental se quedaba sin una sola toma animada. Se parte
+  // la pieza en tantos tramos como clips haya y se coge un candidato de cada uno.
+  const quieren = tomas.filter((t) => planos.get(t.i)?.merecemovimiento).map((t) => t.i);
+  const conMovimiento = new Set(repartirPorTramos(quieren, cupo, tomas.length));
 
   return tomas.map((t) => {
     const p = planos.get(t.i);
@@ -144,6 +217,50 @@ export async function dirigir({ tomas, escenas, tema, config, tratamiento = null
       reusa,
     };
   });
+}
+
+/** Una toma ya dirigida, en la forma que devuelve el modelo. */
+function fichaDe(t) {
+  return {
+    i: t.i,
+    ...t.plano,
+    tipoImagen: t.claseVisual || t.tipoImagen || 'reconstruccion',
+    merecemovimiento: !!t.movimiento,
+    igualQue: Number.isInteger(t.reusa) ? t.reusa : undefined,
+  };
+}
+
+/**
+ * Reparte `cupo` elecciones entre los candidatos, a lo largo de toda la pieza.
+ *
+ * Se divide la pieza en `cupo` tramos iguales y se coge el primer candidato de
+ * cada tramo. Si un tramo no tiene ninguno, su hueco se rellena al final con los
+ * que hayan sobrado, para no desperdiciar cupo.
+ */
+export function repartirPorTramos(candidatos, cupo, total) {
+  if (cupo <= 0 || !candidatos.length) return [];
+  if (candidatos.length <= cupo) return [...candidatos];
+
+  const elegidos = [];
+  const usados = new Set();
+  const ancho = total / cupo;
+  for (let k = 0; k < cupo; k++) {
+    const desde = k * ancho;
+    const hasta = (k + 1) * ancho;
+    const c = candidatos.find((i) => !usados.has(i) && i >= desde && i < hasta);
+    if (c !== undefined) {
+      usados.add(c);
+      elegidos.push(c);
+    }
+  }
+  for (const c of candidatos) {
+    if (elegidos.length >= cupo) break;
+    if (!usados.has(c)) {
+      usados.add(c);
+      elegidos.push(c);
+    }
+  }
+  return elegidos.sort((a, b) => a - b);
 }
 
 /**

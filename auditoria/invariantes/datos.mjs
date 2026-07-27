@@ -383,4 +383,61 @@ export const invariantes = [
     },
     romper: (ctx) => editando(ctx, 'app/fases/metadatos.js', (t) => t.replaceAll('sinMedir', 'cero')),
   },
+
+  {
+    nombre: 'la-direccion-va-por-lotes-y-se-completa-sola',
+    dice: 'Pedir las fichas de plano de todas las tomas en una llamada devuelve una respuesta CORTADA, y una respuesta cortada no da error: da menos fichas. Un guion de 48 tomas devolvía 5, y al reintentar 6.',
+    comprobar(ctx) {
+      const d = fuente(ctx, 'app/fases/direccion.js');
+      const fallos = [];
+
+      if (!/POR_LOTE\s*=\s*(\d+)/.test(d)) fallos.push('La dirección no va por lotes.');
+      const porLote = Number(/POR_LOTE\s*=\s*(\d+)/.exec(d)?.[1] || 0);
+      if (porLote < 6 || porLote > 24) {
+        fallos.push(`El lote es de ${porLote}: de uno en uno sale carísimo y sin coherencia; de más de veinte no cabe.`);
+      }
+      // Y el bucle tiene que avanzar DE LOTE EN LOTE, no mandarlas todas.
+      if (!/desde \+= POR_LOTE/.test(d)) fallos.push('El bucle no avanza por lotes.');
+      // Una respuesta corta se parte y se reintenta: pedir otra vez lo mismo da lo mismo.
+      if (!/particiones/.test(d)) {
+        fallos.push('Un lote que vuelve incompleto no se parte: reintentar igual devuelve igual.');
+      }
+      // Y entre lotes se pasa de dónde venimos, o se nota la costura.
+      if (!/Venimos de/.test(d)) fallos.push('Los lotes no se encadenan: cada uno empezaría de cero.');
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'app/fases/direccion.js', (t) =>
+        t.replace('export const POR_LOTE = 18;', 'export const POR_LOTE = 500;'),
+      ),
+  },
+
+  {
+    nombre: 'el-movimiento-se-reparte-por-toda-la-pieza',
+    dice: 'El cupo de clips no puede llenarse con las tomas del principio: el último tercio del documental se quedaría sin una sola toma animada y se vería como diapositivas.',
+    comprobar(ctx) {
+      const { repartirPorTramos } = ctx.fn;
+      const fallos = [];
+
+      // Candidatos por toda la pieza, cupo pequeño: tiene que coger de todas partes.
+      const todos = Array.from({ length: 40 }, (_, k) => k + 4);
+      const salen = repartirPorTramos(todos, 6, 48);
+      if (salen.length !== 6) fallos.push(`Con cupo 6 salen ${salen.length}.`);
+      if (Math.max(...salen) < 32) {
+        fallos.push(`El último tramo se queda sin clips: el más alto es ${Math.max(...salen)} de 48.`);
+      }
+      if (new Set(salen).size !== salen.length) fallos.push('Repite alguna toma.');
+
+      // Y no puede inventarse candidatos que nadie propuso.
+      const pocos = repartirPorTramos([5, 30], 6, 48);
+      if (pocos.length !== 2 || !pocos.every((i) => [5, 30].includes(i))) {
+        fallos.push('Se inventa tomas con movimiento que el director no propuso.');
+      }
+      if (repartirPorTramos([1, 2, 3], 0, 48).length) fallos.push('Con cupo cero anima algo.');
+      return fallos;
+    },
+    // Se rompe como estaba: cogiendo los primeros del cupo por orden de índice,
+    // que es lo que dejaba el último tercio sin una sola toma animada.
+    romper: (ctx) => conFuncion(ctx, 'repartirPorTramos', (cands, cupo) => cands.slice(0, cupo)),
+  },
 ];

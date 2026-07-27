@@ -786,6 +786,9 @@ accion(
       tema: P.tema,
       config: P.config,
       tratamiento: pieza().tratamiento,
+      // Son varias llamadas y algunas tardan: sin esto parece que se ha colgado.
+      alAvanzar: (hechas, total) =>
+        avisar('tomas', `Dirigiendo… ${hechas} de ${total} tomas.`),
     });
     pieza().tomas = tomas;
     await guardar();
@@ -794,7 +797,7 @@ accion(
     avisar(
       'tomas',
       sin.length
-        ? `${sin.length} tomas se quedaron sin plano (${sin.slice(0, 8).join(', ')}). Vuelve a dirigir: es una sola llamada.`
+        ? `${sin.length} de ${tomas.length} tomas se quedaron sin plano (${sin.slice(0, 8).join(', ')}…). Vuelve a dirigir: solo se rehacen esas.`
         : `Dirigidas ${tomas.length} tomas. ${tomas.filter((x) => x.movimiento).length} llevan movimiento.`,
       sin.length ? 'malo' : 'bueno',
     );
@@ -812,13 +815,14 @@ $('b-detener').addEventListener('click', () => {
 /** Dirige si hace falta: sin ficha de plano no hay ni imagen ni clip. */
 async function asegurarDireccion() {
   if (pieza().tomas.every((t) => t.plano)) return;
-  avisar('paso4', 'Falta la dirección de arte. Se hace sola, en una llamada…');
+  avisar('paso4', 'Falta la dirección de arte. Se hace sola…');
   pieza().tomas = await direccion.dirigir({
     tomas: pieza().tomas,
     escenas: pieza().escenas,
     tema: P.tema,
     config: P.config,
     tratamiento: pieza().tratamiento,
+    alAvanzar: (hechas, total) => avisar('paso4', `Dirigiendo… ${hechas} de ${total} tomas.`),
   });
   await guardar();
   pintarTomas();
