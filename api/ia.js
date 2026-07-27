@@ -14,6 +14,7 @@
 // aquí es una frase, no un código.
 
 import { instalarCensor } from './_lib/censor.js';
+import { probarCadena } from './_lib/salud.js';
 import * as almacen from './_lib/almacen.js';
 import * as proveedor from './_lib/proveedor.js';
 import * as montador from './_lib/montador.js';
@@ -83,8 +84,14 @@ export default async function handler(req, res) {
 async function despachar(modo, c) {
   switch (modo) {
     // ── Diagnóstico ───────────────────────────────────────────────────────────
-    case 'salud':
-      return { configuracion: revisarConfiguracion() };
+    case 'salud': {
+      const configuracion = revisarConfiguracion();
+      // Comprobar que una variable EXISTE no comprueba nada. Cuando la
+      // configuración está completa se prueba la cadena de verdad: firma, almacén,
+      // modelos y montador. Es lo único que distingue «lo pegué» de «funciona».
+      if (!configuracion.lista) return { configuracion };
+      return { configuracion, prueba: await probarCadena() };
+    }
 
     // ── Modelos ───────────────────────────────────────────────────────────────
     case 'texto':

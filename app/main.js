@@ -104,6 +104,27 @@ accion('b-entrar', async () => {
     throw new Error('La herramienta no está configurada del todo todavía.');
   }
 
+  // §1: el fallo se explica AQUÍ, con palabras. Eslabón por eslabón, y cada uno roto
+  // dice qué hacer — que es la diferencia entre arreglarlo en un minuto y pasar la
+  // tarde mirando una pantalla que solo dice «error».
+  const prueba = salud.prueba || [];
+  const rotos = prueba.filter((p) => !p.ok);
+  $('salud').innerHTML = prueba.length
+    ? prueba
+        .map(
+          (p) =>
+            `<div class="aviso ${p.ok ? 'bueno' : 'malo'}">` +
+            `${p.ok ? '✓' : '✗'} <b>${p.paso}</b> — ${escapar(p.dice)}` +
+            (p.arregla ? `<br><span style="opacity:.85">${escapar(p.arregla)}</span>` : '') +
+            `</div>`,
+        )
+        .join('')
+    : '';
+
+  // El montador solo hace falta para montar: no impide entrar ni generar.
+  const graves = rotos.filter((p) => p.paso !== 'montador');
+  if (graves.length) throw new Error('Hay algo que todavía no funciona. Mira arriba: dice cuál y qué hacer.');
+
   // Una llamada real: comprueba la contraseña de verdad, no solo la configuración.
   await llamar('proyecto.listar');
   sessionStorage.setItem('clave', c);

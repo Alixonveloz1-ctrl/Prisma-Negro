@@ -22,7 +22,10 @@ export const invariantes = [
     comprobar(ctx) {
       const patrones = [
         [/[\w.+-]+@[\w-]+\.iam\.gserviceaccount\.com/, 'un correo de cuenta de servicio'],
-        [/-----BEGIN [A-Z ]*PRIVATE KEY-----/, 'una clave privada'],
+        // Se exige la cabecera SEGUIDA DE MATERIAL: hablar de la cabecera no es
+        // llevarla dentro, y el diagnóstico necesita nombrarla para poder decirle al
+        // usuario que se dejó media clave sin pegar.
+        [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\\n]*[A-Za-z0-9+/]{40,}/, 'una clave privada'],
         [/\bgs:\/\/(?!ALMACEN)[a-z0-9][-a-z0-9._]{2,}/, 'un nombre de almacén literal'],
         [/"project_id"\s*:\s*"[^"]+"/, 'un identificador de proyecto'],
       ];
@@ -39,8 +42,15 @@ export const invariantes = [
       }
       return fallos;
     },
+    // El sabotaje trae las dos formas: el correo y una clave CON cuerpo, para que
+    // quede demostrado que el patrón afinado sigue cazando una clave de verdad.
     romper: (ctx) =>
-      conFuente(ctx, 'app/config.js', 'const cuenta = "montador@mi-proyecto.iam.gserviceaccount.com";'),
+      conFuente(
+        ctx,
+        'app/config.js',
+        'const cuenta = "montador@mi-proyecto.iam.gserviceaccount.com";\n' +
+          'const k = "-----BEGIN PRIVATE KEY-----\\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQ";\n',
+      ),
   },
 
   {
@@ -424,6 +434,41 @@ export const invariantes = [
       return fallos;
     },
     romper: (ctx) => editando(ctx, 'index.html', (t) => t.replace(/overflow-x:\s*hidden;?/g, '')),
+  },
+
+  {
+    nombre: 'la-salud-prueba-la-cadena-no-la-presencia',
+    dice: 'El diagnóstico prueba que la credencial FIRMA, que el almacén RESPONDE y que el modelo CONTESTA. Que una variable exista no comprueba nada (§1).',
+    comprobar(ctx) {
+      const s = fuente(ctx, 'api/_lib/salud.js');
+      const api = fuente(ctx, 'api/ia.js');
+      const fallos = [];
+
+      if (!/probarCadena/.test(api)) fallos.push('El modo «salud» no prueba la cadena.');
+
+      // Cada eslabón tiene que hacer una llamada de verdad, no mirar el entorno.
+      for (const [eslabon, senal] of [
+        ['credencial', /tokenDeAcceso\(\)/],
+        ['almacén', /storage\.googleapis\.com/],
+        ['modelos', /generateContent/],
+        ['montador', /run\.googleapis\.com/],
+      ]) {
+        if (!senal.test(s)) fallos.push(`El diagnóstico no prueba de verdad el eslabón «${eslabon}».`);
+      }
+
+      // Un fallo sin qué-hacer es un código de salida con otro nombre (§7.6).
+      if (!/arregla/.test(s)) {
+        fallos.push('Los eslabones rotos no dicen qué hacer para arreglarlos.');
+      }
+      // El pegado incompleto de la clave PEM es EL fallo de configurar desde un
+      // teléfono: tiene que cazarse por su nombre, no como «error de firma».
+      if (!/-----BEGIN/.test(s) || !/-----END/.test(s)) {
+        fallos.push('No se comprueba que la clave privada esté completa antes de usarla.');
+      }
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'api/_lib/salud.js', (t) => t.replace(/generateContent/g, 'noSeLlamaAsi')),
   },
 
   {
