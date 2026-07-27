@@ -54,7 +54,7 @@ export function planificar(tomas, config, { soloLasQueFaltan = true } = {}) {
  * de eso se encarga quien llama, y por eso puede escribir cada unidad antes de
  * pasar a la siguiente (§4).
  */
-export async function narrarBloque({ bloque, pieza, config, senal }) {
+export async function narrarBloque({ bloque, pieza, config, senal, alEsperar }) {
   const n = config.narracion;
 
   const r = await llamar(
@@ -68,7 +68,7 @@ export async function narrarBloque({ bloque, pieza, config, senal }) {
       // a lo largo de quince minutos con las voces que interpretan (§7.9).
       estilo: n.estilo,
     },
-    { senal },
+    { senal, alEsperar },
   );
 
   const audio = leerWav(await (await fetch(`data:audio/wav;base64,${r.datos}`)).arrayBuffer());
@@ -98,7 +98,7 @@ export async function narrarBloque({ bloque, pieza, config, senal }) {
     const subida = await llamar(
       'subir',
       { clave, datos: await aBase64(new Blob([wav])), tipo: 'audio/wav' },
-      { senal },
+      { senal, alEsperar },
     );
 
     // §7.12: ningún valor de retorno de una escritura se ignora. Una toma cuyo audio

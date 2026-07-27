@@ -157,7 +157,7 @@ export function componerInstruccion(toma, config, { conReferencias = false, trat
 }
 
 /** Genera el fotograma de una toma. */
-export async function generarImagen({ toma, tomas, pieza, config, tratamiento = null, senal }) {
+export async function generarImagen({ toma, tomas, pieza, config, tratamiento = null, senal, alEsperar }) {
   if (!toma.plano) throw new Error(`La toma ${toma.i} no tiene ficha de plano. Dirige primero.`);
 
   const usaReferencias = !!config.imagen.aceptaReferencias && config.imagen.maxReferencias > 0;
@@ -188,7 +188,7 @@ export async function generarImagen({ toma, tomas, pieza, config, tratamiento = 
       // están en ningún sitio (§7.12).
       guardarEn: clave,
     },
-    { senal },
+    { senal, alEsperar },
   );
 
   // §7.12: ningún valor de retorno de una escritura se ignora. Si el almacén no

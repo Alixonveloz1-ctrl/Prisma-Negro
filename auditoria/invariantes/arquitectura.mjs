@@ -438,6 +438,53 @@ export const invariantes = [
   },
 
   {
+    nombre: 'la-cuota-agotada-se-espera-no-se-descarta',
+    dice: 'Vertex limita POR MINUTO, y cuando se pasa contesta 429 «Resource has been exhausted». Eso es un «espera», no un «no». Tratarlo como 4xx definitivo dejó 33 de 59 imágenes sin generar tras una hora, con un mensaje que ni siquiera dice que sea cuestión de esperar.',
+    comprobar(ctx) {
+      const api = fuente(ctx, 'app/api.js');
+      const cola = fuente(ctx, 'app/cola.js');
+      const fallos = [];
+
+      // 429 tiene que salir de la regla de «los 4xx no se reintentan».
+      const i = api.indexOf('// 413 = tamaño.');
+      const antes = api.slice(0, i);
+      if (!/esEspera\(r\.status/.test(antes)) {
+        fallos.push('El 429 cae en la regla de los 4xx y se descarta al instante.');
+      }
+      if (!/RESOURCE_EXHAUSTED|has been exhausted/.test(api)) {
+        fallos.push('No se reconoce el texto con el que el proveedor dice que la cuota se agotó.');
+      }
+      // Y con paciencia de ventana de cuota, no de tres segundos.
+      const esperas = /const ESPERAS = \[([^\]]+)\]/.exec(api);
+      if (!esperas) fallos.push('No hay una escala de esperas para la cuota.');
+      else {
+        const total = esperas[1].split(',').reduce((s, x) => s + Number(x.trim()), 0);
+        if (total < 120000) {
+          fallos.push(`Esperando ${Math.round(total / 1000)} s en total no se sale de una ventana de cuota.`);
+        }
+      }
+      // El freno que se ajusta solo: sin él, las 59 siguientes chocan igual.
+      if (!/pausaEntreLlamadas/.test(api)) fallos.push('No baja el ritmo tras chocar con la cuota.');
+      if (!/function aflojar/.test(api)) fallos.push('Baja el ritmo y no lo vuelve a subir nunca.');
+      // Y se dice en pantalla: una espera larga y muda parece que se colgó.
+      // La cola le pasa a cada unidad un cuarto argumento con el que avisar, y
+      // distingue la espera por cuota del freno de ritmo. Se mira eso, no el
+      // nombre del parámetro: el aviso va en una función anónima.
+      if (!/hacerUno\(unidades\[i\], i, this\.senal, \(ms, por\)/.test(cola)) {
+        fallos.push('La cola no le da a cada unidad forma de avisar de que está esperando.');
+      }
+      if (!/'cuota'/.test(cola)) {
+        fallos.push('La espera no se cuenta en pantalla: una espera larga y muda parece colgada.');
+      }
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'app/api.js', (t) =>
+        t.replace('if (esEspera(r.status, cuerpo.error)) {', 'if (false) {'),
+      ),
+  },
+
+  {
     nombre: 'todas-las-puertas-del-proveedor-se-pueden-llamar',
     dice: 'La generación de imágenes nunca funcionó: la variable se llamaba «partes» y la petición decía «parts». Setenta y seis invariantes no lo cazaron porque todas MIRAN el código, y un identificador mal escrito se ve igual de bien que uno correcto. Lo único que lo caza es llamar a la función.',
     async comprobar(ctx) {

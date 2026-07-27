@@ -46,7 +46,7 @@ export function resumen(tomas, clave) {
  * no censurado porque lleva dentro el del proyecto: censurarlo haría fallar la
  * consulta siguiente con un error incomprensible.
  */
-export async function generarClip({ toma, tomas, pieza, config, senal, aviso }) {
+export async function generarClip({ toma, tomas, pieza, config, senal, aviso, alEsperar }) {
   const fot = await fotogramaDe({ toma, tomas, pieza });
   if (!fot) {
     throw new Error(`La toma ${toma.i} no tiene fotograma todavía. Genera la imagen primero.`);
@@ -77,7 +77,7 @@ export async function generarClip({ toma, tomas, pieza, config, senal, aviso }) 
       // escribe el clip en vez de devolverlo en la respuesta.
       guardarEn: claveToma(pieza, toma.i, 'vid'),
     },
-    { senal },
+    { senal, alEsperar },
   );
 
   const r = await esperarOperacion(

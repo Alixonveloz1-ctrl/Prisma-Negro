@@ -932,7 +932,8 @@ accion('b-narrar', async () => {
   const r = await cola.ejecutar(
     'narración',
     bloques,
-    (bloque, _i, senal) => narracion.narrarBloque({ bloque, pieza: P.id, config: P.config, senal }),
+    (bloque, _i, senal, alEsperar) =>
+      narracion.narrarBloque({ bloque, pieza: P.id, config: P.config, senal, alEsperar }),
     {
       alTerminarUno: async (tomasNuevas) => {
         for (const t of tomasNuevas) await guardaToma(t);
@@ -952,7 +953,7 @@ accion('b-imagenes', async () => {
   const r = await cola.ejecutar(
     'imágenes',
     pendientes,
-    (toma, _i, senal) =>
+    (toma, _i, senal, alEsperar) =>
       imagenFase.generarImagen({
         toma,
         tomas: pieza().tomas,
@@ -960,6 +961,7 @@ accion('b-imagenes', async () => {
         config: P.config,
         tratamiento: pieza().tratamiento,
         senal,
+        alEsperar,
       }),
     { alTerminarUno: guardaToma },
   );
@@ -975,13 +977,14 @@ accion('b-movimiento', async () => {
   const r = await cola.ejecutar(
     'movimiento',
     pendientes,
-    (toma, _i, senal) =>
+    (toma, _i, senal, alEsperar) =>
       movimiento.generarClip({
         toma,
         tomas: pieza().tomas,
         pieza: P.id,
         config: P.config,
         senal,
+        alEsperar,
         aviso: (m) => ($('progreso').textContent = m),
       }),
     { alTerminarUno: guardaToma },
@@ -998,7 +1001,11 @@ accion('b-musica', async () => {
   const r = await cola.ejecutar(
     'música',
     pendientes,
-    (escena, _i, senal) => musica.generarMusicaDeEscena({ escena, tomas: pieza().tomas, pieza: P.id, tratamiento: pieza().tratamiento, senal }),
+    (escena, _i, senal, alEsperar) =>
+      musica.generarMusicaDeEscena({
+        escena, tomas: pieza().tomas, pieza: P.id,
+        tratamiento: pieza().tratamiento, senal, alEsperar,
+      }),
     {
       alTerminarUno: async (res) => {
         const e = pieza().escenas.find((x) => x.n === res.n);

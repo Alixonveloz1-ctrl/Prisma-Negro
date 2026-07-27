@@ -57,7 +57,7 @@ export function atmosferaDe(escena, tomas, tratamiento = null) {
     .join(' ');
 }
 
-export async function generarMusicaDeEscena({ escena, tomas, pieza, tratamiento = null, senal }) {
+export async function generarMusicaDeEscena({ escena, tomas, pieza, tratamiento = null, senal, alEsperar }) {
   const clave = claveMusica(pieza, escena.n);
 
   const r = await llamar(
@@ -71,7 +71,7 @@ export async function generarMusicaDeEscena({ escena, tomas, pieza, tratamiento 
       segundos: Math.min(90, Math.max(20, Math.round(escena.segundos * 0.5))),
       guardarEn: clave,
     },
-    { senal },
+    { senal, alEsperar },
   );
 
   // §7.12: ningún valor de retorno de una escritura se ignora.

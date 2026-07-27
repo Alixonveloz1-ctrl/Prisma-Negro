@@ -67,7 +67,13 @@ export class Cola {
 
         for (let intento = 0; intento <= reintentosPorUnidad; intento++) {
           try {
-            resultado = await hacerUno(unidades[i], i, this.senal);
+            resultado = await hacerUno(unidades[i], i, this.senal, (ms, por) =>
+              this.alAviso(
+                por === 'cuota'
+                  ? `Cuota del proveedor agotada. Esperando ${Math.round(ms / 1000)} s y sigo con la ${i + 1} de ${total}…`
+                  : `Bajando el ritmo ${Math.round(ms / 1000)} s por unidad para no volver a agotar la cuota…`,
+              ),
+            );
             ultimoError = null;
             break;
           } catch (e) {
@@ -75,6 +81,9 @@ export class Cola {
             ultimoError = e;
             // Un 413 no mejora por insistir: es tamaño (§7.1).
             if (e?.estado === 413) break;
+            // Una cuota agotada ya se esperó abajo, todo lo que se podía esperar.
+            // Insistir aquí encima solo alarga la agonía.
+            if (e?.estado === 429) break;
           }
         }
 

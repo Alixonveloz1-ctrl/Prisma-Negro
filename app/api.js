@@ -13,6 +13,61 @@ import * as local from './local.js';
 
 const PUERTA = '/api/ia';
 
+// ── El ritmo, que se ajusta solo ──────────────────────────────────────────────
+//
+// Vertex no limita por «cuántas a la vez» sino POR MINUTO. La cola va de una en
+// una, así que la concurrencia nunca fue el problema: el problema es que sesenta
+// imágenes seguidas, aunque vayan en fila, se salen de la cuota del minuto.
+//
+// Y cuando eso pasa, Vertex contesta 429 «Resource has been exhausted». Que es un
+// «espera», no un «no». Tratarlo como fallo definitivo —que es lo que hacía— dejó
+// 33 de 59 imágenes sin generar tras una hora, con un error que ni siquiera dice
+// que sea cuestión de esperar.
+//
+// Así que aquí hay un freno que se aprieta solo: cada 429 aumenta la pausa entre
+// llamadas, y cada tanda de aciertos la afloja. La primera vez que se topa con el
+// límite, la herramienta baja el ritmo y sigue —en vez de estrellarse sesenta
+// veces contra la misma pared—.
+
+const PAUSA_MAX = 30000;
+let pausaEntreLlamadas = 0;
+let aciertosSeguidos = 0;
+
+/** Cuánto se está esperando ahora entre llamadas. Para poder enseñarlo. */
+export const ritmoActual = () => pausaEntreLlamadas;
+
+function frenar() {
+  aciertosSeguidos = 0;
+  pausaEntreLlamadas = Math.min(PAUSA_MAX, pausaEntreLlamadas ? pausaEntreLlamadas * 2 : 4000);
+}
+
+function aflojar() {
+  if (!pausaEntreLlamadas) return;
+  // Hacen falta varios aciertos seguidos para aflojar: uno solo puede ser suerte,
+  // y volver al ritmo alto en cuanto sale bien una es volver a chocar enseguida.
+  if (++aciertosSeguidos >= 5) {
+    aciertosSeguidos = 0;
+    pausaEntreLlamadas = pausaEntreLlamadas <= 4000 ? 0 : Math.round(pausaEntreLlamadas / 2);
+  }
+}
+
+const dormir = (ms, senal) =>
+  new Promise((res, rej) => {
+    if (!ms) return res();
+    const t = setTimeout(res, ms);
+    senal?.addEventListener('abort', () => {
+      clearTimeout(t);
+      rej(new ErrorPuerta('Detenido.'));
+    }, { once: true });
+  });
+
+/** ¿Es un «espera» y no un «no»? */
+const esEspera = (estado, texto) =>
+  estado === 429 ||
+  estado === 408 ||
+  estado === 503 ||
+  /RESOURCE_EXHAUSTED|has been exhausted|quota|rate limit|try again later/i.test(String(texto || ''));
+
 let claveAcceso = '';
 const modelos = { texto: '', imagen: '', video: '' };
 
@@ -59,11 +114,22 @@ export class ErrorPuerta extends Error {
  * saturación del proveedor. Un 4xx no se reintenta —volver a pedir lo mismo da lo
  * mismo— y un 413 menos todavía: eso es tamaño, y el tamaño no cambia por insistir.
  */
-export async function llamar(modo, datos = {}, { reintentos = 2, senal } = {}) {
+export async function llamar(modo, datos = {}, { reintentos = 2, senal, alEsperar } = {}) {
   let ultimo = null;
+  // Los «espera» tienen su propia cuenta y su propia paciencia: una ventana de
+  // cuota se mide en minutos, no en los tres segundos que daban los reintentos
+  // normales.
+  let esperas = 0;
 
   for (let intento = 0; intento <= reintentos; intento++) {
     if (senal?.aborted) throw new ErrorPuerta('Detenido.');
+
+    // El freno, antes de llamar. Si la tanda anterior chocó con la cuota, esto es
+    // lo que hace que la siguiente no vuelva a chocar.
+    if (pausaEntreLlamadas) {
+      alEsperar?.(pausaEntreLlamadas, 'ritmo');
+      await dormir(pausaEntreLlamadas, senal);
+    }
 
     let r;
     try {
@@ -118,6 +184,7 @@ export async function llamar(modo, datos = {}, { reintentos = 2, senal } = {}) {
       // Puesto aquí, una fase nueva no puede olvidarse de hacerlo.
       const escrita = datos.guardarEn || (modo === 'subir' ? datos.clave : '');
       if (escrita) await local.borrarMaterial(escrita).catch(() => {});
+      aflojar();
       return cuerpo;
     }
 
@@ -126,18 +193,43 @@ export async function llamar(modo, datos = {}, { reintentos = 2, senal } = {}) {
       motivo: cuerpo.motivo,
     });
 
-    // 413 = tamaño. 4xx = no va a cambiar. Ninguno se reintenta.
+    // Un «espera» NO es un 4xx cualquiera. Antes caía en la regla de abajo —«los
+    // 4xx no se reintentan»— y se descartaba al instante, que es exactamente lo
+    // que dejó 33 imágenes de 59 sin generar. Se frena y se insiste, con la
+    // paciencia que pide una ventana de cuota.
+    if (esEspera(r.status, cuerpo.error)) {
+      frenar();
+      if (esperas < REINTENTOS_DE_ESPERA) {
+        // Si el proveedor dice cuánto hay que esperar, se le hace caso.
+        const dice = Number(r.headers.get('retry-after')) * 1000;
+        const cuanto = Math.max(dice || 0, ESPERAS[esperas] || ESPERAS[ESPERAS.length - 1]);
+        esperas++;
+        alEsperar?.(cuanto, 'cuota');
+        await dormir(cuanto, senal);
+        intento--; // un «espera» no gasta reintento: no ha fallado, no le tocaba
+        ultimo = err;
+        continue;
+      }
+      err.message =
+        'Se agotó la cuota del proveedor y sigue agotada tras varios minutos esperando. ' +
+        'No es un fallo de la herramienta: es el límite por minuto de tu proyecto en Google Cloud.';
+      throw err;
+    }
+
+    // 413 = tamaño. El resto de 4xx = no va a cambiar. Ninguno se reintenta.
     if (r.status === 413 || (r.status >= 400 && r.status < 500)) throw err;
     ultimo = err;
-    await esperar(intento);
+    await dormir(Math.min(8000, 600 * 2 ** intento), senal);
   }
 
   throw ultimo || new ErrorPuerta('Falló sin decir por qué.');
 }
 
-function esperar(intento) {
-  return new Promise((res) => setTimeout(res, Math.min(8000, 600 * 2 ** intento)));
-}
+// Las esperas de cuota, en milisegundos. Suman unos ocho minutos: una ventana de
+// cuota por minuto se abre mucho antes, y una diaria no se abre nunca —por eso hay
+// un final, en vez de esperar para siempre—.
+const ESPERAS = [5000, 15000, 30000, 60000, 90000, 120000, 180000];
+const REINTENTOS_DE_ESPERA = ESPERAS.length;
 
 /**
  * Espera a que termine una operación larga (§6).
