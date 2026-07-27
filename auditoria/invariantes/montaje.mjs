@@ -69,6 +69,43 @@ export const invariantes = [
   },
 
   {
+    nombre: 'la-previa-sale-de-la-misma-hoja-que-el-montaje',
+    dice: 'La vista previa se construye desde la MISMA hoja que usa ffmpeg. Con una línea de tiempo propia enseñaría un documental parecido al que se va a montar, que es justo lo que no vale para decidir.',
+    comprobar(ctx) {
+      const p = fuente(ctx, 'app/previa.js');
+      const fallos = [];
+
+      if (!/construirHoja/.test(p)) {
+        fallos.push('La previa no construye la hoja: compone su propia línea de tiempo.');
+      }
+      // Los tiempos tienen que salir de la hoja, no de encadenar «cuando acabe este».
+      if (!/t\.inicio/.test(p)) fallos.push('La previa no coloca la voz por el `inicio` de la hoja.');
+      if (!/hoja\.escenas/.test(p)) fallos.push('La música de la previa no sale del reparto por escena de la hoja.');
+
+      // Y tiene que reproducir lo que el montaje hace con el sonido y la imagen: sin
+      // esto es un pase de diapositivas, no una previa.
+      const debeHacer = [
+        [/AudioContext/, 'sonar por Web Audio y no con etiquetas sueltas'],
+        [/loop = true|loop=true/, 'repetir la música si la pieza es más corta que la escena'],
+        [/linearRampToValueAtTime/, 'los fundidos largos de la música (§5.4)'],
+        [/getFloatTimeDomainData|createAnalyser/, 'agachar la música midiendo la voz (§5.6)'],
+        [/CAMARA|animate\(/, 'el recorrido de cámara de las tomas fijas (§4.7)'],
+        [/firma/, 'la marca del canal (§5.7)'],
+      ];
+      for (const [re, que] of debeHacer) {
+        if (!re.test(p)) fallos.push(`La previa no hace: ${que}.`);
+      }
+      return fallos;
+    },
+    // Encadenar por temporizadores en vez de programar por tiempo absoluto es el
+    // error que hace que la imagen se separe de la voz según avanza la pieza.
+    romper: (ctx) =>
+      editando(ctx, 'app/previa.js', (t) =>
+        t.replace(/createAnalyser/g, 'createGain').replace(/getFloatTimeDomainData/g, 'noMide'),
+      ),
+  },
+
+  {
     nombre: 'el-manifiesto-no-lleva-nada-que-no-se-use',
     dice: 'El manifiesto no baja material que el montaje no abre: bajar de más es tiempo y dinero en cada montaje.',
     comprobar(ctx) {

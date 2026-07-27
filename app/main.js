@@ -890,60 +890,62 @@ function informar(r, que) {
 
 // ── Vista previa ──────────────────────────────────────────────────────────────
 //
-// Antes de gastar en montaje, ver y oír lo que hay. No cuesta nada: todo el material
-// está pagado y en el almacén, esto solo lo baja y lo reproduce.
+// Reconstruye lo que va a salir del montaje: recorrido de cámara, marca, lecho de
+// música y el agachado de la música cuando entra la voz. Sale de la MISMA hoja que
+// usa ffmpeg, no de una línea de tiempo propia.
 
-let piezasPrevia = [];
+let preparada = null;
 let reproductor = null;
 
 function asegurarReproductor() {
   if (reproductor) return reproductor;
   reproductor = previa.reproductor({
     lienzo: $('previa-imagen'),
-    audio: $('previa-audio'),
-    alCambiar: (p, k, total) => {
+    marca: $('previa-marca'),
+    alCambiar: (t, k, total, segundo) => {
       $('previa-vacio').style.display = 'none';
       $('previa-pie').textContent =
-        `Toma ${p.i + 1} de ${total} · escena ${p.escena} · ${(p.segundos || 0).toFixed(1)}s` +
-        (p.reusaDe !== null ? ` · reusa la ${p.reusaDe + 1}` : '') +
-        (p.falta.length ? ` · FALTA ${p.falta.join(' y ')}` : '') +
-        `\n${p.texto}`;
+        `${reloj(segundo)} / ${reloj(preparada?.hoja.total || 0)} · toma ${t.i + 1} de ${total}` +
+        ` · escena ${t.escena}${t.movimiento ? ' · clip' : ` · cámara ${t.camara}`}` +
+        (t.falta.length ? ` · FALTA ${t.falta.join(' y ')}` : '') +
+        `\n${t.texto}`;
       document.querySelectorAll('.tira').forEach((e, n) => e.classList.toggle('activa', n === k));
       document.querySelectorAll('.tira')[k]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     },
+    alTerminar: () => avisar('previa', 'Fin de la pieza.', 'bueno'),
   });
   return reproductor;
 }
 
+const reloj = (s) =>
+  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
 accion(
   'b-preparar-previa',
   async () => {
-    const tomas = pieza().tomas;
-    if (!tomas.length) throw new Error('Todavía no hay tomas.');
+    if (!pieza().tomas.length) throw new Error('Todavía no hay tomas.');
+    preparada = await previa.preparar({
+      pieza: pieza(),
+      config: P.config,
+      alAvanzar: (n, de) => avisar('previa', `Bajando material… ${n} de ${de} tomas`),
+    });
 
-    // Por tandas y avisando: bajar ochenta tomas de golpe deja la pantalla parada un
-    // minuto sin decir nada y parece que se colgó.
-    piezasPrevia = [];
-    for (let desde = 0; desde < tomas.length; desde += 12) {
-      const tanda = await previa.preparar({
-        tomas,
-        pieza: P.id,
-        desde,
-        cuantas: 12,
-        alAvanzar: (n, de) =>
-          avisar('previa', `Bajando material… ${desde + n} de ${tomas.length}`),
-      });
-      piezasPrevia.push(...tanda);
-      pintarTiras();
-    }
+    asegurarReproductor().cargar(preparada);
+    pintarTiras();
 
-    asegurarReproductor().cargar(piezasPrevia);
-    const faltan = piezasPrevia.filter((p) => p.falta.length);
+    const faltan = preparada.tomas.filter((t) => t.falta.length);
+    const sinMusica = preparada.hoja.escenas.filter((e) => e.musica && !preparada.musica[e.n]);
     avisar(
       'previa',
-      faltan.length
-        ? `${piezasPrevia.length} tomas. A ${faltan.length} les falta algo: ${faltan.slice(0, 6).map((p) => `#${p.i + 1} (${p.falta.join('+')})`).join(', ')}`
-        : `${piezasPrevia.length} tomas, todas completas. Dale a Reproducir.`,
+      [
+        `${preparada.tomas.length} tomas · ${reloj(preparada.hoja.total)}`,
+        faltan.length
+          ? `A ${faltan.length} les falta algo: ${faltan.slice(0, 6).map((t) => `#${t.i + 1} (${t.falta.join('+')})`).join(', ')}`
+          : 'Todas completas',
+        sinMusica.length ? `${sinMusica.length} escenas sin música` : '',
+      ]
+        .filter(Boolean)
+        .join(' · '),
       faltan.length ? 'malo' : 'bueno',
     );
   },
@@ -953,34 +955,42 @@ accion(
 accion(
   'b-reproducir',
   async () => {
-    if (!piezasPrevia.length) throw new Error('Prepara la previa primero.');
-    asegurarReproductor().reproducir(reproductor.indice);
+    if (!preparada) throw new Error('Prepara la previa primero.');
+    // El navegador solo deja sonar tras un toque: esto ES el toque.
+    await asegurarReproductor().reproducir(desdeSegundo);
   },
   'previa',
 );
 
-$('b-parar-previa').addEventListener('click', () => reproductor?.parar());
+let desdeSegundo = 0;
+$('b-parar-previa').addEventListener('click', () => {
+  reproductor?.parar();
+  desdeSegundo = 0;
+});
 
 function pintarTiras() {
-  $('cuenta-previa').textContent = piezasPrevia.length ? `${piezasPrevia.length}` : '';
+  const tomas = preparada?.tomas || [];
+  $('cuenta-previa').textContent = tomas.length ? `${tomas.length}` : '';
   const caja = $('tiras');
   caja.innerHTML = '';
-  piezasPrevia.forEach((p, k) => {
+  tomas.forEach((t, k) => {
     const b = document.createElement('button');
     b.className = 'tira';
     b.innerHTML =
-      (p.imagen && !p.movimiento
-        ? `<img src="${URL.createObjectURL(p.imagen)}" alt="">`
-        : p.imagen
+      (t.visual && !t.movimiento
+        ? `<img src="${URL.createObjectURL(t.visual)}" alt="">`
+        : t.visual
           ? `<div class="sin" style="color:var(--violeta-2)">clip</div>`
           : `<div class="sin">sin imagen</div>`) +
-      `<div class="pie">#${p.i + 1}` +
-      (p.audio ? '' : ' <span class="pastilla p-falta">sin voz</span>') +
-      (p.corteForzado ? ' <span class="pastilla p-aviso">corte</span>' : '') +
+      `<div class="pie">#${t.i + 1}` +
+      (t.voz ? '' : ' <span class="pastilla p-falta">sin voz</span>') +
       `</div>`;
-    // Tocar una tira lleva el visor a esa toma: revisar es saltar a lo que sospechas,
-    // no verlo entero de nuevo.
-    b.onclick = () => asegurarReproductor().irA(k);
+    // Tocar una tira deja la reproducción lista DESDE ahí: revisar es saltar a lo
+    // que sospechas, no verlo entero otra vez.
+    b.onclick = () => {
+      desdeSegundo = reproductor.segundoDe(k);
+      reproductor.irA(k);
+    };
     caja.appendChild(b);
   });
 }
