@@ -69,6 +69,7 @@ export async function escribirGuion({
   fichas,
   minutos = 10,
   tratamiento = null,
+  anteriores = [],
   senal,
   alAvanzar,
 }) {
@@ -116,6 +117,17 @@ export async function escribirGuion({
           `Extensión de este acto: ${acto.minutos} minutos, unas ${objetivo} palabras. ` +
           `Es un mínimo, no un techo: si te quedas corto, el documental no dura.\n\n` +
           (tratamiento ? comoInstruccion(tratamiento, { para: 'guion' }) + '\n\n' : '') +
+          // El director ya buscó un ángulo nuevo, pero el que ESCRIBE también tiene
+          // que saber qué frases están dichas: si no, vuelve a explicar el caso
+          // desde el principio «para situar al espectador» y la continuación acaba
+          // siendo la primera parte con otras palabras.
+          (anteriores.length
+            ? `LO QUE YA SE CONTÓ EN LAS PARTES ANTERIORES —dalo por sabido, no lo ` +
+              `vuelvas a contar:\n` +
+              anteriores.map((a) => `── ${a.titulo} ──\n${a.guion}`).join('\n\n') +
+              `\n\nComo mucho, una frase de recordatorio al principio de todo el ` +
+              `documental. Ni una escena entera de resumen.\n\n`
+            : '') +
           // La costura entre actos: sin esto, cada acto vuelve a presentar el caso.
           (partes.length
             ? `EL ACTO ANTERIOR TERMINABA ASÍ (no lo repitas, sigue de ahí):\n` +

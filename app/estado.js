@@ -131,8 +131,26 @@ export function abrirPieza(proyecto, { caso = null, titulo = '', vieneDe = null 
       z.caso = caso || padre.caso;
       z.tema = z.tema || padre.tema;
       z.fichas = [...padre.fichas];
-      z.tratamiento = padre.tratamiento;
       z.titulo = titulo || `${padre.titulo} · continuación`;
+
+      // Se hereda EL ASPECTO, no la historia.
+      //
+      // Heredar el tratamiento entero era heredar la premisa, el hilo y los actos:
+      // darle a «Guion» sin más habría escrito otra vez la primera parte. Lo que
+      // pasa a la continuación es lo que la hace parecer la misma serie —paleta,
+      // luz, música, ritmo— y las cautelas legales, que son del caso y no de la
+      // pieza. Lo narrativo se queda vacío y hay que dirigirlo.
+      z.tratamiento = padre.tratamiento
+        ? {
+            ...padre.tratamiento,
+            premisa: '',
+            hilo: '',
+            aperturaEnFrio: '',
+            cierre: '',
+            estructura: [],
+            soloIdentidad: true,
+          }
+        : null;
     }
   }
 

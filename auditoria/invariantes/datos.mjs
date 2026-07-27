@@ -573,4 +573,57 @@ export const invariantes = [
     romper: (ctx) =>
       conFuncion(ctx, 'claveFotograma', (pieza, toma) => `${pieza}/t${String(toma.i).padStart(3, '0')}/img`),
   },
+
+  {
+    nombre: 'una-continuacion-no-vuelve-a-contar-lo-contado',
+    dice: 'Una continuación es otro video del mismo caso, no el mismo otra vez. El director y el que escribe tienen que ver los guiones anteriores ENTEROS: un resumen pierde qué frases están dichas, que es lo único que importa aquí.',
+    async comprobar(ctx) {
+      const estado = await import('../../app/estado.js');
+      const dir = fuente(ctx, 'app/fases/director.js');
+      const gui = fuente(ctx, 'app/fases/guion.js');
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      // Las dos fases que escriben tienen que recibirlo, y usarlo.
+      for (const [ruta, texto] of [['director.js', dir], ['guion.js', gui]]) {
+        if (!/anteriores = \[\]/.test(texto)) fallos.push(`${ruta} no recibe las partes anteriores.`);
+        if (!/anteriores\.length/.test(texto)) fallos.push(`${ruta} las recibe y no las usa.`);
+        if (!/a\.guion|\$\{a\.guion\}/.test(texto)) fallos.push(`${ruta} no le pasa el guion anterior entero.`);
+      }
+      // Y la pantalla tiene que dárselas a las dos, desde un solo sitio.
+      if ((main.match(/anteriores: /g) || []).length < 3) {
+        fallos.push('Alguna de las dos fases se queda sin las partes anteriores.');
+      }
+      if (!/function loYaContado/.test(main)) fallos.push('«Lo ya contado» se compone en más de un sitio.');
+
+      // Una continuación hereda el ASPECTO y no la historia: si heredara la
+      // estructura, darle a «Guion» escribiría la primera parte otra vez.
+      const P = estado.sanear({
+        id: 'p01',
+        piezas: [{
+          id: 'p01', titulo: 'Uno', caso: { titulo: 'C', sinopsis: 's' }, guion: '## A\nTexto.',
+          tratamiento: {
+            premisa: 'P1', hilo: 'H1', aperturaEnFrio: 'A1', cierre: 'C1',
+            estructura: [{ acto: 1, titulo: 'Uno', minutos: 5 }],
+            identidadVisual: { paleta: 'ámbar' }, musica: { atmosfera: 'cuerdas' },
+            ritmo: { segundosPorToma: 11, proporcionMovimiento: 0.15 }, cuidado: ['no afirmar X'],
+          },
+        }],
+      });
+      const c = estado.abrirPieza(P, { vieneDe: 'p01' });
+      if (c.tratamiento.identidadVisual?.paleta !== 'ámbar') fallos.push('La continuación no hereda la paleta: no parecerá la misma serie.');
+      if (!c.tratamiento.cuidado?.length) fallos.push('La continuación pierde las cautelas legales, que son del caso.');
+      if (c.tratamiento.premisa || c.tratamiento.estructura.length) {
+        fallos.push('La continuación hereda la historia del padre: escribiría la primera parte otra vez.');
+      }
+      if (!c.tratamiento.soloIdentidad) fallos.push('Nada marca que a la continuación le falta su propio hilo.');
+      // Y la pantalla tiene que negarse a escribir hasta que se dirija.
+      if (!/soloIdentidad/.test(main)) fallos.push('Se puede escribir el guion de una continuación sin dirigirla.');
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'app/fases/guion.js', (t) =>
+        t.replace('anteriores.length\n            ?', 'false\n            ?'),
+      ),
+  },
 ];

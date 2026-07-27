@@ -143,7 +143,7 @@ acto.`;
  * fichas decidiría sobre lo que se imagina, que es exactamente lo que un documental
  * no puede permitirse.
  */
-export async function dirigirPieza({ caso, fichas, minutos = 10, senal }) {
+export async function dirigirPieza({ caso, fichas, minutos = 10, anteriores = [], senal }) {
   if (!caso) throw new Error('No hay caso que dirigir. Elige uno primero.');
   if (!fichas?.length) {
     throw new Error(
@@ -177,6 +177,30 @@ export async function dirigirPieza({ caso, fichas, minutos = 10, senal }) {
           )
           .join('\n') +
         `\n\nDuración objetivo: ${minutos} minutos.\n\n` +
+        // Una continuación NO es el mismo documental otra vez. El director recibe
+        // lo que ya se contó —entero, no un resumen: lo que importa es qué frases
+        // ya se dijeron— y su trabajo pasa a ser encontrar lo que quedó fuera.
+        (anteriores.length
+          ? `ESTO ES UNA CONTINUACIÓN. Del mismo caso ya se publicaron ` +
+            `${anteriores.length} ${anteriores.length === 1 ? 'parte' : 'partes'}.\n\n` +
+            anteriores
+              .map(
+                (a, n) =>
+                  `── PARTE ${n + 1}: ${a.titulo} ──\n` +
+                  `Premisa: ${a.premisa || '—'}\n` +
+                  `Hilo: ${a.hilo || '—'}\n` +
+                  `Lo que se contó, entero:\n${a.guion}\n`,
+              )
+              .join('\n') +
+            `\n\nTU TRABAJO AHORA: encontrar lo que quedó FUERA de esas partes y ` +
+            `merece un documental propio. Otro hilo, otra pregunta, otro material de ` +
+            `las mismas fichas. Reglas:\n` +
+            `- NO vuelvas a contar lo ya contado. Puedes darlo por sabido en una ` +
+            `frase, no más.\n` +
+            `- La apertura NO puede ser la de ninguna parte anterior.\n` +
+            `- Si de verdad no queda nada por contar, dilo en la premisa en vez de ` +
+            `repetir la primera parte con otras palabras.\n\n`
+          : '') +
         `Decide el documental. Devuelve:\n` +
         `- premisa: una frase de qué es esta pieza.\n` +
         `- hilo: la pregunta que se abre al principio y se cierra al final.\n` +

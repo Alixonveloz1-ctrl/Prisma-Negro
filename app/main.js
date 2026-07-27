@@ -625,12 +625,22 @@ function pintarReparto() {
 accion(
   'b-dirigir-pieza',
   async () => {
+    const yaContado = loYaContado();
+    if (yaContado.length) {
+      avisar('paso3', `Dirigiendo la continuación. El director lee las ${yaContado.length} partes anteriores…`);
+    }
     const tr = await director.dirigirPieza({
       caso: pieza().caso,
       fichas: pieza().fichas,
       minutos: Number($('minutos').value) || 10,
+      anteriores: yaContado,
     });
-    pieza().tratamiento = tr;
+    // En una continuación, el ASPECTO lo pone la primera parte, no el director:
+    // dos partes de la misma serie que no se parecen no son una serie.
+    const heredado = pieza().tratamiento?.soloIdentidad ? pieza().tratamiento : null;
+    pieza().tratamiento = heredado
+      ? { ...tr, identidadVisual: heredado.identidadVisual, musica: heredado.musica, soloIdentidad: false }
+      : tr;
 
     // El ritmo que pide el director entra en la configuración: es él quien sabe si
     // esta pieza va lenta o va nerviosa. El tope de gasto sigue siendo del usuario.
@@ -683,12 +693,23 @@ accion(
       );
     }
     if (!pieza().tratamiento) throw new Error('Dirige la pieza primero: el guion sale del tratamiento.');
+    // Una continuación nace con el ASPECTO del padre y sin su historia. Escribir
+    // ahora sería escribir la primera parte otra vez, que es justo lo que no se
+    // quiere de una continuación.
+    if (pieza().tratamiento.soloIdentidad) {
+      throw new Error(
+        'Esta continuación hereda la paleta, la música y las cautelas del caso, pero ' +
+          'todavía no tiene hilo propio. Dale a «Dirigir»: el director leerá lo ya ' +
+          'contado y buscará lo que quedó fuera.',
+      );
+    }
     avisar('paso3', `${pieza().fichas.length} fichas. Escribiendo el guion…`);
     const texto = await guionFase.escribirGuion({
       tema: pieza().tema,
       fichas: pieza().fichas,
       minutos: Number($('minutos').value) || 10,
       tratamiento: pieza().tratamiento,
+      anteriores: loYaContado(),
       alAvanzar: (n, total) => avisar('paso3', `Escribiendo el acto ${n} de ${total}…`),
     });
     pieza().guion = texto;
@@ -723,6 +744,7 @@ accion(
       fichas: pieza().fichas,
       minutos: Number($('minutos').value) || 10,
       tratamiento: pieza().tratamiento,
+      anteriores: loYaContado(),
       alAvanzar: (n, total) => avisar('guion', `Escribiendo el acto ${n} de ${total}…`),
     });
     pieza().guion = texto;
@@ -1290,6 +1312,26 @@ async function rehacerMusica(n) {
  * Cada caso es una pieza y todas se quedan. Elegir un caso nuevo ya no pisa el
  * anterior: se puede volver a él, mirarlo, o pedirle una continuación.
  */
+/**
+ * Lo que ya se contó de este caso, para no repetirlo.
+ *
+ * Sale de la ascendencia de la pieza: las partes anteriores, de la más reciente a
+ * la más antigua, con su guion ENTERO. No un resumen —lo que importa es qué
+ * frases están dichas, y eso un resumen lo pierde—. Solo las que tienen guion:
+ * una pieza sin escribir no ha contado nada.
+ */
+function loYaContado() {
+  return estado
+    .ascendencia(P, pieza())
+    .filter((z) => (z.guion || '').trim())
+    .map((z) => ({
+      titulo: z.titulo,
+      guion: z.guion,
+      premisa: z.tratamiento?.premisa || '',
+      hilo: z.tratamiento?.hilo || '',
+    }));
+}
+
 function pintarHistorial() {
   const caja = $('historial');
   if (!caja) return;
@@ -1347,8 +1389,9 @@ accion(
     pintarTodo();
     avisar(
       'historial',
-      `Abierta la continuación de «${padre.titulo}» con ${z.fichas.length} fichas y el ` +
-        `mismo tratamiento. Escribe el guion: el director sabe lo que ya se contó.`,
+      `Abierta la continuación de «${padre.titulo}»: hereda sus ${z.fichas.length} fichas, ` +
+        `su paleta, su música y las cautelas del caso. Dale a «Dirigir» en el paso 3: ` +
+        `el director leerá lo ya contado y buscará lo que quedó fuera.`,
       'bueno',
     );
   },
