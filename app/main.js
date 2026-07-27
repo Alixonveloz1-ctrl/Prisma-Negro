@@ -17,6 +17,7 @@ import * as estado from './estado.js';
 import { Cola } from './cola.js';
 import { pintarSelectorModelo } from './config.js';
 import { segmentarVerificado } from '../comun/segmentar.mjs';
+import { TEMAS, EPOCAS, EPOCA_POR_DEFECTO, temaPorId, epocaPorId } from '../comun/temas.mjs';
 import * as investigacion from './fases/investigacion.js';
 import * as guionFase from './fases/guion.js';
 import * as direccion from './fases/direccion.js';
@@ -53,6 +54,15 @@ const VISTAS = [
 let P = null;
 let casos = [];
 const cola = new Cola({ alProgresar: pintarProgreso, alAviso: (m) => avisar('paso3', m) });
+// Una cola aparte para la investigación: su progreso va en el paso 2 y puede
+// solaparse con una generación en marcha sin pisarle la barra.
+const colaInvestiga = new Cola({
+  alProgresar: ({ hechas, total, estado: e }) => {
+    $('barra2').style.width = total ? `${Math.round((hechas / total) * 100)}%` : '0';
+    $('progreso2').textContent =
+      e === 'termina' ? '' : `Buscando… ${hechas} de ${total} ángulos`;
+  },
+});
 
 // ── Pantalla ──────────────────────────────────────────────────────────────────
 
@@ -187,13 +197,50 @@ function ir(id) {
   window.scrollTo(0, 0);
 }
 
+/**
+ * El selector de temas.
+ *
+ * Sin acotar el tema, «busca casos reales» sale a internet sin rumbo. Y sin acotar
+ * la época devuelve lo más publicado, que es lo más viejo: por eso salían casos del
+ * XIX una y otra vez.
+ */
+function pintarFiltros() {
+  const st = $('tema');
+  if (!st.options.length) {
+    st.innerHTML = '<option value="">Cualquier tema del canal</option>';
+    for (const g of TEMAS) {
+      const og = document.createElement('optgroup');
+      og.label = `${g.icono} ${g.grupo}`;
+      for (const x of g.temas) {
+        const o = document.createElement('option');
+        o.value = x.id;
+        o.textContent = x.nombre;
+        og.appendChild(o);
+      }
+      st.appendChild(og);
+    }
+    const se = $('epoca');
+    se.innerHTML = '';
+    for (const e of EPOCAS) {
+      const o = document.createElement('option');
+      o.value = e.id;
+      o.textContent = e.nombre;
+      se.appendChild(o);
+    }
+  }
+  st.value = P.temaId || '';
+  $('epoca').value = P.epocaId || EPOCA_POR_DEFECTO;
+}
+
 function pintarTodo() {
+  pintarFiltros();
   $('titulo').value = P.titulo;
   $('guion').value = pieza().guion;
   $('nombre-proyecto').textContent = P.caso?.titulo || P.titulo;
   $('cabecera-movil').textContent = `${pieza().tomas.length} tomas`;
   pintarCasoElegido();
   pintarFichas();
+  pintarReparto();
   pintarTomas();
   pintarAjustes();
   pintarPasos();
@@ -234,25 +281,55 @@ function pintarPasos() {
 
 // ── Paso 1: buscar casos y elegir uno ─────────────────────────────────────────
 
-accion(
-  'b-buscar-casos',
-  async () => {
-    $('zona-casos').innerHTML = '<p class="nota" style="margin-top:14px">Buscando en internet…</p>';
-    casos = await investigacion.buscarCasos({
-      tema: '',
-      // No repetir lo ya descartado: buscar dos veces y que salgan los mismos cinco
-      // es la forma más rápida de que la herramienta parezca rota.
-      evitar: P.casosVistos,
-    });
-    P.casosVistos = [...new Set([...P.casosVistos, ...casos.map((c) => c.titulo)])].slice(-40);
-    await guardar();
-    pintarCasos();
-  },
-  'paso2',
-);
+async function buscar() {
+  P.temaId = $('tema').value;
+  P.epocaId = $('epoca').value;
+  const tema = temaPorId(P.temaId);
+  const epoca = epocaPorId(P.epocaId);
+
+  $('zona-casos').innerHTML =
+    `<p class="nota" style="margin-top:14px">Buscando en internet` +
+    `${tema ? ` · ${escapar(tema.nombre)}` : ''} · ${escapar(epoca.nombre.toLowerCase())}…</p>`;
+
+  const r = await investigacion.buscarCasos({
+    tema,
+    epoca,
+    // No repetir lo ya descartado: buscar dos veces y que salgan los mismos cinco es
+    // la forma más rápida de que la herramienta parezca rota.
+    evitar: P.casosVistos,
+  });
+  casos = r.casos;
+  P.casosVistos = [...new Set([...P.casosVistos, ...casos.map((c) => c.titulo)])].slice(-60);
+  await guardar();
+  pintarCasos();
+
+  if (!casos.length) {
+    throw new Error(
+      `No salió ningún caso de ${epoca.nombre.toLowerCase()} para ese tema. ` +
+        `Prueba con una época más amplia o con otro tema.`,
+    );
+  }
+  // Si se cayeron casos por fecha, se dice: si no, parece que la búsqueda vino floja.
+  if (r.descartados) {
+    avisar(
+      'paso1',
+      `Se descartaron ${r.descartados} casos anteriores a ${r.desde}. Quedan ${casos.length}. ` +
+        `Dale a «Otros cinco» si quieres más.`,
+    );
+  }
+}
+
+accion('b-buscar-casos', buscar, 'paso1');
+accion('b-otros-casos', buscar, 'paso1');
 
 function pintarCasos() {
-  if (!casos.length) return;
+  // Sin resultados hay que LIMPIAR: si no, se queda colgado el «Buscando en
+  // internet…» de antes y parece que sigue trabajando mientras el error dice otra
+  // cosa. Lo vio la prueba con la época filtrando todo.
+  if (!casos.length) {
+    $('zona-casos').innerHTML = '';
+    return;
+  }
   $('zona-casos').innerHTML =
     `<p class="nota chica" style="margin-top:15px;display:flex;align-items:center;gap:8px">` +
     `<b style="color:var(--violeta-2)">${casos.length} casos encontrados</b>` +
@@ -313,6 +390,7 @@ async function buscarFichas(mas) {
   P.fichas = mas ? [...P.fichas, ...nuevas] : nuevas;
   await guardar();
   pintarFichas();
+  pintarReparto();
   pintarCasoElegido();
 }
 
@@ -326,6 +404,7 @@ function pintarFichas() {
           (f) =>
             `<div class="ficha"><div class="cab">` +
             `<span class="pastilla ${f.incierto ? 'p-aviso' : 'p-ok'}">${f.incierto ? 'disputado' : escapar(f.fiabilidad)}</span>` +
+            `<span class="pastilla p-tipo">${escapar(f.tipoFuente)}</span>` +
             `<span>${escapar(f.fuente)}${f.fecha ? ' · ' + escapar(f.fecha) : ''}</span></div>` +
             `<p>${escapar(f.afirmacion)}</p>` +
             (f.cita ? `<div class="cita">«${escapar(f.cita)}»</div>` : '') +
@@ -335,14 +414,78 @@ function pintarFichas() {
     : '<p class="nota">Todavía no hay fichas. Sin ellas el guion sería opinión, no documental.</p>';
 }
 
+/**
+ * La investigación a fondo del caso elegido.
+ *
+ * Seis ángulos, cada uno una búsqueda distinta. Una sola pregunta trae una sola
+ * versión —la del primer resultado— y con eso sale un resumen de Wikipedia con voz
+ * grave, no un documental.
+ */
+accion(
+  'b-investigar-fondo',
+  async () => {
+    if (!P.caso) throw new Error('Elige un caso primero, en el paso 1.');
+
+    const r = await colaInvestiga.ejecutar(
+      'investigación',
+      investigacion.ANGULOS_DE_INVESTIGACION,
+      (angulo, _i, senal) => investigacion.investigarAngulo({ caso: P.caso, angulo, senal }),
+      {
+        // Cada ángulo se guarda al terminar: se puede detener a mitad y lo buscado
+        // no se pierde ni se vuelve a pagar (§4).
+        alTerminarUno: async (fichas) => {
+          P.fichas = investigacion.fusionarFichas([P.fichas, fichas]);
+          await guardar();
+          pintarFichas();
+          pintarReparto();
+        },
+      },
+    );
+
+    pintarCasoElegido();
+    pintarPasos();
+    if (r.fallos.length) {
+      avisar('paso2', `${P.fichas.length} fichas. ${r.fallos.length} ángulos fallaron; vuelve a darle.`, 'malo');
+      return registro('paso2', r.fallos.map((f) => `· ${f.error}`));
+    }
+    avisar('paso2', `${P.fichas.length} fichas de ${r.total} ángulos. Ya puedes generar el guion.`, 'bueno');
+  },
+  'paso2',
+);
+
+/** De qué tipo son las fuentes que sostienen el documental. */
+function pintarReparto() {
+  const r = investigacion.reparto(P.fichas);
+  const NOMBRE = {
+    oficial: 'oficiales', judicial: 'judiciales', policial: 'policiales',
+    prensa: 'prensa', academica: 'académicas', testimonio: 'testimonios', otra: 'otras',
+  };
+  const SOLIDA = ['oficial', 'judicial', 'policial', 'academica'];
+  const caja = $('reparto-fuentes');
+  if (!caja) return;
+  caja.innerHTML = Object.keys(r).length
+    ? '<div class="reparto">' +
+      Object.entries(r)
+        .sort((a, b) => b[1] - a[1])
+        .map(
+          ([k, n]) =>
+            `<span class="pastilla ${SOLIDA.includes(k) ? 'p-ok' : ''}">${n} ${escapar(NOMBRE[k] || k)}</span>`,
+        )
+        .join('') +
+      '</div>'
+    : '';
+}
+
 /** El paso 2 del flujo: fichas y guion de una vez, que es como se usa. */
 accion(
   'b-generar-guion',
   async () => {
     if (!P.caso) throw new Error('Elige un caso primero.');
     if (!P.fichas.length) {
-      avisar('paso2', 'Buscando fichas del caso…');
-      await buscarFichas(false);
+      throw new Error(
+        'Todavía no hay fichas. Dale a «Investigar a fondo» primero: el guion se ' +
+          'escribe a partir de ellas, y sin fichas sería opinión, no documental.',
+      );
     }
     avisar('paso2', `${P.fichas.length} fichas. Escribiendo el guion…`);
     const texto = await guionFase.escribirGuion({

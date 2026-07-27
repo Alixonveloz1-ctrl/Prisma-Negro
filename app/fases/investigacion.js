@@ -49,9 +49,21 @@ const ESQUEMA_CASOS = {
  *
  * `tema` es opcional: sin él busca casos abiertos; con él, casos de ese terreno.
  */
-export async function buscarCasos({ tema = '', evitar = [], cuantos = 5, senal } = {}) {
+export async function buscarCasos({ tema = null, epoca = null, evitar = [], cuantos = 5, senal } = {}) {
   const yaVistos = evitar.length
-    ? `\n\nNO propongas ninguno de estos, ya se descartaron:\n${evitar.map((t) => `- ${t}`).join('\n')}`
+    ? `\n\nNO propongas ninguno de estos, ya se descartaron:\n${evitar.slice(-25).map((t) => `- ${t}`).join('\n')}`
+    : '';
+
+  // La época va DURA en la instrucción y repetida al final.
+  //
+  // Sin acotarla, la búsqueda devuelve lo más publicado, y lo más publicado es lo
+  // más viejo: un caso de 1888 lleva siglo y medio escribiéndose y uno de hace dos
+  // años todavía no. Salían casos del XIX una y otra vez por esto.
+  const desde = epoca?.desde?.() ?? null;
+  const corte = desde
+    ? `\n\nLÍMITE DE FECHA, y es obligatorio: los hechos tienen que haber ocurrido ` +
+      `DE ${desde} EN ADELANTE. Un caso anterior a ${desde} no vale aunque sea bueno. ` +
+      `Si no encuentras cinco de ese periodo, devuelve menos, pero NINGUNO anterior.`
     : '';
 
   const r = await llamar(
@@ -61,29 +73,34 @@ export async function buscarCasos({ tema = '', evitar = [], cuantos = 5, senal }
       // fechas con una seguridad que engaña.
       buscarEnInternet: true,
       sistema:
-        'Eres documentalista de investigación. Buscas casos REALES, comprobables y ya ' +
-        'documentados en fuentes públicas, que den para un documental corto de 8 a 15 ' +
-        'minutos.\n\n' +
+        'Eres documentalista de investigación de un canal de documentales de misterio, ' +
+        'crimen real y polémicas del mundo del espectáculo. Buscas casos REALES, ' +
+        'comprobables y documentados en fuentes públicas, que den para un documental ' +
+        'corto de 8 a 15 minutos.\n\n' +
         'Reglas:\n' +
         '- Solo casos REALES. Nada de leyendas urbanas presentadas como hechos, ni ' +
         'creepypastas, ni casos inventados. Si algo es folclore, no lo propongas.\n' +
-        '- Que estén documentados: prensa, expedientes, archivos, investigaciones.\n' +
-        '- Evita casos donde la única fuente sea un vídeo viral o un foro.\n' +
-        '- No propongas crímenes recientes con víctimas identificables vivas ni casos ' +
-        'con menores implicados.\n' +
-        '- Variedad: que los cinco no sean del mismo tipo ni de la misma época.',
+        '- Que estén documentados: prensa, expedientes judiciales, informes policiales, ' +
+        'archivos oficiales, investigaciones periodísticas.\n' +
+        '- Evita casos cuya única fuente sea un vídeo viral o un foro.\n' +
+        '- No propongas casos con menores identificables implicados.\n' +
+        '- Con personas vivas, cíñete a lo que consta en resoluciones públicas o en ' +
+        'prensa de referencia; nada de acusaciones no probadas.\n' +
+        '- Variedad: que no sean todos del mismo tipo ni del mismo país.',
       instruccion:
         (tema
-          ? `Busca casos reales relacionados con: ${tema}\n\n`
-          : 'Busca casos reales llamativos y bien documentados, de cualquier terreno: ' +
-            'desapariciones, fraudes, catástrofes evitables, experimentos, misterios ' +
-            'históricos resueltos, hallazgos.\n\n') +
-        `Devuelve ${cuantos} casos.\n\n` +
+          ? `Busca casos reales de este terreno: ${tema.nombre}.\n` +
+            `Términos por los que buscar: ${tema.busca}.\n\n`
+          : 'Busca casos reales llamativos y bien documentados de misterio, crimen real ' +
+            'o polémicas de figuras públicas.\n\n') +
+        corte +
+        `\n\nDevuelve ${cuantos} casos.\n\n` +
         'Para cada uno:\n' +
         '- titulo: título del documental, corto y concreto. Sin signos de exclamación.\n' +
         '- gancho: una frase de lo que engancha, sin exagerar ni prometer de más.\n' +
         '- sinopsis: 2 o 3 frases de qué pasó.\n' +
-        '- cuando / donde: fecha y lugar reales.\n' +
+        '- cuando: el AÑO en que ocurrió. Obligatorio y real.\n' +
+        '- donde: lugar real.\n' +
         '- porQueFunciona: por qué da para documental visual.\n' +
         '- imagenSugerida: descripción visual para la portada, SIN rostros de personas ' +
         'reales identificables.\n' +
@@ -91,7 +108,8 @@ export async function buscarCasos({ tema = '', evitar = [], cuantos = 5, senal }
         'Responde ÚNICAMENTE con un objeto JSON así:\n' +
         '{"casos":[{"titulo":"","gancho":"","sinopsis":"","cuando":"","donde":"",' +
         '"porQueFunciona":"","imagenSugerida":"","documentado":true}]}' +
-        yaVistos,
+        yaVistos +
+        (desde ? `\n\nRECUERDA: nada anterior a ${desde}.` : ''),
       esquema: ESQUEMA_CASOS,
       temperatura: 0.85,
       maxTokens: 6000,
@@ -116,7 +134,195 @@ export async function buscarCasos({ tema = '', evitar = [], cuantos = 5, senal }
   if (!casos.length) {
     throw new Error('La búsqueda no devolvió ningún caso. Prueba otra vez, o acota el tema.');
   }
-  return casos;
+
+  // El filtro de época se aplica TAMBIÉN aquí, sobre lo que vuelve.
+  //
+  // Decírselo al modelo ayuda pero no obliga: cuela casos viejos igual, sobre todo
+  // si son famosos. Comprobarlo en el código es lo único que de verdad lo impide, y
+  // se dice cuántos se cayeron para que no parezca que la búsqueda vino floja.
+  if (!desde) return { casos, descartados: 0 };
+
+  const dentro = casos.filter((c) => {
+    const anio = Number(String(c.cuando).match(/\b(1[89]\d{2}|20\d{2})\b/)?.[1]);
+    return !anio || anio >= desde;
+  });
+  return { casos: dentro, descartados: casos.length - dentro.length, desde };
+}
+
+// ── Paso 2: la investigación exhaustiva del caso elegido ──────────────────────
+//
+// La búsqueda del paso 1 es de reconocimiento: mira por encima y trae cinco
+// opciones. Esta es otra cosa. Sobre el caso ya elegido se buscan SEIS ÁNGULOS
+// distintos, cada uno por separado, porque una sola pregunta trae una sola versión
+// —normalmente la del primer resultado— y un documental que se apoya en una sola
+// versión es un resumen de Wikipedia con voz grave.
+//
+// Cada ficha guarda de qué TIPO es su fuente. Un dato de una sentencia y un dato de
+// un blog no valen lo mismo, y el guion tiene que poder distinguirlos.
+
+const ANGULOS = [
+  {
+    id: 'cronologia',
+    nombre: 'Cronología',
+    pide:
+      'La secuencia exacta de los hechos: fechas, horas, lugares y nombres. ' +
+      'Qué pasó primero y qué después. Datos duros, no interpretación.',
+  },
+  {
+    id: 'oficial',
+    nombre: 'Fuentes oficiales',
+    pide:
+      'Lo que consta en documentación OFICIAL: informes policiales, atestados, ' +
+      'expedientes judiciales, sentencias, autopsias, informes forenses, actas, ' +
+      'comisiones de investigación, registros públicos. Cita el documento concreto.',
+  },
+  {
+    id: 'prensa',
+    nombre: 'Prensa e investigación periodística',
+    pide:
+      'Lo publicado por medios de referencia e investigaciones periodísticas serias. ' +
+      'Distingue lo que el medio verificó de lo que solo recogió de terceros.',
+  },
+  {
+    id: 'discutido',
+    nombre: 'Lo que se discute',
+    pide:
+      'Las versiones EN CONFLICTO: qué se afirma sin haberse probado, qué desmintió ' +
+      'quién, qué quedó sin aclarar, qué teorías circulan sin respaldo. Marca todo ' +
+      'esto como incierto.',
+  },
+  {
+    id: 'cifras',
+    nombre: 'Datos y cifras',
+    pide:
+      'Cifras concretas y comprobables: cantidades, importes, duraciones, distancias, ' +
+      'número de personas, resultados de pruebas. Con su unidad y su fuente.',
+  },
+  {
+    id: 'despues',
+    nombre: 'Qué pasó después',
+    pide:
+      'El estado ACTUAL: condenas, absoluciones, recursos, indemnizaciones, reformas ' +
+      'legales, reapertura del caso, dónde está hoy cada implicado. Lo más reciente.',
+  },
+];
+
+const ESQUEMA_FICHAS = {
+  type: 'object',
+  properties: {
+    fichas: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          afirmacion: { type: 'string' },
+          fuente: { type: 'string' },
+          tipoFuente: {
+            type: 'string',
+            enum: ['oficial', 'judicial', 'policial', 'prensa', 'academica', 'testimonio', 'otra'],
+          },
+          fecha: { type: 'string' },
+          cita: { type: 'string' },
+          enlace: { type: 'string' },
+          fiabilidad: { type: 'string', enum: ['alta', 'media', 'baja', 'sin calificar'] },
+          incierto: { type: 'boolean' },
+        },
+        required: ['afirmacion', 'fuente', 'tipoFuente', 'fecha', 'cita', 'fiabilidad', 'incierto'],
+      },
+    },
+  },
+  required: ['fichas'],
+};
+
+/** Un ángulo. Se expone suelto para que la cola cuente el progreso por ángulos. */
+export async function investigarAngulo({ caso, angulo, senal }) {
+  const r = await llamar(
+    'texto',
+    {
+      buscarEnInternet: true,
+      sistema:
+        'Eres el documentalista de un equipo de investigación. Tu trabajo NO es ' +
+        'escribir, es DOCUMENTAR con fuentes verificables.\n\n' +
+        'Reglas que no se negocian:\n' +
+        '- Cada ficha es UN hecho comprobable, no una valoración ni un resumen.\n' +
+        '- La cita es TEXTUAL de la fuente. Si no puedes citar, la ficha no vale.\n' +
+        '- La fuente se nombra con precisión: medio y fecha, número de expediente, ' +
+        'órgano judicial, título del informe. «Varios medios» no es una fuente.\n' +
+        '- tipoFuente dice de qué clase es: oficial, judicial, policial, prensa, ' +
+        'academica, testimonio, otra. Sé honesto: un blog es «otra».\n' +
+        '- Si un dato es disputado o no lo puedes sostener, incierto=true y dilo en la ' +
+        'propia afirmación.\n' +
+        '- NO inventes enlaces ni números de expediente. Si no lo tienes, deja vacío.\n' +
+        '- Si de este ángulo hay poco, devuelve MENOS fichas. Nadie te pide llenar un cupo.',
+      instruccion:
+        `CASO: ${caso.titulo}\n` +
+        `${caso.sinopsis}\n` +
+        `Cuándo: ${caso.cuando} · Dónde: ${caso.donde}\n\n` +
+        `ÁNGULO DE ESTA BÚSQUEDA — ${angulo.nombre}:\n${angulo.pide}\n\n` +
+        'Busca en internet y devuelve las fichas de ESTE ángulo, hasta 8.\n\n' +
+        'Responde ÚNICAMENTE con un objeto JSON así:\n' +
+        '{"fichas":[{"afirmacion":"","fuente":"","tipoFuente":"prensa","fecha":"",' +
+        '"cita":"","enlace":"","fiabilidad":"alta","incierto":false}]}',
+      esquema: ESQUEMA_FICHAS,
+      temperatura: 0.25,
+      maxTokens: 7000,
+    },
+    { senal, reintentos: 1 },
+  );
+
+  return (r.json?.fichas || []).map((f) => ({
+    id: `f${Math.random().toString(36).slice(2, 9)}`,
+    angulo: angulo.id,
+    afirmacion: f.afirmacion || '',
+    fuente: f.fuente || '',
+    tipoFuente: f.tipoFuente || 'otra',
+    fecha: f.fecha || '',
+    cita: f.cita || '',
+    // Los enlaces que el modelo consultó de verdad valen más que los que escribe:
+    // los primeros existen, los segundos a veces no.
+    enlace: f.enlace || '',
+    fiabilidad: f.fiabilidad || 'sin calificar',
+    incierto: !!f.incierto,
+    consultadas: r.fuentes || [],
+  }));
+}
+
+export const ANGULOS_DE_INVESTIGACION = ANGULOS;
+
+/**
+ * Junta fichas quitando las repetidas.
+ *
+ * Seis ángulos sobre el mismo caso repiten los hechos centrales —la fecha, el
+ * lugar— y sin esto la lista sale con la misma afirmación cinco veces. Se quedan la
+ * que tenga mejor fuente.
+ */
+export function fusionarFichas(listas) {
+  const PESO = { oficial: 6, judicial: 6, policial: 5, academica: 4, prensa: 3, testimonio: 2, otra: 1 };
+  const porClave = new Map();
+
+  for (const f of listas.flat()) {
+    if (!f.afirmacion.trim()) continue;
+    const clave = f.afirmacion
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9 ]/g, '')
+      .split(/\s+/)
+      .slice(0, 12)
+      .join(' ');
+    const previa = porClave.get(clave);
+    if (!previa || (PESO[f.tipoFuente] || 1) > (PESO[previa.tipoFuente] || 1)) {
+      porClave.set(clave, f);
+    }
+  }
+  return [...porClave.values()];
+}
+
+/** Cuántas fichas hay de cada tipo de fuente. Para poder enseñarlo en pantalla. */
+export function reparto(fichas) {
+  const r = {};
+  for (const f of fichas || []) r[f.tipoFuente || 'otra'] = (r[f.tipoFuente || 'otra'] || 0) + 1;
+  return r;
 }
 
 const ESQUEMA = {

@@ -200,6 +200,14 @@ input[type=range]{padding:0;accent-color:var(--violeta-2);border:none;background
 .caso .cb p{margin:6px 0 0;font-size:12px;color:var(--tinta-2);line-height:1.5}
 .caso .cb .meta{margin-top:8px;font-size:11px;color:var(--tinta-3);display:flex;gap:6px;flex-wrap:wrap}
 
+/* ── Filtros de búsqueda ────────────────────────────────────────────────── */
+.rejilla-filtros{display:grid;grid-template-columns:1fr 1fr;gap:0 12px;margin-top:14px}
+@media (max-width:520px){.rejilla-filtros{grid-template-columns:1fr}}
+.rejilla-filtros label{margin-top:0}
+
+/* ── Reparto de fuentes ─────────────────────────────────────────────────── */
+.reparto{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+
 /* ── Pastillas y estados ────────────────────────────────────────────────── */
 .pastilla{
   font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;
@@ -352,14 +360,26 @@ nav.abajo button svg{width:22px;height:22px}
               <h3>Investigación</h3>
               <p>Busca en internet casos reales que den para documental. Elige uno.</p>
             </div>
-            <div class="paso-acc">
-              <button class="btn primario" id="b-buscar-casos">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-                Buscar casos
-              </button>
+          </div>
+          <div class="rejilla-filtros">
+            <div>
+              <label for="tema">Tema</label>
+              <select id="tema"></select>
+            </div>
+            <div>
+              <label for="epoca">Época</label>
+              <select id="epoca"></select>
             </div>
           </div>
+          <div class="fila-btn" style="margin-top:12px">
+            <button class="btn primario" id="b-buscar-casos">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+              Buscar casos
+            </button>
+            <button class="btn fantasma" id="b-otros-casos">Otros cinco</button>
+          </div>
           <div id="zona-casos"></div>
+          <div id="aviso-paso1"></div>
         </div>
 
         <!-- 2 · Guion -->
@@ -367,16 +387,23 @@ nav.abajo button svg{width:22px;height:22px}
           <div class="paso-cab">
             <div class="paso-n">2</div>
             <div class="paso-txt">
-              <h3>Guion</h3>
-              <p>Fichas documentales del caso y guion escrito a partir de ellas.</p>
-            </div>
-            <div class="paso-acc">
-              <button class="btn" id="b-generar-guion">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h11l5 5v11H4z"/><path d="M8 13h8M8 17h5"/></svg>
-                Generar guion
-              </button>
+              <h3>Investigación a fondo y guion</h3>
+              <p>Seis búsquedas sobre el caso —cronología, fuentes oficiales, prensa, lo discutido, cifras y qué pasó después— y el guion sale de ahí.</p>
             </div>
           </div>
+          <div class="fila-btn" style="margin-top:13px">
+            <button class="btn primario" id="b-investigar-fondo">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/><path d="M11 8v6M8 11h6"/></svg>
+              Investigar a fondo
+            </button>
+            <button class="btn" id="b-generar-guion">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h11l5 5v11H4z"/><path d="M8 13h8M8 17h5"/></svg>
+              Generar guion
+            </button>
+          </div>
+          <div class="barra"><i id="barra2"></i></div>
+          <p class="nota chica" id="progreso2" style="margin-top:8px"></p>
+          <div id="reparto-fuentes"></div>
           <div id="aviso-paso2"></div>
         </div>
 

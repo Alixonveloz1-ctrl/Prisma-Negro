@@ -13,6 +13,11 @@
 
 import { llamar } from '../api.js';
 
+// Cuánto pesa cada tipo de fuente. Un dato de una sentencia y uno de un blog no
+// valen lo mismo, y el guion tiene que apoyarse antes en el primero.
+const PESO = { oficial: 6, judicial: 6, policial: 5, academica: 4, prensa: 3, testimonio: 2, otra: 1 };
+const PESO_FUENTE = (f) => (PESO[f.tipoFuente] || 1) - (f.incierto ? 2 : 0);
+
 const SISTEMA = `Escribes narración de documental para voz en off. No escribes un
 artículo leído en voz alta: escribes para el oído.
 
@@ -23,6 +28,11 @@ artículo leído en voz alta: escribes para el oído.
   discutido, el guion lo dice discutido: "según el expediente...", "la versión
   oficial sostiene...".
 - No inventes datos, fechas, cifras ni nombres que no estén en las fichas.
+- Atribuye según el tipo de fuente que lleva cada ficha entre corchetes: lo que
+  viene de [oficial], [judicial] o [policial] se puede afirmar ("consta en el
+  atestado", "la sentencia declaró probado"); lo de [prensa] se atribuye al medio;
+  lo de [testimonio] u [otra] se cuenta como lo que es ("según relató", "se ha
+  dicho, sin que conste probado").
 - Estructura con "## " los cambios de escena. El título de escena NO se narra.
 - Separa con una línea en blanco los bloques que deben ir en tomas distintas.`;
 
@@ -50,12 +60,16 @@ export async function escribirGuion({ tema, angulo = '', fichas, minutos = 10, s
         (angulo ? `Ángulo: ${angulo}\n` : '') +
         `Duración objetivo: ${minutos} minutos (~${palabras} palabras).\n\n` +
         `FICHAS DISPONIBLES:\n` +
-        fichas
+        // Las fichas van ORDENADAS por solidez de la fuente. El modelo se apoya en
+        // lo primero que lee, así que lo primero tiene que ser lo mejor sostenido:
+        // una sentencia antes que un blog.
+        [...fichas]
+          .sort((a, b) => PESO_FUENTE(b) - PESO_FUENTE(a))
           .map(
             (f, i) =>
               `[${i}] ${f.afirmacion}\n` +
-              `    fuente: ${f.fuente}${f.fecha ? ` (${f.fecha})` : ''}` +
-              `${f.incierto ? ' — DISPUTADO' : ''}\n` +
+              `    fuente: ${f.fuente}${f.fecha ? ` (${f.fecha})` : ''} [${f.tipoFuente || 'otra'}]` +
+              `${f.incierto ? ' — DISPUTADO, dilo como discutido' : ''}\n` +
               (f.cita ? `    cita: «${f.cita}»\n` : ''),
           )
           .join('\n') +

@@ -81,6 +81,9 @@ export function sanear(bruto) {
   // salió el documental sin volver a buscarlo.
   p.caso = p.caso && p.caso.titulo ? p.caso : null;
   p.casosVistos = Array.isArray(p.casosVistos) ? p.casosVistos : [];
+  p.tema = String(p.tema || '');
+  p.temaId = String(p.temaId || '');
+  p.epocaId = String(p.epocaId || '');
 
   p.fichas = Array.isArray(p.fichas) ? p.fichas.map(sanearFicha) : [];
   p.piezas = Array.isArray(p.piezas) && p.piezas.length
@@ -142,16 +145,24 @@ function sanearToma(bruto, i, proyecto) {
 }
 
 /** §8.1: afirmación, fuente, fecha, cita literal, enlace. */
+const TIPOS_FUENTE = ['oficial', 'judicial', 'policial', 'prensa', 'academica', 'testimonio', 'otra'];
+
 function sanearFicha(bruto) {
   const f = { ...(bruto || {}) };
   return {
     id: f.id || `f${Math.random().toString(36).slice(2, 9)}`,
     afirmacion: String(f.afirmacion || ''),
     fuente: String(f.fuente || ''),
+    // Un dato de una sentencia y un dato de un blog no valen lo mismo. Que el tipo
+    // viaje en el modelo es lo que permite ordenarlos por solidez y enseñarlo.
+    tipoFuente: TIPOS_FUENTE.includes(f.tipoFuente) ? f.tipoFuente : 'otra',
+    angulo: String(f.angulo || ''),
     fecha: String(f.fecha || ''),
     cita: String(f.cita || ''),
     enlace: String(f.enlace || ''),
     fiabilidad: f.fiabilidad || 'sin calificar',
+    incierto: f.incierto === true,
+    consultadas: Array.isArray(f.consultadas) ? f.consultadas.slice(0, 6) : [],
   };
 }
 

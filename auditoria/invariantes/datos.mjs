@@ -309,6 +309,64 @@ export const invariantes = [
   },
 
   {
+    nombre: 'la-busqueda-de-casos-va-acotada-en-tema-y-epoca',
+    dice: 'La época por defecto NO es «cualquiera», y el filtro se aplica también sobre lo que vuelve. Sin acotar, la búsqueda devuelve lo más publicado, que es lo más viejo: salían casos del XIX una y otra vez.',
+    async comprobar(ctx) {
+      const { EPOCAS, EPOCA_POR_DEFECTO, TEMAS } = await import('../../comun/temas.mjs');
+      const inv = ctx.fuentes.get('app/fases/investigacion.js') || '';
+      const fallos = [];
+
+      const porDefecto = EPOCAS.find((e) => e.id === EPOCA_POR_DEFECTO);
+      if (!porDefecto) fallos.push('La época por defecto no existe en el catálogo.');
+      else if (porDefecto.desde() === null) {
+        fallos.push('La época por defecto es «cualquiera»: volverán los casos del XIX.');
+      }
+
+      // Decírselo al modelo no basta: cuela casos viejos igual. El filtro tiene que
+      // aplicarse TAMBIÉN en el código, sobre lo que vuelve.
+      if (!/casos\.filter\(/.test(inv) || !/>= desde/.test(inv)) {
+        fallos.push('El filtro de época no se aplica sobre los casos devueltos, solo se pide en el prompt.');
+      }
+      if (TEMAS.flatMap((g) => g.temas).length < 20) {
+        fallos.push('El catálogo de temas es demasiado corto para elegir de verdad.');
+      }
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'app/fases/investigacion.js', (t) =>
+        t.replace(/const dentro = casos\.filter\(/, 'const dentro = [].concat(').replace(/>= desde/, '>= 0'),
+      ),
+  },
+
+  {
+    nombre: 'la-investigacion-a-fondo-busca-por-varios-angulos',
+    dice: 'La investigación del caso elegido son VARIAS búsquedas distintas, con fuentes oficiales entre ellas. Una sola pregunta trae una sola versión, y con eso sale un resumen con voz grave, no un documental.',
+    async comprobar(ctx) {
+      const { ANGULOS_DE_INVESTIGACION } = await import('../../app/fases/investigacion.js');
+      const fallos = [];
+      if (!Array.isArray(ANGULOS_DE_INVESTIGACION) || ANGULOS_DE_INVESTIGACION.length < 4) {
+        fallos.push('La investigación a fondo no tiene suficientes ángulos distintos.');
+      }
+      const ids = (ANGULOS_DE_INVESTIGACION || []).map((a) => a.id);
+      for (const imprescindible of ['oficial', 'cronologia', 'discutido']) {
+        if (!ids.includes(imprescindible)) {
+          fallos.push(`Falta el ángulo «${imprescindible}», que es de los que sostienen el documental.`);
+        }
+      }
+      const inv = ctx.fuentes.get('app/fases/investigacion.js') || '';
+      if (!/tipoFuente/.test(inv)) {
+        fallos.push('Las fichas no guardan de qué tipo es su fuente: un blog y una sentencia valdrían lo mismo.');
+      }
+      const g = ctx.fuentes.get('app/fases/guion.js') || '';
+      if (!/tipoFuente/.test(g)) {
+        fallos.push('El guion no distingue la solidez de la fuente al atribuir.');
+      }
+      return fallos;
+    },
+    romper: (ctx) => editando(ctx, 'app/fases/guion.js', (t) => t.replaceAll('tipoFuente', 'nada')),
+  },
+
+  {
     nombre: 'los-tiempos-de-los-capitulos-salen-de-lo-medido',
     dice: 'Las marcas de tiempo de la descripción salen de `inicio` de cada escena, no de un modelo estimando minutos (§4.10, §8.4).',
     comprobar(ctx) {
