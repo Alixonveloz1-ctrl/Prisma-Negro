@@ -29,6 +29,15 @@ import { comoInstruccion } from './director.js';
 /** Tomas por llamada. Ver la cabecera: ni una ni todas. */
 export const POR_LOTE = 18;
 
+/**
+ * Cuántas tomas tienen que separar una repetición de su original.
+ *
+ * Seis tomas son más de un minuto de documental: suficiente para que volver a ver
+ * un plano se lea como un motivo y no como un fallo. Por debajo de eso, la
+ * repetición canta.
+ */
+export const SEPARACION_MINIMA = 6;
+
 const ESQUEMA = {
   type: 'object',
   properties: {
@@ -94,10 +103,24 @@ Reglas de este documental:
 - merecemovimiento=true solo donde el movimiento APORTE (algo se mueve de verdad:
   humo, agua, multitud, vehículo). Es la fase más cara con diferencia. En duda,
   false.
-- igualQue: si una toma transcurre en el MISMO plano que otra anterior (mismo
-  lugar, mismo encuadre, misma luz, mismos sujetos), pon el índice de aquella. Se
-  reutilizará su imagen en vez de pagar otra. Úsalo solo cuando de verdad se vería
-  igual.
+- MOTIVOS RECURRENTES. Esto no es un truco de ahorro: es cómo se monta un
+  documental. Los de plataforma tienen un puñado de planos que VUELVEN —la
+  patrulla llegando a la casa, la calle de noche, el pasillo del juzgado, la
+  cámara de vigilancia— y los repiten cuatro o cinco veces a lo largo de la hora,
+  nunca seguidos. Eso da unidad visual, y de paso una imagen sirve para cinco
+  tomas en vez de para una.
+  Elige entre CUATRO Y OCHO planos que sean los motivos de esta pieza: los que
+  mejor representan el caso y aguantan verse varias veces. Cada uno vuelve entre
+  dos y cinco veces, repartido a lo largo del documental.
+- igualQue: el índice de una toma ANTERIOR cuyo plano se ve igual —mismo lugar,
+  mismo encuadre, misma luz, mismos sujetos—. Es con lo que se marcan las vueltas
+  de un motivo, y con lo que se aprovecha cualquier otra coincidencia real.
+  Dos reglas y son firmes:
+    · NUNCA en tomas seguidas ni casi seguidas. Ver el mismo plano dos veces en
+      veinte segundos parece un error de montaje, no un motivo. Deja al menos seis
+      tomas de por medio.
+    · Solo si de verdad se vería igual. Un motivo repetido con la luz cambiada no
+      es el mismo plano: es otro.
 - La descripción es para un generador de imágenes: concreta, visual, sin metáforas
   ni adjetivos de opinión. Nombra la luz, la hora del día, la textura, el color.`;
 
@@ -208,8 +231,16 @@ export async function dirigir({ tomas, escenas, tema, config, tratamiento = null
 
     // `igualQue` solo vale hacia atrás y hacia una toma que existe: si no, la
     // resolución de `reusa` daría vueltas o apuntaría al vacío (§3).
+    //
+    // Y NUNCA a una toma cercana. Un motivo que vuelve es lo que da unidad a un
+    // documental; el mismo plano dos veces en veinte segundos es un error de
+    // montaje. La regla está en la instrucción del director, pero pedirla no basta:
+    // aquí se cumple, porque el que mira el resultado eres tú y no él.
     const reusa =
-      Number.isInteger(p.igualQue) && p.igualQue >= 0 && p.igualQue < t.i && !conMovimiento.has(t.i)
+      Number.isInteger(p.igualQue) &&
+      p.igualQue >= 0 &&
+      t.i - p.igualQue >= SEPARACION_MINIMA &&
+      !conMovimiento.has(t.i)
         ? p.igualQue
         : null;
 

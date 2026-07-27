@@ -822,18 +822,36 @@ function pintarTomas() {
   $('cuenta-tomas').textContent = t.length ? `${t.length}` : '';
   $('cabecera-movil').textContent = `${t.length} tomas`;
 
+  // Lo que se PAGA frente a lo que se ve. Es la cifra que importa cuando el canal
+  // todavía no monetiza: un documental de 63 tomas puede costar 39 imágenes si el
+  // director ha repetido bien sus motivos y hay banco de otros casos.
+  const repiteDentro = t.filter((x) => x.reusa !== null && x.reusa !== undefined).length;
+  const delBanco = t.filter((x) => x.heredado).length;
+  const seGeneran = t.filter((x) => !x.movimiento && x.reusa == null && !x.heredado).length;
+
   $('cifras-tomas').innerHTML = [
     ['tomas', t.length],
     ['escenas', pieza().escenas.length],
     ['minutos', (estado.duracionDe(pieza()) / 60).toFixed(1)],
-    ['con movimiento', t.filter((x) => x.movimiento).length],
-    ['reutilizan', t.filter((x) => x.reusa !== null).length],
+    ['imágenes que se pagan', seGeneran],
+    ['repiten un motivo', repiteDentro],
+    ['vienen del banco', delBanco],
+    ['clips de video', t.filter((x) => x.movimiento).length],
     ['falta narrar', falta.narracion],
     ['faltan imágenes', falta.imagen],
     ['llamadas de voz', narracion.resumen(t, P.config).llamadas],
   ]
     .map(([k, v]) => `<div class="cifra"><b>${v}</b><span>${k}</span></div>`)
     .join('');
+
+  const ahorradas = repiteDentro + delBanco;
+  $('ahorro-tomas').textContent = ahorradas
+    ? `De ${t.length} tomas se pagan ${seGeneran} imágenes: ${repiteDentro} repiten un motivo ` +
+      `del propio documental y ${delBanco} salen del banco de otros casos. ` +
+      `${Math.round((ahorradas / t.length) * 100)}% menos de imágenes que tomas.`
+    : t.length
+      ? `Ninguna toma reutiliza nada todavía: se pagarían ${seGeneran} imágenes para ${t.length} tomas.`
+      : '';
 
   $('lista-tomas').innerHTML = t.length
     ? t
@@ -1364,12 +1382,19 @@ function pintarContinuacion() {
       `de «${z.titulo}», y el director buscará lo que quedó fuera de este guion.`;
   }
 
-  // Dirigidas y sin imagen: es lo único que se puede reutilizar.
+  // Dirigidas y sin imagen: es lo único que se puede reutilizar. Y sirve
+  // cualquier otro caso del proyecto, no solo el que esta pieza continúa: el banco
+  // de planos genéricos —una comisaría, patrullas, un pasillo de juzgado— no es de
+  // ningún caso en particular.
+  const otras = P.piezas.filter((x) => x.id !== z.id && (x.tomas || []).some((t) => t.imagen === 'ok'));
   const candidatas = z.tomas.filter((t) => t.plano && !t.heredado && t.imagen !== 'ok').length;
-  const puede = padres.length > 0 && candidatas > 0;
+  const puede = otras.length > 0 && candidatas > 0;
   $('b-reutilizar').classList.toggle('oculto', !puede);
   if (puede) {
-    $('b-reutilizar').textContent = `Reutilizar imágenes de «${padres[0].titulo}»`;
+    $('b-reutilizar').textContent =
+      padres.length
+        ? `Reutilizar imágenes de «${padres[0].titulo}» y de los demás casos`
+        : `Buscar imágenes reutilizables en los otros ${otras.length === 1 ? 'casos' : `${otras.length} casos`}`;
   }
 }
 
@@ -1452,14 +1477,24 @@ accion(
   async () => {
     const z = pieza();
     if (!z.tomas.length) throw new Error('Este caso todavía no tiene tomas dirigidas.');
-    const padres = estado.ascendencia(P, z);
-    if (!padres.length) {
-      throw new Error('Este caso no continúa a ninguno: no hay imágenes anteriores que reutilizar.');
+    // TODAS las piezas del proyecto, no solo las de este caso.
+    //
+    // Hay planos que no son de nadie —una comisaría, patrullas frente a una casa,
+    // un pasillo de juzgado— y sirven para el caso de la semana que viene igual
+    // que para el de hoy. Limitar esto a la ascendencia dejaba fuera justo el
+    // banco que hace viable un canal que todavía no monetiza.
+    const otras = P.piezas.filter((x) => x.id !== z.id);
+    if (!otras.length) {
+      throw new Error('Todavía no hay otros casos de los que reutilizar nada.');
     }
 
-    const puede = imagenFase.heredables(z.tomas, padres);
+    const puede = imagenFase.heredables(z.tomas, otras);
     if (!puede.length) {
-      return avisar('tomas', 'Ningún plano de este guion coincide con los del caso anterior.', 'bueno');
+      return avisar(
+        'tomas',
+        `Ningún plano de este guion coincide con los ${otras.length === 1 ? 'del otro caso' : `de los otros ${otras.length} casos`}.`,
+        'bueno',
+      );
     }
     for (const { i, de } of puede) {
       const t = z.tomas.find((x) => x.i === i);
@@ -1472,7 +1507,8 @@ accion(
     pintarTodo();
     avisar(
       'tomas',
-      `${puede.length} tomas reutilizan una imagen del caso anterior. Esas ya no se generan ni se pagan.`,
+      `${puede.length} tomas reutilizan una imagen ya generada ` +
+        `(${[...new Set(puede.map((x) => x.de.titulo))].join(', ')}). Esas ya no se pagan.`,
       'bueno',
     );
   },

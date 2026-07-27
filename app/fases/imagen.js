@@ -45,14 +45,27 @@ export function planificar(tomas, { soloLasQueFaltan = true } = {}) {
 }
 
 /**
- * Qué planos de las piezas anteriores sirven para esta.
+ * Qué planos ya generados —en cualquier caso de este proyecto— sirven para este.
  *
- * Una continuación del mismo caso vuelve a los mismos sitios: la fachada, el
- * pasillo, la carretera. Volver a generarlos es pagar dos veces por la misma
- * imagen —y encima sale distinta, que en un documental se nota—.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * EL BANCO DE PLANOS
+ *
+ * Dos clases de reutilización, y las dos valen dinero:
+ *
+ *   · DEL MISMO CASO. Una continuación vuelve a los mismos sitios: la fachada, el
+ *     pasillo, la carretera. Regenerarlos es pagar dos veces por la misma imagen,
+ *     y encima sale distinta, que en un documental se nota.
+ *
+ *   · DE CUALQUIER CASO. Hay planos que no son de nadie: la fachada de una
+ *     comisaría, patrullas y una ambulancia frente a una casa, un pasillo de
+ *     juzgado, una carretera de noche. Sirven para el caso de la semana que viene
+ *     igual que para el de hoy. Un canal que lleva diez documentales tiene un
+ *     banco de esos planos pagados hace meses.
  *
  * Se compara el LUGAR y el ENCUADRE, que es lo que hace que dos planos se vean
- * iguales. La luz no: la misma fachada de noche y de día es otro plano.
+ * iguales. La luz también: la misma fachada de noche y de día es otro plano, y
+ * darte la de noche cuando el guion pide de día es peor que pagar.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 export function heredables(tomas, piezasAnteriores) {
   const antes = new Map();

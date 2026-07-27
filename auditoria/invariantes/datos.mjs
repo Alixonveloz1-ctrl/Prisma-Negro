@@ -677,4 +677,64 @@ export const invariantes = [
           .componerInstruccion({ ...toma, plano: { ...toma.plano, sujetos: [] } }, config, opciones)
       ),
   },
+
+  {
+    nombre: 'un-motivo-vuelve-pero-nunca-seguido',
+    dice: 'Los documentales de plataforma repiten un puñado de planos —la patrulla llegando, la calle de noche, la cámara de vigilancia— cuatro o cinco veces a lo largo de la hora. Da unidad visual y una imagen sirve para cinco tomas. Pero dos veces en veinte segundos no es un motivo: es un error de montaje.',
+    comprobar(ctx) {
+      const dir = fuente(ctx, 'app/fases/direccion.js');
+      const fallos = [];
+
+      // El valor se lee DE LA FUENTE, no importándolo: importándolo, cambiarlo en
+      // el sabotaje no cambiaba nada y la invariante salía ciega.
+      const SEPARACION_MINIMA = Number(/SEPARACION_MINIMA = (\d+)/.exec(dir)?.[1] || 0);
+      if (!(SEPARACION_MINIMA >= 4)) {
+        fallos.push(`Con ${SEPARACION_MINIMA} tomas de separación la repetición se ve seguida.`);
+      }
+      // Y la regla se CUMPLE en el código, no solo se pide en la instrucción: quien
+      // mira el resultado es el usuario, no el modelo.
+      if (!/t\.i - p\.igualQue >= SEPARACION_MINIMA/.test(dir)) {
+        fallos.push('La separación se le pide al director y no se comprueba: repetiría seguido.');
+      }
+      // Y al director se le tiene que pedir que diseñe los motivos, no que los
+      // encuentre por casualidad.
+      if (!/MOTIVOS RECURRENTES/.test(dir)) {
+        fallos.push('Nadie le pide al director que diseñe planos que vuelvan: solo cazaría coincidencias.');
+      }
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'app/fases/direccion.js', (t) =>
+        t.replace('export const SEPARACION_MINIMA = 6;', 'export const SEPARACION_MINIMA = 1;'),
+      ),
+  },
+
+  {
+    nombre: 'el-banco-de-planos-no-es-solo-del-mismo-caso',
+    dice: 'Una comisaría, patrullas frente a una casa, un pasillo de juzgado: son planos que no son de ningún caso y sirven para el de la semana que viene. Limitar la reutilización a la ascendencia dejaba fuera justo el banco que hace viable un canal que todavía no monetiza.',
+    comprobar(ctx) {
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      // Se busca en TODAS las piezas del proyecto menos esta.
+      const i = main.indexOf("'b-reutilizar',");
+      const cuerpo = main.slice(i, main.indexOf('\nfunction ', i));
+      if (!/P\.piezas\.filter\(\(x\) => x\.id !== z\.id\)/.test(cuerpo)) {
+        fallos.push('La reutilización solo mira los casos de los que este desciende.');
+      }
+      if (/estado\.ascendencia\(P, z\);\s*\n\s*if \(!padres\.length\)/.test(cuerpo)) {
+        fallos.push('Sigue exigiendo que esta pieza sea continuación de otra.');
+      }
+      // Y el ahorro se enseña ANTES de gastar, que es cuando sirve.
+      if (!/ahorro-tomas/.test(main)) fallos.push('No se dice cuántas imágenes se pagan de verdad.');
+      if (!/x\.heredado/.test(main) || !/x\.reusa == null/.test(main)) {
+        fallos.push('La cuenta de lo que se paga no descuenta lo reutilizado.');
+      }
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace('const otras = P.piezas.filter((x) => x.id !== z.id);', 'const otras = estado.ascendencia(P, z);'),
+      ),
+  },
 ];
