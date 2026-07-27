@@ -20,7 +20,7 @@
 import { llamar } from '../api.js';
 import { claveToma, tomaDelFotograma } from '../../comun/claves.mjs';
 import { reducirReferencias, deBase64 } from '../imagenes.js';
-import { estiloPorId, BARRERA_DOCUMENTAL } from '../../comun/estilos.mjs';
+import { estiloPorId, ESTILOS, BARRERA_DOCUMENTAL } from '../../comun/estilos.mjs';
 import * as local from '../local.js';
 
 // El estilo ya no vive aquí: sale del catálogo y se elige en Ajustes. Escrito
@@ -237,6 +237,107 @@ export async function fotogramaDe({ toma, tomas, pieza }) {
  * de verdad y no de un ejemplo abstracto— y si no, una escena inventada del mismo
  * género.
  */
+/**
+ * El plano con el que se prueba un estilo.
+ *
+ * Se usa uno DEL CASO si ya hay tomas dirigidas —comparar estilos sobre una
+ * carretera genérica no dice si te sirve para TU documental— y uno de reserva
+ * cuando todavía no hay nada, para poder elegir el estilo antes de gastar en
+ * imágenes de verdad. Que es el orden en que se decide.
+ */
+export function planoDePrueba(tomas = [], caso = null) {
+  const conPlano = tomas.find((t) => t.plano);
+  if (conPlano) return { toma: conPlano, deLaToma: conPlano.i };
+
+  return {
+    deLaToma: null,
+    toma: {
+      i: 0,
+      plano: {
+        encuadre: 'plano general',
+        lugar: caso?.donde || 'una carretera secundaria de noche',
+        luz: 'faros y una farola lejana',
+        sujetos: [],
+        descripcion:
+          caso?.imagenSugerida ||
+          'Una carretera secundaria vacía de noche, vista desde el arcén.',
+      },
+    },
+  };
+}
+
+/**
+ * Una imagen POR CADA ESTILO, para poder compararlos y elegir.
+ *
+ * Antes solo se podía probar el estilo que estuviera puesto, de uno en uno: para
+ * comparar seis había que cambiar el desplegable seis veces y quedarse con lo que
+ * uno recordara de la anterior. Y elegir el estilo DESPUÉS de generar las imágenes
+ * del documental es al revés de como se decide.
+ *
+ * Cada muestra se guarda con su propia clave, así que volver a esta pantalla las
+ * enseña sin volver a pagarlas.
+ */
+export async function muestrarioDeEstilos({
+  tomas = [],
+  config,
+  caso = null,
+  tratamiento = null,
+  pieza = 'p01',
+  soloLasQueFaltan = true,
+  senal,
+  alAvanzar,
+}) {
+  const { toma, deLaToma } = planoDePrueba(tomas, caso);
+  const salida = [];
+
+  for (const [n, estilo] of ESTILOS.entries()) {
+    if (senal?.aborted) throw new Error('Detenido.');
+    const clave = claveMuestra(pieza, estilo.id);
+
+    if (soloLasQueFaltan) {
+      const ya = await local.leerMaterial(clave);
+      if (ya) {
+        salida.push({ estilo, blob: ya, clave, deLaToma, reusada: true });
+        alAvanzar?.(n + 1, ESTILOS.length);
+        continue;
+      }
+    }
+
+    // El estilo de ESTA muestra, no el que esté puesto en la configuración.
+    const suyo = { ...config, imagen: { ...config.imagen, estilo: estilo.id } };
+    const instruccion = componerInstruccion(toma, suyo, { tratamiento });
+
+    const r = await llamar(
+      'imagen',
+      {
+        instruccion,
+        aspecto: config.formato.vertical ? '9:16' : '16:9',
+        guardarEn: clave,
+        devolver: true,
+      },
+      { senal },
+    );
+    const blob = r.datos ? deBase64(r.datos, r.tipo || 'image/png') : null;
+    if (blob) await local.guardarMaterial(clave, blob);
+    salida.push({ estilo, blob, clave, deLaToma, instruccion, reusada: false });
+    alAvanzar?.(n + 1, ESTILOS.length);
+  }
+  return salida;
+}
+
+export const claveMuestra = (pieza, estiloId) => `${pieza}/muestra-${estiloId}/img`;
+
+/** Las muestras que ya están guardadas, sin generar ni pagar nada. */
+export async function muestrasGuardadas(pieza) {
+  const salida = [];
+  for (const estilo of ESTILOS) {
+    const clave = claveMuestra(pieza, estilo.id);
+    const blob = await local.leerMaterial(clave);
+    if (blob) salida.push({ estilo, blob, clave, reusada: true });
+  }
+  return salida;
+}
+
 export async function probarEstilo({ tomas = [], config, tratamiento = null, senal }) {
   const conPlano = tomas.find((t) => t.plano);
   const toma = conPlano || {

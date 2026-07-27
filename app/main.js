@@ -342,6 +342,7 @@ function pintarTodo() {
   pintarPestanas();
   pintarHistorial();
   pintarContinuacion();
+  cargarMuestrario();
   // La previa preparada es de la pieza que estaba abierta: al cambiar de caso ya no
   // vale, y dejarla puesta enseñaría el documental anterior como si fuera este.
   if (preparada && preparada.hoja?.pieza !== pieza().id) {
@@ -1697,6 +1698,81 @@ function pintarEstilos() {
   sel.value = P.config.imagen.estilo;
   $('estilo-resumen').textContent = estiloPorId(sel.value).resumen;
 }
+
+/**
+ * El muestrario: una imagen por estilo, para elegir mirando.
+ *
+ * Es el orden en que se decide y antes estaba al revés: solo se podía probar el
+ * estilo que estuviera puesto, de uno en uno, así que para comparar seis había que
+ * cambiar el desplegable seis veces y fiarse de lo que uno recordara de la
+ * anterior. Y el estilo se elige ANTES de generar las ochenta imágenes del
+ * documental, no después.
+ *
+ * Cada muestra se guarda: volver aquí las enseña sin volver a pagarlas.
+ */
+function pintarMuestrario(muestras) {
+  const caja = $('muestrario');
+  caja.innerHTML = '';
+  for (const m of muestras) {
+    const elegido = m.estilo.id === P.config.imagen.estilo;
+    const d = document.createElement('div');
+    d.className = 'pieza-mat' + (elegido ? ' elegido' : '');
+    d.innerHTML =
+      (m.blob ? `<img src="${URL.createObjectURL(m.blob)}" alt="">` : '<div class="sin">sin imagen</div>') +
+      `<div class="cuerpo"><p><b>${escapar(m.estilo.nombre)}</b>${elegido ? ' · elegido' : ''}</p></div>`;
+
+    const b = document.createElement('button');
+    b.className = 'btn chico' + (elegido ? ' primario' : ' fantasma');
+    b.textContent = elegido ? 'En uso' : 'Usar este';
+    b.onclick = async () => {
+      P.config.imagen.estilo = m.estilo.id;
+      $('estilo-imagen').value = m.estilo.id;
+      $('estilo-resumen').textContent = m.estilo.resumen;
+      await guardar();
+      pintarMuestrario(muestras);
+      avisar('estilos', `Estilo elegido: ${m.estilo.nombre}. Las imágenes del documental saldrán así.`, 'bueno');
+    };
+    d.querySelector('.cuerpo').appendChild(b);
+    caja.appendChild(d);
+  }
+}
+
+/** Enseña las muestras que ya estén guardadas, sin generar ni pagar nada. */
+async function cargarMuestrario() {
+  try {
+    const ya = await imagenFase.muestrasGuardadas(P.id);
+    if (ya.length) pintarMuestrario(ya);
+  } catch {
+    /* si la copia local falla, el botón sigue estando */
+  }
+}
+
+accion(
+  'b-muestrario',
+  async () => {
+    const faltan = 6 - (await imagenFase.muestrasGuardadas(P.id)).length;
+    if (faltan > 0 && !confirm(`Se generan ${faltan} ${faltan === 1 ? 'imagen' : 'imágenes'}, una por estilo. ¿Sigo?`)) {
+      return;
+    }
+    const muestras = await imagenFase.muestrarioDeEstilos({
+      tomas: pieza().tomas,
+      config: { ...P.config, __pieza: P.id },
+      caso: pieza().caso,
+      tratamiento: pieza().tratamiento,
+      pieza: P.id,
+      alAvanzar: (n, total) => avisar('estilos', `Generando el estilo ${n} de ${total}…`),
+    });
+    pintarMuestrario(muestras);
+    const conToma = muestras.some((m) => m.deLaToma !== null && m.deLaToma !== undefined);
+    avisar(
+      'estilos',
+      `${muestras.length} estilos, ${conToma ? 'con una toma de tu documental' : 'con una escena de ejemplo'}. ` +
+        'Toca «Usar este» en el que te guste: las imágenes del documental saldrán así.',
+      'bueno',
+    );
+  },
+  'estilos',
+);
 
 accion(
   'b-probar-estilo',

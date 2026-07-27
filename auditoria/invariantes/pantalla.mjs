@@ -330,4 +330,48 @@ export const invariantes = [
         t.replace("$('b-reutilizar').classList.toggle('oculto', !puede);", "$('b-reutilizar').classList.remove('oculto');"),
       ),
   },
+
+  {
+    nombre: 'los-estilos-se-eligen-mirandolos-todos',
+    dice: 'El estilo se decide ANTES de generar las ochenta imágenes del documental, y comparando. Solo se podía probar el que estuviera puesto, de uno en uno: para comparar seis había que cambiar el desplegable seis veces y fiarse de la memoria.',
+    async comprobar(ctx) {
+      const html = fuente(ctx, 'index.html');
+      const main = fuente(ctx, 'app/main.js');
+      const img = fuente(ctx, 'app/fases/imagen.js');
+      const { ESTILOS } = await import('../../comun/estilos.mjs');
+      const fallos = [];
+
+      if (!/id="b-muestrario"/.test(html)) fallos.push('No hay forma de ver todos los estilos.');
+      if (!/id="muestrario"/.test(html)) fallos.push('No hay dónde enseñarlos.');
+
+      // Una muestra POR ESTILO, y con el estilo de esa muestra, no con el puesto.
+      const i = img.indexOf('export async function muestrarioDeEstilos');
+      if (i < 0) return [...fallos, 'No existe el muestrario.'];
+      const cuerpo = img.slice(i, img.indexOf('\nexport const claveMuestra', i));
+      if (!/for \(const \[n, estilo\] of ESTILOS/.test(cuerpo)) {
+        fallos.push('El muestrario no recorre todos los estilos.');
+      }
+      if (!/estilo: estilo\.id/.test(cuerpo)) {
+        fallos.push('Cada muestra se genera con el estilo puesto, no con el suyo: saldrían seis iguales.');
+      }
+      // Y cada una con su clave, o se pisarían entre ellas.
+      if (!/claveMuestra\(pieza, estilo\.id\)/.test(cuerpo)) {
+        fallos.push('Las muestras comparten clave: cada una borraría la anterior.');
+      }
+      // Guardadas: volver a la pantalla no puede volver a cobrar seis imágenes.
+      if (!/local\.guardarMaterial/.test(cuerpo)) fallos.push('Las muestras no se guardan: se pagarían cada vez.');
+      if (!/muestrasGuardadas/.test(main)) fallos.push('La pantalla no enseña las muestras ya pagadas.');
+
+      // Y elegir una tiene que ESCRIBIR la elección (§7.3).
+      if (!/P\.config\.imagen\.estilo = m\.estilo\.id/.test(main)) {
+        fallos.push('Tocar una muestra no cambia el estilo que se va a usar.');
+      }
+      if (ESTILOS.length < 2) fallos.push('No hay estilos que comparar.');
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'app/fases/imagen.js', (t) =>
+        t.replace('estilo: estilo.id', 'estilo: config.imagen.estilo'),
+      ),
+  },
 ];

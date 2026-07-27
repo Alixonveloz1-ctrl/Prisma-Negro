@@ -222,6 +222,7 @@ nav.pestanas button.on{background:var(--violeta);border-color:var(--violeta);col
 .hist b{display:block;font-size:14px;font-weight:600;letter-spacing:-.01em}
 .hist span{display:block;margin-top:3px;font-size:12px;color:var(--tinta-2)}
 .galeria{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:9px}
+.pieza-mat.elegido{border-color:var(--violeta);box-shadow:0 0 0 1px var(--violeta)}
 .pieza-mat{border:1px solid var(--linea);border-radius:var(--r-m);overflow:hidden;background:var(--fondo-2)}
 .pieza-mat img,.pieza-mat video{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#0B0C12}
 .pieza-mat .cuerpo{padding:8px 9px 10px}
@@ -709,9 +710,12 @@ nav.abajo button svg{width:22px;height:22px}
           <label for="m-imagen">Generador de imagen</label>
           <select id="m-imagen"></select>
           <div class="fila-btn" style="margin-top:13px">
-            <button class="btn primario" id="b-probar-estilo">Probar el estilo · 1 imagen</button>
+            <button class="btn primario" id="b-muestrario">Ver los 6 estilos · 6 imágenes</button>
+            <button class="btn" id="b-probar-estilo">Probar solo este · 1 imagen</button>
             <button class="btn fantasma chico" id="b-ver-prompt">Ver la instrucción</button>
           </div>
+          <div class="galeria" id="muestrario" style="margin-top:12px"></div>
+          <div id="aviso-estilos"></div>
           <div class="visor oculto" id="visor-estilo" style="margin-top:12px">
             <img id="muestra-estilo" alt="">
           </div>
