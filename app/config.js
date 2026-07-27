@@ -15,6 +15,7 @@
 // La auditoría comprueba que no hay un cuarto camino que se la salte.
 
 import { PREDETERMINADO as SEGMENTACION } from '../comun/segmentar.mjs';
+import { ESTILOS, ESTILO_POR_DEFECTO } from '../comun/estilos.mjs';
 
 /**
  * Catálogo de modelos.
@@ -110,6 +111,8 @@ export const PREDETERMINADA = {
     // §8.2: la decisión de diseño más importante de un proyecto documental.
     // El valor por defecto es el seguro.
     tipoPorDefecto: 'reconstruccion',
+    // El estilo visual, del catálogo de comun/estilos.mjs.
+    estilo: ESTILO_POR_DEFECTO,
     // Con esto en `true`, la fase de imagen se niega a pedir fotorrealismo de
     // personas reales identificables. Se puede apagar, pero hay que apagarlo a
     // mano y sabiendo lo que se hace.
@@ -206,6 +209,7 @@ export function normalizar(cruda) {
   if (!['generada', 'archivo', 'reconstruccion'].includes(c.imagen.tipoPorDefecto)) {
     c.imagen.tipoPorDefecto = 'reconstruccion';
   }
+  if (!ESTILOS.some((e) => e.id === c.imagen.estilo)) c.imagen.estilo = ESTILO_POR_DEFECTO;
 
   c.movimiento.proporcion = numero(c.movimiento.proporcion, 0, 1, 0.15);
   c.movimiento.segundosPorClip = [4, 6, 8].includes(c.movimiento.segundosPorClip)

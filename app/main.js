@@ -18,6 +18,7 @@ import { Cola } from './cola.js';
 import { pintarSelectorModelo, mejorModeloTexto, etiquetaModelo } from './config.js';
 import { segmentarVerificado } from '../comun/segmentar.mjs';
 import { TEMAS, EPOCAS, EPOCA_POR_DEFECTO, temaPorId, epocaPorId } from '../comun/temas.mjs';
+import { ESTILOS, estiloPorId } from '../comun/estilos.mjs';
 import * as investigacion from './fases/investigacion.js';
 import * as guionFase from './fases/guion.js';
 import * as direccion from './fases/direccion.js';
@@ -30,6 +31,7 @@ import * as miniatura from './fases/miniatura.js';
 import * as metadatos from './fases/metadatos.js';
 import * as montajeFase from './fases/montaje.js';
 import * as previa from './previa.js';
+import * as local from './local.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -299,6 +301,7 @@ function pintarTodo() {
   pintarTomas();
   pintarAjustes();
   pintarPasos();
+  pintarPestanas();
 }
 
 /**
@@ -828,7 +831,14 @@ accion('b-imagenes', async () => {
     'imágenes',
     pendientes,
     (toma, _i, senal) =>
-      imagenFase.generarImagen({ toma, tomas: pieza().tomas, pieza: P.id, config: P.config, senal }),
+      imagenFase.generarImagen({
+        toma,
+        tomas: pieza().tomas,
+        pieza: P.id,
+        config: P.config,
+        tratamiento: pieza().tratamiento,
+        senal,
+      }),
     { alTerminarUno: guardaToma },
   );
   informar(r, 'imágenes');
@@ -932,6 +942,7 @@ accion(
 
     asegurarReproductor().cargar(preparada);
     pintarTiras();
+    pintarPorTipo();
 
     const faltan = preparada.tomas.filter((t) => t.falta.length);
     const sinMusica = preparada.hoja.escenas.filter((e) => e.musica && !preparada.musica[e.n]);
@@ -967,6 +978,211 @@ $('b-parar-previa').addEventListener('click', () => {
   reproductor?.parar();
   desdeSegundo = 0;
 });
+
+// ── Las pestañas de la previa ─────────────────────────────────────────────────
+//
+// Antes solo estaba el montaje entero, y para saber si una música servía había que
+// verse el documental completo. Cada material se oye y se ve por separado, y se
+// regenera desde donde se está mirando.
+
+const HOJAS_PREVIA = [
+  ['montado', 'Montado'],
+  ['voz', 'Voz'],
+  ['imagenes', 'Imágenes'],
+  ['musica', 'Música'],
+  ['clips', 'Clips'],
+];
+
+function pintarPestanas() {
+  const nav = $('pestanas-previa');
+  if (nav.children.length) return;
+  for (const [id, nombre] of HOJAS_PREVIA) {
+    const b = document.createElement('button');
+    b.textContent = nombre;
+    b.dataset.hojaBoton = id;
+    b.onclick = () => abrirHoja(id);
+    nav.appendChild(b);
+  }
+  abrirHoja('montado');
+}
+
+function abrirHoja(id) {
+  document.querySelectorAll('.hoja-previa').forEach((e) => e.classList.toggle('oculto', e.dataset.hoja !== id));
+  document.querySelectorAll('[data-hoja-boton]').forEach((b) => b.classList.toggle('on', b.dataset.hojaBoton === id));
+  // Al salir del montaje se para: dos audios sonando a la vez no dejan juzgar
+  // ninguno de los dos.
+  if (id !== 'montado') reproductor?.parar();
+}
+
+/** Una fila con reproductor y botón de rehacer. */
+function filaAudio({ titulo, texto, blob, alRehacer, etiqueta = 'Rehacer' }) {
+  const d = document.createElement('div');
+  d.className = 'fila-mat';
+  d.innerHTML =
+    `<div class="txt"><b>${escapar(titulo)}</b>${escapar(texto || '')}</div>` +
+    `<div class="acc"></div>`;
+  const acc = d.querySelector('.acc');
+
+  if (blob) {
+    const a = document.createElement('audio');
+    a.controls = true;
+    a.preload = 'none';
+    a.src = URL.createObjectURL(blob);
+    d.querySelector('.txt').appendChild(a);
+  } else {
+    d.querySelector('.txt').insertAdjacentHTML('beforeend', '<span class="pastilla p-falta">falta</span>');
+  }
+
+  const b = document.createElement('button');
+  b.className = 'btn chico fantasma';
+  b.textContent = etiqueta;
+  b.onclick = async () => {
+    b.disabled = true;
+    b.textContent = '…';
+    try {
+      await alRehacer();
+    } catch (e) {
+      avisar('previa', e.message, 'malo');
+    }
+    b.disabled = false;
+    b.textContent = etiqueta;
+  };
+  acc.appendChild(b);
+  return d;
+}
+
+function pintarPorTipo() {
+  const tomas = preparada?.tomas || [];
+
+  // ── Voz, toma a toma ──
+  $('cuenta-voz').textContent = tomas.length ? `${tomas.filter((t) => t.voz).length}/${tomas.length}` : '';
+  const cajaVoz = $('lista-voz');
+  cajaVoz.innerHTML = '';
+  if (!tomas.length) cajaVoz.innerHTML = '<p class="nota">Prepara la previa primero.</p>';
+  for (const t of tomas) {
+    cajaVoz.appendChild(
+      filaAudio({
+        titulo: `Toma ${t.i + 1} · ${t.duracion.toFixed(1)}s`,
+        texto: t.texto,
+        blob: t.voz,
+        alRehacer: () => rehacerVoz(t.i),
+      }),
+    );
+  }
+
+  // ── Imágenes ──
+  const conImagen = tomas.filter((t) => !t.movimiento);
+  $('cuenta-imagenes').textContent = conImagen.length ? `${conImagen.filter((t) => t.visual).length}/${conImagen.length}` : '';
+  const g = $('galeria');
+  g.innerHTML = conImagen.length ? '' : '<p class="nota">Prepara la previa primero.</p>';
+  for (const t of conImagen) {
+    const d = document.createElement('div');
+    d.className = 'pieza-mat';
+    d.innerHTML =
+      (t.visual ? `<img src="${URL.createObjectURL(t.visual)}" alt="">` : '<div class="sin">sin imagen</div>') +
+      `<div class="cuerpo"><p>#${t.i + 1} · ${escapar((t.texto || '').slice(0, 70))}…</p></div>`;
+    const b = document.createElement('button');
+    b.className = 'btn chico fantasma';
+    b.textContent = 'Rehacer';
+    b.onclick = async () => {
+      b.disabled = true;
+      b.textContent = '…';
+      try {
+        await rehacerImagen(t.i);
+      } catch (e) {
+        avisar('previa', e.message, 'malo');
+      }
+      b.disabled = false;
+      b.textContent = 'Rehacer';
+    };
+    d.querySelector('.cuerpo').appendChild(b);
+    g.appendChild(d);
+  }
+
+  // ── Música, escena a escena ──
+  const escenas = preparada?.hoja.escenas || [];
+  $('cuenta-musica').textContent = escenas.length ? `${Object.values(preparada.musica).filter(Boolean).length}/${escenas.length}` : '';
+  const cajaMus = $('lista-musica');
+  cajaMus.innerHTML = escenas.length ? '' : '<p class="nota">Prepara la previa primero.</p>';
+  for (const e of escenas) {
+    cajaMus.appendChild(
+      filaAudio({
+        titulo: `Escena ${e.n} · ${reloj(e.duracion)}`,
+        texto: pieza().escenas.find((x) => x.n === e.n)?.titulo || '',
+        blob: preparada.musica[e.n],
+        alRehacer: () => rehacerMusica(e.n),
+      }),
+    );
+  }
+
+  // ── Clips ──
+  const clips = tomas.filter((t) => t.movimiento);
+  $('cuenta-clips').textContent = clips.length ? `${clips.filter((t) => t.visual).length}/${clips.length}` : '';
+  const cajaClips = $('lista-clips');
+  cajaClips.innerHTML = clips.length ? '' : '<p class="nota">Ninguna toma lleva clip de video.</p>';
+  for (const t of clips) {
+    const d = document.createElement('div');
+    d.className = 'pieza-mat';
+    d.innerHTML =
+      (t.visual
+        ? `<video src="${URL.createObjectURL(t.visual)}" controls playsinline preload="metadata"></video>`
+        : '<div class="sin">sin clip</div>') +
+      `<div class="cuerpo"><p>#${t.i + 1} · ${t.duracion.toFixed(1)}s</p></div>`;
+    cajaClips.appendChild(d);
+  }
+}
+
+// ── Rehacer una sola pieza, desde donde se está mirando ───────────────────────
+
+async function refrescar(clave) {
+  await local.borrarMaterial(clave);
+}
+
+async function rehacerVoz(i) {
+  const bloques = narracion.planificar(pieza().tomas, P.config, { soloLasQueFaltan: false });
+  const bloque = bloques.find((b) => b.tomas.some((t) => t.i === i));
+  if (!bloque) throw new Error('No encuentro el bloque de esa toma.');
+
+  avisar('previa', `Rehaciendo la voz del bloque de la toma ${i + 1}…`);
+  const nuevas = await narracion.narrarBloque({ bloque, pieza: P.id, config: P.config });
+  for (const t of nuevas) {
+    const k = pieza().tomas.findIndex((x) => x.i === t.i);
+    if (k >= 0) pieza().tomas[k] = t;
+    await refrescar(`${P.id}/t${String(t.i).padStart(3, '0')}/audio`);
+  }
+  await guardar();
+  avisar('previa', `Voz rehecha. Vuelve a preparar para oírla.`, 'bueno');
+}
+
+async function rehacerImagen(i) {
+  const toma = pieza().tomas.find((t) => t.i === i);
+  avisar('previa', `Rehaciendo la imagen de la toma ${i + 1}…`);
+  const nueva = await imagenFase.generarImagen({
+    toma,
+    tomas: pieza().tomas,
+    pieza: P.id,
+    config: P.config,
+    tratamiento: pieza().tratamiento,
+  });
+  const k = pieza().tomas.findIndex((t) => t.i === i);
+  pieza().tomas[k] = nueva;
+  await refrescar(`${P.id}/t${String(i).padStart(3, '0')}/img`);
+  await guardar();
+  avisar('previa', 'Imagen rehecha. Vuelve a preparar para verla.', 'bueno');
+}
+
+async function rehacerMusica(n) {
+  const escena = { n, segundos: preparada.hoja.escenas.find((e) => e.n === n)?.duracion || 30 };
+  avisar('previa', `Rehaciendo la música de la escena ${n}…`);
+  await musica.generarMusicaDeEscena({
+    escena,
+    tomas: pieza().tomas,
+    pieza: P.id,
+    tratamiento: pieza().tratamiento,
+  });
+  await refrescar(`${P.id}/mus/${String(n).padStart(3, '0')}`);
+  avisar('previa', 'Música rehecha. Vuelve a preparar para oírla.', 'bueno');
+}
 
 function pintarTiras() {
   const tomas = preparada?.tomas || [];
@@ -1173,7 +1389,74 @@ accion(
 
 // ── Ajustes ───────────────────────────────────────────────────────────────────
 
+/**
+ * El estilo visual, con una prueba de UNA imagen antes de pagar ochenta.
+ *
+ * «Tengo que gastar primero para saber el estilo» era cierto y era el problema.
+ */
+function pintarEstilos() {
+  const sel = $('estilo-imagen');
+  if (!sel.options.length) {
+    for (const e of ESTILOS) {
+      const o = document.createElement('option');
+      o.value = e.id;
+      o.textContent = e.nombre;
+      sel.appendChild(o);
+    }
+    sel.addEventListener('change', () => {
+      $('estilo-resumen').textContent = estiloPorId(sel.value).resumen;
+    });
+  }
+  sel.value = P.config.imagen.estilo;
+  $('estilo-resumen').textContent = estiloPorId(sel.value).resumen;
+}
+
+accion(
+  'b-probar-estilo',
+  async () => {
+    // Se guarda el estilo elegido ANTES de probar: si no, se probaría el anterior y
+    // la muestra no sería de lo que se está mirando.
+    P.config.imagen.estilo = $('estilo-imagen').value;
+    await guardar();
+
+    avisar('estilo', 'Generando una imagen de muestra…');
+    const r = await imagenFase.probarEstilo({
+      tomas: pieza().tomas,
+      config: { ...P.config, __pieza: P.id },
+      tratamiento: pieza().tratamiento,
+    });
+    if (r.blob) {
+      $('muestra-estilo').src = URL.createObjectURL(r.blob);
+      $('visor-estilo').classList.remove('oculto');
+    }
+    avisar(
+      'estilo',
+      r.deLaToma !== null
+        ? `Muestra con la toma ${r.deLaToma + 1} de tu documental.`
+        : 'Muestra con una escena de ejemplo: dirige la pieza y vuelve a probar para verla con tu material.',
+      'bueno',
+    );
+  },
+  'estilo',
+);
+
+accion(
+  'b-ver-prompt',
+  async () => {
+    const toma = pieza().tomas.find((t) => t.plano);
+    if (!toma) throw new Error('Dirige la pieza primero: sin ficha de plano no hay instrucción que enseñar.');
+    const txt = imagenFase.componerInstruccion(
+      toma,
+      { ...P.config, imagen: { ...P.config.imagen, estilo: $('estilo-imagen').value } },
+      { tratamiento: pieza().tratamiento },
+    );
+    registro('estilo', [txt]);
+  },
+  'estilo',
+);
+
 function pintarAjustes() {
+  pintarEstilos();
   // §7.3: la función que repinta un control DEVUELVE el valor con el que se quedó, y
   // quien la llama lo ESCRIBE. Si no, la pantalla dice una cosa y el estado otra.
   P.config.imagen.modelo = pintarSelectorModelo($('m-imagen'), 'imagen', P.config.imagen.modelo);
@@ -1213,6 +1496,7 @@ accion(
     P.config.movimiento.proporcion = Number($('proporcion').value) / 100;
     P.config.segmentacion.segundosObjetivo = Number($('objetivo').value);
     P.config.narracion.velocidad = Number($('velocidad').value) / 100;
+    P.config.imagen.estilo = $('estilo-imagen').value;
     P.config.marca.texto = $('marca-texto').value.trim();
     P.config.formato.vertical = $('vertical').value === '1';
     if ($('voz').value) P.config.narracion.nombreVoz = $('voz').value;

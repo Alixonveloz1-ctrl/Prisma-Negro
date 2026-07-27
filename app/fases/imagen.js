@@ -20,12 +20,11 @@
 import { llamar } from '../api.js';
 import { claveToma, tomaDelFotograma } from '../../comun/claves.mjs';
 import { reducirReferencias, deBase64 } from '../imagenes.js';
+import { estiloPorId, BARRERA_DOCUMENTAL } from '../../comun/estilos.mjs';
 import * as local from '../local.js';
 
-const ESTILO_BASE =
-  'Fotografía documental de reconstrucción, luz natural motivada, grano fino, ' +
-  'paleta desaturada y fría, sin texto sobre la imagen, sin marcas de agua, ' +
-  'sin rostros de personas reales identificables.';
+// El estilo ya no vive aquí: sale del catálogo y se elige en Ajustes. Escrito
+// dentro de la fase, no había forma de saber cuál era sin generar ochenta imágenes.
 
 /**
  * Qué tomas hay que generar.
@@ -80,14 +79,22 @@ export function elegirReferencias(toma, tomas, maximo = 3) {
  * el prompt fija el FORMATO y deja libre la PUESTA EN ESCENA. Por eso aquí se dice
  * explícitamente «decide tú el encuadre y la distancia».
  */
-export function componerInstruccion(toma, config, { conReferencias = false } = {}) {
+export function componerInstruccion(toma, config, { conReferencias = false, tratamiento = null } = {}) {
   const p = toma.plano;
+  const estilo = estiloPorId(config?.imagen?.estilo);
+  const v = tratamiento?.identidadVisual;
+
   const partes = [
     p.descripcion,
     `Encuadre: ${p.encuadre}.`,
     p.lugar ? `Lugar: ${p.lugar}.` : '',
     p.luz ? `Luz: ${p.luz}.` : '',
-    ESTILO_BASE,
+    // El estilo dice de qué CLASE es la imagen; el tratamiento del director dice
+    // cómo es la de ESTA pieza. Los dos, en ese orden.
+    estilo.prompt,
+    v ? `Paleta: ${v.paleta}. Luz general: ${v.luz}. Textura: ${v.textura}.` : '',
+    v?.queEvitar ? `Evitar: ${v.queEvitar}.` : '',
+    BARRERA_DOCUMENTAL,
     'Decide tú la puesta en escena: la distancia exacta, la posición de los sujetos y hacia dónde miran.',
   ];
 
@@ -112,7 +119,7 @@ export function componerInstruccion(toma, config, { conReferencias = false } = {
 }
 
 /** Genera el fotograma de una toma. */
-export async function generarImagen({ toma, tomas, pieza, config, senal }) {
+export async function generarImagen({ toma, tomas, pieza, config, tratamiento = null, senal }) {
   if (!toma.plano) throw new Error(`La toma ${toma.i} no tiene ficha de plano. Dirige primero.`);
 
   const usaReferencias = !!config.imagen.aceptaReferencias && config.imagen.maxReferencias > 0;
@@ -133,7 +140,10 @@ export async function generarImagen({ toma, tomas, pieza, config, senal }) {
   const r = await llamar(
     'imagen',
     {
-      instruccion: componerInstruccion(toma, config, { conReferencias: referencias.length > 0 }),
+      instruccion: componerInstruccion(toma, config, {
+        conReferencias: referencias.length > 0,
+        tratamiento,
+      }),
       referencias,
       aspecto: config.formato.vertical ? '9:16' : '16:9',
       // Se sube en el mismo viaje: así no hay imágenes que «se generaron» pero no
@@ -178,4 +188,47 @@ export async function fotogramaDe({ toma, tomas, pieza }) {
   const blob = deBase64(r.datos, 'image/png');
   await local.guardarMaterial(clave, blob);
   return { clave, blob, de: dueña.i };
+}
+
+/**
+ * Genera UNA imagen de prueba para ver el estilo antes de pagar ochenta.
+ *
+ * «Tengo que gastar primero para saber el estilo» era cierto y era el problema. Esto
+ * cuesta una imagen.
+ *
+ * Usa la primera toma con ficha de plano si la hay —así la prueba es del documental
+ * de verdad y no de un ejemplo abstracto— y si no, una escena inventada del mismo
+ * género.
+ */
+export async function probarEstilo({ tomas = [], config, tratamiento = null, senal }) {
+  const conPlano = tomas.find((t) => t.plano);
+  const toma = conPlano || {
+    i: 0,
+    plano: {
+      encuadre: 'plano general',
+      lugar: 'una carretera secundaria de noche',
+      luz: 'faros y una farola lejana',
+      sujetos: [],
+      descripcion: 'Una carretera secundaria vacía de noche, vista desde el arcén.',
+    },
+  };
+
+  const instruccion = componerInstruccion(toma, config, { tratamiento });
+  const r = await llamar(
+    'imagen',
+    {
+      instruccion,
+      aspecto: config.formato.vertical ? '9:16' : '16:9',
+      // A una clave de prueba, para no pisar la imagen de ninguna toma.
+      guardarEn: `${config.__pieza || 'p01'}/prueba/img`,
+      devolver: true,
+    },
+    { senal },
+  );
+
+  return {
+    instruccion,
+    blob: r.datos ? deBase64(r.datos, r.tipo || 'image/png') : null,
+    deLaToma: conPlano ? conPlano.i : null,
+  };
 }
