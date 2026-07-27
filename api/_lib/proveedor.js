@@ -196,6 +196,20 @@ export async function texto({
     .map((c) => ({ titulo: c.web?.title || '', enlace: c.web?.uri || '' }))
     .filter((f) => f.enlace);
 
+  // Cortada a mitad. NO es un caso raro: los modelos que razonan gastan parte del
+  // presupuesto de salida PENSANDO, así que un tope que parecía holgado para el
+  // texto se agota antes de escribirlo. Y cortarse no da error: da menos texto.
+  //
+  // Así fue como un guion de diez minutos salió con una escena y una toma, y la
+  // pantalla dijo «guion escrito». Se avisa aquí, que es donde se sabe.
+  if (candidato?.finishReason === 'MAX_TOKENS') {
+    throw new Error(
+      'El modelo se quedó sin espacio de respuesta y devolvió el texto a medias ' +
+        `(${salida.length} caracteres). Lo que llegó NO está completo, así que se ` +
+        'descarta en vez de darlo por bueno. Pide menos de una vez.',
+    );
+  }
+
   if (!esquema) return { texto: salida, fuentes };
   return { texto: salida, fuentes, json: extraerJson(salida) };
 }

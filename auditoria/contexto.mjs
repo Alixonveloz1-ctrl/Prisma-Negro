@@ -139,8 +139,11 @@ async function funcionesPuras() {
   const cfg = await import('../app/config.js');
   const mod = await import('../comun/modelos.mjs');
   const dir = await import('../app/fases/direccion.js');
+  const gui = await import('../app/fases/guion.js');
   return {
     repartirPorTramos: dir.repartirPorTramos,
+    actosDe: gui.actosDe,
+    contarPalabras: gui.contarPalabras,
     normalizar: cfg.normalizar,
     duracionValida: mod.duracionValida,
     regionDe: mod.regionDe,

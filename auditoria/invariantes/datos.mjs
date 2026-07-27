@@ -440,4 +440,64 @@ export const invariantes = [
     // que es lo que dejaba el último tercio sin una sola toma animada.
     romper: (ctx) => conFuncion(ctx, 'repartirPorTramos', (cands, cupo) => cands.slice(0, cupo)),
   },
+
+  {
+    nombre: 'el-guion-se-escribe-por-actos-y-se-mide',
+    dice: 'Pedir los diez minutos en una llamada devolvía UNA escena y UNA toma, y la pantalla decía «guion escrito». Los modelos que razonan gastan el presupuesto de salida pensando, y cortarse no da error: da menos guion.',
+    comprobar(ctx) {
+      const g = fuente(ctx, 'app/fases/guion.js');
+      const { actosDe, contarPalabras } = ctx.fn;
+      const fallos = [];
+
+      // Se escribe por actos, no de una vez.
+      if (!/for \(const \[n, acto\] of actos/.test(g)) fallos.push('El guion no se escribe acto por acto.');
+      // Con un tope apretado, el razonamiento se come el texto.
+      const tope = Number(/maxTokens: (\d+)/.exec(g)?.[1] || 0);
+      if (tope < 16384) fallos.push(`El tope de salida del guion es ${tope}: se corta antes de escribir.`);
+      if (/palabras \* 3/.test(g)) fallos.push('El tope se calcula de las palabras: no deja sitio al razonamiento.');
+      // Y lo que sale se MIDE: «escrito» a secas fue lo que dijo la pantalla.
+      if (!/salieron < palabras/.test(g)) fallos.push('Un guion demasiado corto se da por bueno.');
+
+      // Siempre hay actos, con o sin tratamiento, y suman los minutos pedidos.
+      for (const [caso, tr] of [
+        ['sin tratamiento', null],
+        ['con estructura', { estructura: [{ titulo: 'A', minutos: 6 }, { titulo: 'B', minutos: 6 }] }],
+      ]) {
+        const actos = actosDe(tr, 8);
+        if (actos.length < 2) fallos.push(`${caso}: sale ${actos.length} acto, se escribiría de una vez.`);
+        const suma = actos.reduce((s, a) => s + a.minutos, 0);
+        if (Math.abs(suma - 8) > 1) fallos.push(`${caso}: los actos suman ${suma} min y se pidieron 8.`);
+        if (actos.some((a) => !a.titulo || !(a.minutos > 0))) fallos.push(`${caso}: hay un acto sin título o sin minutos.`);
+      }
+
+      if (contarPalabras('  uno   dos \n tres ') !== 3) fallos.push('No se cuentan bien las palabras.');
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'app/fases/guion.js', (t) => t.replace('maxTokens: 32768,', 'maxTokens: 4096,')),
+  },
+
+  {
+    nombre: 'una-respuesta-cortada-no-pasa-por-completa',
+    dice: 'Cuando el modelo se queda sin espacio devuelve el texto a medias y un 200. Sin mirar `finishReason`, un fragmento pasa por documental terminado — que es lo que pasó.',
+    comprobar(ctx) {
+      const prov = fuente(ctx, 'api/_lib/proveedor.js');
+      const fallos = [];
+      if (!/MAX_TOKENS/.test(prov)) {
+        fallos.push('Nadie mira si la respuesta se cortó: un texto a medias pasaría por bueno.');
+      }
+      // Y tiene que LANZAR, no solo mencionarlo en un mensaje de «vino vacío»:
+      // el caso malo es que venga texto, pero incompleto.
+      const i = prov.indexOf("finishReason === 'MAX_TOKENS'");
+      if (i < 0) fallos.push('No se comprueba el motivo de fin de la respuesta.');
+      else if (!/throw new Error/.test(prov.slice(i, i + 400))) {
+        fallos.push('Se detecta el corte pero se devuelve el texto a medias igual.');
+      }
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'api/_lib/proveedor.js', (t) =>
+        t.replace("if (candidato?.finishReason === 'MAX_TOKENS') {", 'if (false) {'),
+      ),
+  },
 ];

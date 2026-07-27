@@ -652,6 +652,7 @@ accion(
       fichas: P.fichas,
       minutos: Number($('minutos').value) || 10,
       tratamiento: pieza().tratamiento,
+      alAvanzar: (n, total) => avisar('paso3', `Escribiendo el acto ${n} de ${total}…`),
     });
     pieza().guion = texto;
     $('guion').value = texto;
@@ -663,7 +664,8 @@ accion(
     pintarTodo();
     avisar(
       'paso2',
-      `Guion escrito y partido en ${r.tomas.length} tomas, ${r.escenas.length} escenas. ` +
+      `Guion de ${guionFase.contarPalabras(texto)} palabras (~${Math.round(guionFase.contarPalabras(texto) / 145)} min), ` +
+        `partido en ${r.tomas.length} tomas y ${r.escenas.length} escenas. ` +
         `Léelo en Guion antes de generar: es el insumo del que sale todo.`,
       'bueno',
     );
@@ -679,11 +681,19 @@ accion(
       fichas: P.fichas,
       minutos: Number($('minutos').value) || 10,
       tratamiento: pieza().tratamiento,
+      alAvanzar: (n, total) => avisar('guion', `Escribiendo el acto ${n} de ${total}…`),
     });
     pieza().guion = texto;
     $('guion').value = texto;
     await guardar();
-    avisar('guion', 'Guion escrito. Léelo y edítalo antes de seguir.', 'bueno');
+    // Con números: «escrito» a secas fue justo lo que dijo la pantalla cuando el
+    // guion venía con una escena y una toma.
+    avisar(
+      'guion',
+      `Guion escrito: ${guionFase.contarPalabras(texto)} palabras, ` +
+        `~${Math.round(guionFase.contarPalabras(texto) / 145)} min. Léelo antes de seguir.`,
+      'bueno',
+    );
   },
   'guion',
 );
