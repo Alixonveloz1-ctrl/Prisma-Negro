@@ -61,6 +61,11 @@ export async function narrarBloque({ bloque, pieza, config, senal, alEsperar }) 
     'voz',
     {
       texto: bloque.texto,
+      // Los textos toma a toma. Con ellos el servicio de voz devuelve el segundo
+      // exacto en que acaba cada uno, y el reparto deja de adivinarse.
+      // `.trim()` igual que al componer `bloque.texto`: lo que se marca tiene que
+      // ser EXACTAMENTE lo que se narra, o las marcas caerían corridas.
+      marcas: bloque.tomas.map((t) => (t.texto || '').trim()),
       nombreVoz: n.nombreVoz,
       velocidad: n.velocidad,
       tono: n.tono,
@@ -73,11 +78,12 @@ export async function narrarBloque({ bloque, pieza, config, senal, alEsperar }) 
 
   const audio = leerWav(await (await fetch(`data:audio/wav;base64,${r.datos}`)).arrayBuffer());
 
-  // Los objetivos son las duraciones ESTIMADAS de la segmentación. `repartirBloque`
-  // las escala a lo que el audio dura de verdad y busca el silencio más cercano a
-  // cada frontera.
+  // Si vinieron los tiempos, se corta EXACTAMENTE donde el servicio dice que acaba
+  // cada toma. Si no —voces que no admiten SSML—, se cae a la estimación de
+  // siempre, y cada trozo dice cuál de las dos cosas fue.
   const objetivos = bloque.tomas.map((t) => t.segundos || 1);
   const trozos = repartirBloque(audio, objetivos, {
+    tiempos: r.tiempos,
     // §7.8: el dedal va DENTRO del primer trozo, así que forma parte de su duración
     // medida y llega al montaje sin que nadie tenga que acordarse de sumarlo.
     silencioInicialMs: n.silencioInicialMs,
@@ -118,6 +124,10 @@ export async function narrarBloque({ bloque, pieza, config, senal, alEsperar }) 
       // modelo es lo que permite enseñarlo en pantalla en vez de que el usuario lo
       // descubra oyendo el video montado.
       corteForzado: !!trozo.forzado,
+      // Si el corte lo dijo el servicio de voz. Cuando NO es exacto, el audio de
+      // esta toma puede llevar dentro palabras de la siguiente —el corte suena
+      // bien y el texto no corresponde—, y eso tiene que poder verse en pantalla.
+      corteExacto: !!trozo.exacto,
     });
   }
 

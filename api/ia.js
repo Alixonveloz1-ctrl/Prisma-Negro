@@ -175,6 +175,10 @@ async function despachar(modo, c) {
             nombreVoz: c.nombreVoz,
             velocidad: c.velocidad,
             tono: c.tono,
+            // Los textos por toma. Con ellos, el servicio devuelve el segundo
+            // exacto en que acaba cada una y el reparto deja de ser una
+            // estimación.
+            marcas: c.marcas,
           });
       // La narración se devuelve al navegador porque ahí se mide su duración real y
       // se corta por los silencios (§4.5). Un bloque de 45 s en PCM a 24 kHz son

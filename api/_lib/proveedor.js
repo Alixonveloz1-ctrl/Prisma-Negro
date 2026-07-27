@@ -31,6 +31,12 @@ export const DURACIONES_VIDEO = [4, 6, 8];
 // una tilde ocupa dos.
 export const TOPE_BYTES_VOZ = 4000;
 
+// El mismo bloque en SSML ocupa más: cada marca son unos veinte bytes y con diez
+// tomas eso son doscientos. El servicio admite hasta 5.000 para SSML, así que el
+// tope de la envoltura es mayor que el del texto que lleva dentro. Sin esto, un
+// bloque que cabía en texto plano se rechazaba al ponerle las marcas.
+export const TOPE_BYTES_SSML = 5000;
+
 function region() {
   return valorEntorno('regionIA', 'us-central1');
 }
@@ -441,47 +447,100 @@ export async function videoConsultar(referencia) {
 
 const VOZ_API = 'https://texttospeech.googleapis.com/v1';
 
-export async function voz({ texto: t, nombreVoz, velocidad = 1.0, tono = 0 }) {
-  const bytes = Buffer.byteLength(t, 'utf8');
-  if (bytes > TOPE_BYTES_VOZ) {
+const escaparSsml = (x) =>
+  String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/**
+ * Narra un bloque, y si se le dan los textos por toma DICE DÓNDE ACABA CADA UNO.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ ESTO NO SE PUEDE ADIVINAR
+ *
+ * El bloque se generaba entero y luego se cortaba buscando el silencio más
+ * cercano a donde uno CALCULA que debería estar la frontera. El cálculo sale de
+ * contar caracteres, y una frase con una cifra escrita en letra —«veintitrés mil
+ * cuatrocientos»— dura el triple de lo estimado.
+ *
+ * El corte caía en un silencio, así que sonaba perfecto. Pero era el silencio de
+ * OTRA frase. Resultado: el audio de una toma terminaba con las palabras de la
+ * siguiente, y las imágenes no correspondían a lo que se oía. Un fallo que no
+ * suena a fallo, que es la peor clase.
+ *
+ * El servicio de voz sabe la respuesta exacta: con SSML se ponen marcas entre las
+ * tomas y devuelve el segundo en el que cae cada una. Ni estimación, ni tolerancia,
+ * ni silencio más cercano: el sitio.
+ *
+ * No todas las voces admiten SSML. Si esta no lo admite, se narra en texto plano y
+ * se devuelve `tiempos: null`, para que aguas arriba se sepa que el reparto vuelve
+ * a ser una estimación y se pueda decir en pantalla.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export async function voz({ texto: t, nombreVoz, velocidad = 1.0, tono = 0, marcas = null }) {
+  const conMarcas = Array.isArray(marcas) && marcas.length > 1;
+  const ssml = conMarcas
+    ? `<speak>${marcas.map((x, k) => `${escaparSsml(x)}<mark name="m${k}"/>`).join(' ')}</speak>`
+    : '';
+
+  const bytes = Buffer.byteLength(conMarcas ? ssml : t, 'utf8');
+  const tope = conMarcas ? TOPE_BYTES_SSML : TOPE_BYTES_VOZ;
+  if (bytes > tope) {
     throw new Error(
-      `El bloque de narración ocupa ${bytes} bytes y el tope por llamada es ${TOPE_BYTES_VOZ}. ` +
+      `El bloque de narración ocupa ${bytes} bytes y el tope por llamada es ${tope}. ` +
         'Repártelo en más bloques.',
     );
   }
 
-  let token = await tokenDeAcceso();
-  const hacer = (tk) =>
-    fetch(`${VOZ_API}/text:synthesize`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${tk}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        input: { text: t },
-        voice: {
-          languageCode: (nombreVoz || 'es-US-Neural2-B').split('-').slice(0, 2).join('-'),
-          name: nombreVoz || 'es-US-Neural2-B',
-        },
-        audioConfig: {
-          audioEncoding: 'LINEAR16',
-          sampleRateHertz: 24000,
-          speakingRate: velocidad,
-          pitch: tono,
-        },
-      }),
-    });
+  const cuerpo = (conSsml) => ({
+    input: conSsml ? { ssml } : { text: t },
+    voice: {
+      languageCode: (nombreVoz || 'es-US-Neural2-B').split('-').slice(0, 2).join('-'),
+      name: nombreVoz || 'es-US-Neural2-B',
+    },
+    audioConfig: {
+      audioEncoding: 'LINEAR16',
+      sampleRateHertz: 24000,
+      speakingRate: velocidad,
+      pitch: tono,
+    },
+    ...(conSsml ? { enableTimePointing: ['SSML_MARK'] } : {}),
+  });
 
-  let r = await hacer(token);
-  if (r.status === 401) {
-    olvidarToken();
-    token = await tokenDeAcceso();
-    r = await hacer(token);
+  const pedirVoz = async (conSsml) => {
+    let token = await tokenDeAcceso();
+    const hacer = (tk) =>
+      fetch(`${VOZ_API}/text:synthesize`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${tk}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(cuerpo(conSsml)),
+      });
+    let r = await hacer(token);
+    if (r.status === 401) {
+      olvidarToken();
+      token = await tokenDeAcceso();
+      r = await hacer(token);
+    }
+    return { r, datos: await r.json().catch(() => ({})) };
+  };
+
+  if (conMarcas) {
+    const { r, datos } = await pedirVoz(true);
+    // Con marcas Y con todas: si faltan, el reparto sería peor que el estimado
+    // —cortaría por donde no toca creyendo que sabe—. Mejor caer al camino de
+    // siempre, que al menos sabe que está estimando.
+    if (r.ok && datos.audioContent && datos.timepoints?.length === marcas.length) {
+      return {
+        datos: datos.audioContent,
+        tipo: 'audio/wav',
+        tiempos: datos.timepoints.map((p) => Number(p.timeSeconds) || 0),
+      };
+    }
   }
 
-  const datos = await r.json().catch(() => ({}));
+  const { r, datos } = await pedirVoz(false);
   if (!r.ok || !datos.audioContent) {
     throw new Error(`El servicio de voz falló: ${datos?.error?.message || `HTTP ${r.status}`}`);
   }
-  return { datos: datos.audioContent, tipo: 'audio/wav' };
+  return { datos: datos.audioContent, tipo: 'audio/wav', tiempos: null };
 }
 
 /**

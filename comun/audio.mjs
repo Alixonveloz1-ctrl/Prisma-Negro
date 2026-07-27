@@ -230,10 +230,50 @@ export function repartir(audio, objetivos, opciones = {}) {
  * El silencio va DENTRO del primer trozo, así que forma parte de su duración medida
  * y llega al montaje sin que nadie tenga que acordarse de sumarlo.
  */
-export function repartirBloque(audio, objetivos, opciones = {}) {
-  const { silencioInicialMs = 120 } = opciones;
+/**
+ * Reparte un bloque por los TIEMPOS QUE DIJO EL SERVICIO DE VOZ.
+ *
+ * Sin estimar y sin buscar silencios: `tiempos[k]` es el segundo exacto en el que
+ * acaba la toma k, porque lo dice quien la ha pronunciado.
+ *
+ * Es lo que arregla el fallo que no sonaba a fallo: el corte caía en un silencio
+ * —así que se oía perfecto— pero era el silencio de OTRA frase, así que el audio
+ * de una toma terminaba diciendo las palabras de la siguiente y la imagen no
+ * correspondía a lo que se oía.
+ */
+export function repartirPorTiempos(audio, tiempos) {
   const { muestras, frecuencia, canales = 1 } = audio;
-  const trozos = repartir(audio, objetivos, opciones);
+  const total = muestras.length;
+  const marcoDe = (s) => Math.min(total, Math.max(0, Math.round(s * frecuencia) * canales));
+
+  const trozos = [];
+  let inicio = 0;
+  for (let k = 0; k < tiempos.length; k++) {
+    // La última toma llega hasta el final del audio, pase lo que pase: si la marca
+    // cayera un poco antes del final se perderían las últimas sílabas.
+    const fin = k === tiempos.length - 1 ? total : Math.max(inicio, marcoDe(tiempos[k]));
+    trozos.push({
+      inicio,
+      fin,
+      segundos: (fin - inicio) / canales / frecuencia,
+      // Nada forzado: estos cortes no se han adivinado.
+      forzado: false,
+      exacto: true,
+    });
+    inicio = fin;
+  }
+  return trozos;
+}
+
+export function repartirBloque(audio, objetivos, opciones = {}) {
+  const { silencioInicialMs = 120, tiempos = null } = opciones;
+  const { muestras, frecuencia, canales = 1 } = audio;
+  // Si el servicio de voz dijo dónde acaba cada toma, se le hace caso. Estimar
+  // teniendo el dato exacto delante es justo el error que hubo que arreglar.
+  const trozos =
+    Array.isArray(tiempos) && tiempos.length === objetivos.length
+      ? repartirPorTiempos(audio, tiempos)
+      : repartir(audio, objetivos, opciones);
 
   return trozos.map((t, k) => {
     const cuerpo = muestras.subarray(t.inicio, t.fin);
@@ -251,6 +291,10 @@ export function repartirBloque(audio, objetivos, opciones = {}) {
       // Duración REAL: la que manda en el montaje (§4.5).
       segundos: salida.length / canales / frecuencia,
       forzado: t.forzado,
+      // Si el corte lo dijo el servicio de voz o lo adivinamos nosotros. Viaja
+      // hasta la pantalla: un corte adivinado puede dejar el texto de una toma
+      // dentro del audio de la siguiente, y eso hay que poder verlo.
+      exacto: !!t.exacto,
     };
   });
 }

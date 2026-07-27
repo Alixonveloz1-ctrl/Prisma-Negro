@@ -828,4 +828,59 @@ export const invariantes = [
         t.replace('conMovimiento.has(dueña) &&', 'false &&'),
       ),
   },
+
+  {
+    nombre: 'el-corte-del-audio-lo-dice-la-voz-no-se-adivina',
+    dice: 'El bloque se cortaba buscando el silencio más cercano a donde uno CALCULA que acaba cada toma. El corte caía en un silencio, así que sonaba perfecto, pero era el silencio de OTRA frase: el audio de una toma terminaba con las palabras de la siguiente y la imagen no correspondía a lo que se oía. Un fallo que no suena a fallo.',
+    async comprobar(ctx) {
+      const { repartirPorTiempos, repartirBloque } = await import('../../comun/audio.mjs');
+      const prov = fuente(ctx, 'api/_lib/proveedor.js');
+      const nar = fuente(ctx, 'app/fases/narracion.js');
+      const fallos = [];
+
+      // 1 · El servicio tiene que PEDIR los tiempos, con una marca por toma.
+      if (!/enableTimePointing/.test(prov)) {
+        fallos.push('No se le piden los tiempos al servicio de voz: el corte se seguiría adivinando.');
+      }
+      if (!/<mark name=/.test(prov)) fallos.push('No se ponen marcas entre las tomas.');
+      if (!/escaparSsml/.test(prov)) {
+        fallos.push('El texto entra en el SSML sin escapar: un «&» rompería la petición entera.');
+      }
+      // Y si faltan tiempos, NO se usan a medias: cortar por marcas incompletas es
+      // peor que estimar, porque estimar al menos sabe que estima.
+      if (!/timepoints\?\.length === marcas\.length/.test(prov)) {
+        fallos.push('Se aceptarían tiempos incompletos y el reparto saldría corrido.');
+      }
+
+      // 2 · La narración tiene que mandarlos y usarlos.
+      if (!/marcas: bloque\.tomas\.map/.test(nar)) {
+        fallos.push('La narración no manda los textos por toma: el servicio no puede marcar nada.');
+      }
+      if (!/tiempos: r\.tiempos/.test(nar)) {
+        fallos.push('Vienen los tiempos y no se usan.');
+      }
+
+      // 3 · Y el reparto exacto tiene que ser exacto: sin huecos, sin solapes, y
+      // la última toma llega al final del audio.
+      const f = 24000;
+      const audio = { muestras: new Int16Array(f * 10).fill(1000), frecuencia: f, canales: 1 };
+      const t = repartirPorTiempos(audio, [2.5, 6.1, 10]);
+      if (t.length !== 3) fallos.push(`Salen ${t.length} trozos para 3 tomas.`);
+      if (Math.abs(t[0].segundos - 2.5) > 0.01) fallos.push(`El primer trozo dura ${t[0].segundos} y debía durar 2,5.`);
+      if (t.some((x, k) => k > 0 && x.inicio !== t[k - 1].fin)) fallos.push('Los trozos dejan huecos o se solapan.');
+      if (t[t.length - 1].fin !== audio.muestras.length) {
+        fallos.push('El último trozo no llega al final: se perderían las últimas sílabas.');
+      }
+      if (!t.every((x) => x.exacto)) fallos.push('Un corte por tiempos no se marca como exacto.');
+
+      // 4 · Con tiempos manda el exacto; sin ellos, se estima y se dice.
+      const conT = repartirBloque(audio, [1, 1, 1], { tiempos: [2.5, 6.1, 10], silencioInicialMs: 0 });
+      if (!conT.every((x) => x.exacto)) fallos.push('Teniendo los tiempos, se sigue estimando.');
+      const sinT = repartirBloque(audio, [3, 3, 4], { silencioInicialMs: 0 });
+      if (sinT.some((x) => x.exacto)) fallos.push('Un reparto estimado se hace pasar por exacto.');
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'app/fases/narracion.js', (t) => t.replace('tiempos: r.tiempos,', '')),
+  },
 ];

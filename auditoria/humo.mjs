@@ -127,6 +127,15 @@ export async function humoDelProveedor({ parche = null } = {}) {
       ['video.iniciar', () => prov.videoIniciar({ instruccion: 'anima esto', carpetaGs: 'gs://b/c/' })],
       ['voz de Gemini', () => prov.vozGemini({ texto: 'hola', nombreVoz: 'gemini:Kore' })],
       ['voz de Cloud', () => prov.voz({ texto: 'hola', nombreVoz: 'es-US-Neural2-B' })],
+      [
+        'voz de Cloud con marcas',
+        () =>
+          prov.voz({
+            texto: 'Uno. Dos. Tres.',
+            nombreVoz: 'es-US-Neural2-B',
+            marcas: ['Uno.', 'Dos & <tres>.', 'Tres.'],
+          }),
+      ],
       ['musica', () => prov.musica({ instruccion: 'cuerdas graves' })],
     ];
 
