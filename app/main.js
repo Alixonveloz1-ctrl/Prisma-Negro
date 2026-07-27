@@ -122,6 +122,44 @@ const pieza = () => P.piezas[0];
 
 // ── Acceso ────────────────────────────────────────────────────────────────────
 
+/**
+ * El diagnóstico, eslabón por eslabón (§1).
+ *
+ * Vive en UNA función y la usan los dos sitios que lo enseñan: la pantalla de
+ * entrada y el botón de Ajustes. Escribir esto dos veces es cómo el propio
+ * diagnóstico acabó comprobando algo distinto de lo que hace la herramienta.
+ */
+async function comprobarConexion(donde) {
+  const caja = $(donde);
+  caja.innerHTML = '<div class="aviso">Comprobando…</div>';
+
+  const salud = await llamar('salud');
+  const cfg = salud.configuracion;
+  if (!cfg.lista) {
+    caja.innerHTML =
+      '<div class="aviso malo"><b>Falta configurar esto:</b>' +
+      cfg.faltan
+        .map((f) => `<span class="comoarreglar"><b>${escapar(f.variable)}</b> — ${escapar(f.es)}</span>`)
+        .join('') +
+      '</div>';
+    throw new Error('La herramienta no está configurada del todo todavía.');
+  }
+
+  const prueba = salud.prueba || [];
+  caja.innerHTML = prueba
+    .map(
+      (p) =>
+        `<div class="aviso ${p.ok ? 'bueno' : 'malo'}">${p.ok ? '✓' : '✗'} <b>${escapar(p.paso)}</b> — ` +
+        `${escapar(p.dice)}` +
+        (p.arregla ? `<span class="comoarreglar">${escapar(p.arregla)}</span>` : '') +
+        `</div>`,
+    )
+    .join('');
+  return prueba;
+}
+
+accion('b-comprobar', () => comprobarConexion('salud-ajustes'));
+
 accion(
   'b-entrar',
   async () => {
@@ -129,29 +167,7 @@ accion(
     if (!c) throw new Error('Escribe la contraseña.');
     ponerClave(c);
 
-    const salud = await llamar('salud');
-    const cfg = salud.configuracion;
-    if (!cfg.lista) {
-      $('salud').innerHTML =
-        '<div class="aviso malo"><b>Falta configurar esto:</b>' +
-        cfg.faltan
-          .map((f) => `<span class="comoarreglar"><b>${escapar(f.variable)}</b> — ${escapar(f.es)}</span>`)
-          .join('') +
-        '</div>';
-      throw new Error('La herramienta no está configurada del todo todavía.');
-    }
-
-    // §1: eslabón por eslabón, y cada uno roto dice qué hacer.
-    const prueba = salud.prueba || [];
-    $('salud').innerHTML = prueba
-      .map(
-        (p) =>
-          `<div class="aviso ${p.ok ? 'bueno' : 'malo'}">${p.ok ? '✓' : '✗'} <b>${escapar(p.paso)}</b> — ` +
-          `${escapar(p.dice)}` +
-          (p.arregla ? `<span class="comoarreglar">${escapar(p.arregla)}</span>` : '') +
-          `</div>`,
-      )
-      .join('');
+    const prueba = await comprobarConexion('salud');
 
     // El montador solo hace falta para montar: no impide entrar ni generar.
     if (prueba.filter((p) => !p.ok && p.paso !== 'montador').length) {
