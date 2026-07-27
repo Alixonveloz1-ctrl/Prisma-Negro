@@ -341,6 +341,7 @@ function pintarTodo() {
   pintarPasos();
   pintarPestanas();
   pintarHistorial();
+  pintarContinuacion();
   // La previa preparada es de la pieza que estaba abierta: al cambiar de caso ya no
   // vale, y dejarla puesta enseñaría el documental anterior como si fuera este.
   if (preparada && preparada.hoja?.pieza !== pieza().id) {
@@ -1332,6 +1333,38 @@ function loYaContado() {
     }));
 }
 
+/**
+ * Los dos botones de continuación aparecen CUANDO SIRVEN, no antes.
+ *
+ * Estaban los dos sueltos en Ajustes, siempre visibles. Así se podía pedir
+ * «reutilizar imágenes» de un guion de continuación que todavía no existía, que no
+ * es que fallara: es que no significaba nada. Cada uno tiene un momento:
+ *
+ *   · continuar  → cuando ESTE caso ya tiene guion. Se continúa lo escrito.
+ *   · reutilizar → cuando la continuación ya tiene sus tomas dirigidas, porque lo
+ *                  que se compara son los planos, y sin dirigir no hay planos.
+ */
+function pintarContinuacion() {
+  const z = pieza();
+  const hayGuion = !!(z.guion || '').trim();
+  const padres = estado.ascendencia(P, z);
+
+  $('panel-continuar').classList.toggle('oculto', !hayGuion);
+  if (hayGuion) {
+    $('nota-continuar').textContent =
+      `Otro video del mismo caso. Hereda las ${z.fichas.length} fichas, la paleta y la música ` +
+      `de «${z.titulo}», y el director buscará lo que quedó fuera de este guion.`;
+  }
+
+  // Dirigidas y sin imagen: es lo único que se puede reutilizar.
+  const candidatas = z.tomas.filter((t) => t.plano && !t.heredado && t.imagen !== 'ok').length;
+  const puede = padres.length > 0 && candidatas > 0;
+  $('b-reutilizar').classList.toggle('oculto', !puede);
+  if (puede) {
+    $('b-reutilizar').textContent = `Reutilizar imágenes de «${padres[0].titulo}»`;
+  }
+}
+
 function pintarHistorial() {
   const caja = $('historial');
   if (!caja) return;
@@ -1388,14 +1421,14 @@ accion(
     await guardar();
     pintarTodo();
     avisar(
-      'historial',
+      'continuar',
       `Abierta la continuación de «${padre.titulo}»: hereda sus ${z.fichas.length} fichas, ` +
         `su paleta, su música y las cautelas del caso. Dale a «Dirigir» en el paso 3: ` +
         `el director leerá lo ya contado y buscará lo que quedó fuera.`,
       'bueno',
     );
   },
-  'historial',
+  'continuar',
 );
 
 /**
@@ -1418,7 +1451,7 @@ accion(
 
     const puede = imagenFase.heredables(z.tomas, padres);
     if (!puede.length) {
-      return avisar('historial', 'Ningún plano de este guion coincide con los del caso anterior.', 'bueno');
+      return avisar('tomas', 'Ningún plano de este guion coincide con los del caso anterior.', 'bueno');
     }
     for (const { i, de } of puede) {
       const t = z.tomas.find((x) => x.i === i);
@@ -1430,12 +1463,12 @@ accion(
     await guardar();
     pintarTodo();
     avisar(
-      'historial',
+      'tomas',
       `${puede.length} tomas reutilizan una imagen del caso anterior. Esas ya no se generan ni se pagan.`,
       'bueno',
     );
   },
-  'historial',
+  'tomas',
 );
 
 function pintarTiras() {

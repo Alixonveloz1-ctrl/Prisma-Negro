@@ -280,4 +280,54 @@ export const invariantes = [
         t.replace('if (escrita) await local.borrarMaterial(escrita).catch(() => {});', ''),
       ),
   },
+
+  {
+    nombre: 'los-botones-de-continuacion-salen-cuando-sirven',
+    dice: 'Estaban los dos sueltos en Ajustes, siempre visibles: se podía pedir «reutilizar imágenes» de un guion de continuación que aún no existía. No fallaba, es que no significaba nada. Continuar va donde está el guion que se continúa; reutilizar, donde ya hay planos que comparar.',
+    comprobar(ctx) {
+      const html = fuente(ctx, 'index.html');
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      // Cada botón, en su vista.
+      const dentroDe = (id, vista) => {
+        const i = html.indexOf(`id="v-${vista}"`);
+        const fin = html.indexOf('</section>', i);
+        return i >= 0 && html.slice(i, fin).includes(`id="${id}"`);
+      };
+      if (!dentroDe('b-continuacion', 'guion')) fallos.push('Continuar no está en la vista del guion.');
+      if (!dentroDe('b-reutilizar', 'tomas')) fallos.push('Reutilizar no está en la vista de tomas.');
+      if (dentroDe('b-continuacion', 'ajustes') || dentroDe('b-reutilizar', 'ajustes')) {
+        fallos.push('Siguen sueltos en Ajustes, fuera del momento en que sirven.');
+      }
+
+      // Y nacen ocultos: si el HTML no los oculta, se ven antes de que la pantalla
+      // decida, que es el parpadeo que hace dudar de si el botón hace algo.
+      for (const id of ['panel-continuar', 'b-reutilizar']) {
+        const i = html.indexOf(`id="${id}"`);
+        const linea = html.slice(Math.max(0, i - 200), i);
+        if (!/oculto/.test(linea)) fallos.push(`«${id}» no nace oculto.`);
+      }
+
+      // Y la condición de aparecer es la de verdad, no «siempre».
+      const i = main.indexOf('function pintarContinuacion');
+      if (i < 0) return [...fallos, 'Nadie decide cuándo salen.'];
+      const cuerpo = main.slice(i, main.indexOf('\nfunction ', i + 10));
+      if (!/z\.guion/.test(cuerpo)) fallos.push('Continuar no mira si hay guion que continuar.');
+      if (!/ascendencia/.test(cuerpo)) fallos.push('Reutilizar no mira si esta pieza continúa a otra.');
+      if (!/t\.plano/.test(cuerpo)) fallos.push('Reutilizar sale sin tomas dirigidas: no hay planos que comparar.');
+      // Y la condición tiene que APLICARSE. Calcularla y luego enseñar el botón
+      // igual es tener la comprobación escrita y no usarla.
+      for (const [id, cond] of [['panel-continuar', 'hayGuion'], ['b-reutilizar', 'puede']]) {
+        if (!new RegExp(`\\$\\('${id}'\\)\\.classList\\.toggle\\('oculto', !${cond}\\)`).test(cuerpo)) {
+          fallos.push(`«${id}» se enseña sin mirar su condición.`);
+        }
+      }
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace("$('b-reutilizar').classList.toggle('oculto', !puede);", "$('b-reutilizar').classList.remove('oculto');"),
+      ),
+  },
 ];

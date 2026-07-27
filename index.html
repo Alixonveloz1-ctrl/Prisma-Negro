@@ -597,6 +597,14 @@ nav.abajo button svg{width:22px;height:22px}
           </div>
           <div id="aviso-guion"></div>
         </div>
+        <div class="panel oculto" id="panel-continuar">
+          <h2>Continuación</h2>
+          <p class="nota chica" id="nota-continuar"></p>
+          <div class="fila-btn" style="margin-top:11px">
+            <button class="btn" id="b-continuacion">Generar continuación de este caso</button>
+          </div>
+          <div id="aviso-continuar"></div>
+        </div>
       </section>
 
       <!-- TOMAS -->
@@ -607,6 +615,7 @@ nav.abajo button svg{width:22px;height:22px}
           <div class="cifras" id="cifras-tomas"></div>
           <div class="fila-btn" style="margin-top:14px">
             <button class="btn primario" id="b-dirigir">Dirección · 1 llamada</button>
+            <button class="btn fantasma oculto" id="b-reutilizar">Reutilizar imágenes ya generadas</button>
           </div>
           <div id="aviso-tomas"></div>
         </div>
@@ -743,10 +752,6 @@ nav.abajo button svg{width:22px;height:22px}
         <div class="panel">
           <h2>Historial de casos <span class="cuenta" id="cuenta-historial"></span></h2>
           <div id="historial"></div>
-          <div class="fila-btn" style="margin-top:12px">
-            <button class="btn" id="b-continuacion">Generar continuación de este caso</button>
-            <button class="btn fantasma" id="b-reutilizar">Reutilizar imágenes del caso anterior</button>
-          </div>
           <div id="aviso-historial"></div>
         </div>
         <div class="panel">

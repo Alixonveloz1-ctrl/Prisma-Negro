@@ -287,7 +287,7 @@ export async function imagen({ instruccion, referencias = [], aspecto = '16:9', 
 
   const datos = await conGrafias('imagen', eleccion, (id) =>
     pedir(`${rutaDe(id)}:generateContent`, {
-      contents: [{ role: 'user', parts }],
+      contents: [{ role: 'user', parts: partes }],
       generationConfig: {
         // La familia 3 EXIGE ['TEXT','IMAGE']; el 2.5 solo acepta ['IMAGE']. Con
         // el valor equivocado la petición falla y el error no dice que sea esto.

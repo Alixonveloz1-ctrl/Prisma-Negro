@@ -8,6 +8,8 @@
 // comprobando nada (§9) — en el proyecto de origen una de ellas medía el bloque de
 // código equivocado durante semanas y siempre pasaba.
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { editando, conFuente, conConfig, conCatalogo, conFuncion } from '../contexto.mjs';
 
 const fuente = (ctx, ruta) => ctx.fuentes.get(ruta) || '';
@@ -324,6 +326,46 @@ export const invariantes = [
       editando(ctx, 'api/_lib/proveedor.js', (t) =>
         t.replace(/rutaDe\(id\)/g, '`${base()}/${id}`'),
       ),
+  },
+
+  {
+    nombre: 'todas-las-puertas-del-proveedor-se-pueden-llamar',
+    dice: 'La generación de imágenes nunca funcionó: la variable se llamaba «partes» y la petición decía «parts». Setenta y seis invariantes no lo cazaron porque todas MIRAN el código, y un identificador mal escrito se ve igual de bien que uno correcto. Lo único que lo caza es llamar a la función.',
+    async comprobar(ctx) {
+      const { humoDelProveedor } = await import('../humo.mjs');
+      // Si la auditoría trae el proveedor saboteado, se prueba ESE. Sin esto la
+      // prueba de humo se llamaba siempre sobre el archivo bueno y salía «ciega»:
+      // una prueba que no puede fallar no está probando nada (§9).
+      const enElContexto = ctx.fuentes.get('api/_lib/proveedor.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'api/_lib/proveedor.js'), 'utf8');
+      const parche = enElContexto !== enDisco ? () => enElContexto : null;
+
+      const { fallos, salidas } = await humoDelProveedor({ parche });
+      const problemas = [...fallos];
+
+      // Y ya que se llama, se mira QUÉ se pidió: que no reviente no basta si lo
+      // que sale es una petición vacía.
+      const imagen = salidas.find((s) => /IMAGE/.test(JSON.stringify(s.cuerpo?.generationConfig || {})));
+      if (!imagen) problemas.push('La llamada de imagen no llegó a componerse.');
+      else {
+        const partes = imagen.cuerpo?.contents?.[0]?.parts || [];
+        if (!partes.length) problemas.push('La petición de imagen sale sin contenido.');
+        if (!partes.some((p) => p.text)) problemas.push('La petición de imagen sale sin instrucción.');
+      }
+      const conRef = salidas.find((s) =>
+        (s.cuerpo?.contents?.[0]?.parts || []).some((p) => p.inlineData),
+      );
+      if (!conRef) problemas.push('Las imágenes de referencia no llegan a la petición.');
+
+      const clip = salidas.find((s) => s.url.includes('predictLongRunning'));
+      if (!clip) problemas.push('La llamada de clip no llegó a componerse.');
+      else if (!clip.cuerpo?.parameters?.storageUri) {
+        problemas.push('El clip se pide sin storageUri: volvería en base64 y no cabría.');
+      }
+      return problemas;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'api/_lib/proveedor.js', (t) => t.replace('parts: partes', 'parts')),
   },
 
   {
