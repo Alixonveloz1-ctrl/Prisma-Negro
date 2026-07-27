@@ -351,15 +351,29 @@ export const invariantes = [
       const t = fuente(ctx, 'api/_lib/proveedor.js');
       const i = t.indexOf('export async function vocesDisponibles');
       if (i < 0) return ['No existe el catálogo de voces.'];
-      const cuerpo = t.slice(i);
+      // Acotado a ESTA función. Sin acotar llegaba hasta el final del archivo y
+      // recogía la etiqueta del catálogo de modelos, que no es una voz.
+      const resto = t.slice(i + 10);
+      const fin = resto.search(/\nexport /);
+      const cuerpo = fin > 0 ? resto.slice(0, fin) : resto;
       const fallos = [];
       if (!/\.filter\(/.test(cuerpo)) fallos.push('El catálogo no filtra nada.');
       // La región tiene que estar DENTRO de la etiqueta, no solo declarada en algún
       // sitio del archivo: dos voces distintas se ven idénticas en el desplegable si
       // la etiqueta es solo el nombre (§7.10).
-      const etiqueta = cuerpo.match(/etiqueta:\s*([^\n]+)/)?.[1] || '';
-      if (!/REGIONES\w*\[/.test(etiqueta)) {
-        fallos.push(`La etiqueta de la voz no lleva la región dentro: ${etiqueta.slice(0, 60)}`);
+      // §7.10: dos voces distintas no pueden verse idénticas en el desplegable. Lo
+      // que hace falta es que CADA etiqueta lleve algo que la distinga además del
+      // nombre —la región en las de Cloud, la familia en las de Gemini, que no
+      // tienen región porque hablan el idioma del texto—. Antes esto exigía la
+      // región en todas y saltaba en falso al añadir la segunda familia.
+      const etiquetas = [...cuerpo.matchAll(/etiqueta:/g)].map((m) =>
+        cuerpo.slice(m.index, m.index + 170),
+      );
+      if (!etiquetas.length) fallos.push('No se encontró ninguna etiqueta de voz.');
+      for (const e of etiquetas) {
+        if (!/REGIONES\w*\[|Gemini/.test(e)) {
+          fallos.push(`Una etiqueta de voz no lleva nada que la distinga: ${e.split('\n')[0].slice(0, 50)}`);
+        }
       }
       // El canal narra en español LATINO. Una voz peninsular en medio de una
       // narración latina se oye como otro narrador, igual que el §7.9 con los

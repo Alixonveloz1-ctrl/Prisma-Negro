@@ -13,6 +13,9 @@ import { cifrar, descifrar } from './cifrado.js';
 // trae dentro. Un sitio solo lo resuelve.
 import { proyecto } from './cuenta.js';
 import { valor as valorEntorno } from './entorno.js';
+// El mismo escritor de WAV que usa el navegador: una sola forma de audio en todo el
+// sistema, venga del camino que venga.
+import { escribirWav } from '../../comun/audio.mjs';
 
 // §6: los generadores de video tienen listas CERRADAS de duración. Se pide la más
 // cercana a lo que dura la locución y se congela el último fotograma para el resto.
@@ -347,6 +350,17 @@ export async function vocesDisponibles(idioma = 'es', expresivas = false) {
 
   const GENEROS = { MALE: 'masculina', FEMALE: 'femenina', NEUTRAL: 'neutra' };
 
+  const deGemini = expresivas
+    ? VOCES_GEMINI.map(([n, c]) => ({
+        nombre: `${PREFIJO_GEMINI}${n}`,
+        region: 'gemini',
+        genero: '',
+        expresiva: true,
+        familia: 'Gemini TTS',
+        etiqueta: `${n} · ${c} · Gemini`,
+      }))
+    : [];
+
   return (datos.voices || [])
     // §7.10: se listaron todas y salieron cien, la mayoría del idioma equivocado y
     // con nombres idénticos a las buenas. Aquí se filtra por región Y por variante.
@@ -373,6 +387,7 @@ export async function vocesDisponibles(idioma = 'es', expresivas = false) {
           `${GENEROS[v.ssmlGender] || ''}${variable ? ' · expresiva' : ''}`,
       };
     })
+    .concat(deGemini)
     // Las de entrega fija primero: son las que sirven para narrar quince minutos.
     .sort(
       (a, b) =>
@@ -380,6 +395,69 @@ export async function vocesDisponibles(idioma = 'es', expresivas = false) {
         a.genero.localeCompare(b.genero) ||
         a.nombre.localeCompare(b.nombre),
     );
+}
+
+// ── Voz de Gemini (Vertex AI) ─────────────────────────────────────────────────
+//
+// Otro camino, no otro proveedor: sigue siendo Vertex, con la misma cuenta y la
+// misma región. Lo que cambia es el endpoint —generateContent pidiendo audio en vez
+// de texto— y que la voz se elige por nombre propio (Kore, Puck…) en lugar de por
+// código de idioma.
+//
+// Devuelve PCM CRUDO, sin cabecera. Se le pone la de WAV aquí, con el mismo escritor
+// que usa el resto del sistema, para que aguas abajo no haya dos clases de audio: la
+// narración mide duraciones y corta por silencios, y no puede estar preguntándose de
+// dónde vino cada trozo.
+
+// Las voces que ofrece Gemini TTS. Es una lista cerrada del proveedor, no del
+// idioma: cada una habla el idioma del texto que se le da.
+export const VOCES_GEMINI = [
+  ['Kore', 'firme'], ['Charon', 'informativa'], ['Orus', 'firme'], ['Enceladus', 'susurrada'],
+  ['Iapetus', 'clara'], ['Umbriel', 'tranquila'], ['Algieba', 'suave'], ['Despina', 'suave'],
+  ['Erinome', 'clara'], ['Algenib', 'grave'], ['Rasalgethi', 'informativa'], ['Achernar', 'suave'],
+  ['Alnilam', 'firme'], ['Schedar', 'pareja'], ['Gacrux', 'madura'], ['Zephyr', 'brillante'],
+  ['Puck', 'animada'], ['Fenrir', 'excitable'], ['Leda', 'juvenil'], ['Aoede', 'ligera'],
+  ['Callirrhoe', 'relajada'], ['Autonoe', 'brillante'], ['Laomedeia', 'animada'],
+  ['Sadaltager', 'entendida'], ['Sulafat', 'cálida'],
+];
+
+const PREFIJO_GEMINI = 'gemini:';
+export const esVozGemini = (v) => String(v || '').startsWith(PREFIJO_GEMINI);
+
+export async function vozGemini({ texto: t, nombreVoz, estilo = '' }) {
+  const modelo = process.env.MODELO_VOZ_GEMINI || 'gemini-2.5-flash-preview-tts';
+  const voz = String(nombreVoz).replace(PREFIJO_GEMINI, '') || 'Kore';
+
+  // §7.9: estas voces interpretan cada llamada por su cuenta. Mandar SIEMPRE la
+  // misma indicación de estilo es lo que más acerca la llamada 23 a la llamada 1.
+  // No lo arregla del todo, pero la diferencia entre mandarla y no mandarla es
+  // grande, y el usuario puede afinarla desde los ajustes.
+  const brief = estilo || 'Narra en tono documental, sobrio y parejo, ritmo constante, sin dramatizar.';
+
+  const datos = await pedir(`${base()}/${modelo}:generateContent`, {
+    contents: [{ role: 'user', parts: [{ text: `${brief}\n\n${t}` }] }],
+    generationConfig: {
+      responseModalities: ['AUDIO'],
+      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voz } } },
+    },
+  });
+
+  const parte = (datos?.candidates?.[0]?.content?.parts || []).find((p) => p.inlineData);
+  if (!parte) {
+    const motivo = datos?.candidates?.[0]?.finishReason || 'sin motivo declarado';
+    throw new Error(`La voz de Gemini no devolvió audio (${motivo}).`);
+  }
+
+  const crudo = Buffer.from(parte.inlineData.data, 'base64');
+  const frecuencia = Number(/rate=(\d+)/.exec(parte.inlineData.mimeType || '')?.[1]) || 24000;
+
+  // PCM crudo → WAV, con el escritor común. Un byte impar al final rompería el
+  // Int16Array, así que se recorta a par.
+  const muestras = new Int16Array(
+    crudo.buffer.slice(crudo.byteOffset, crudo.byteOffset + (crudo.byteLength & ~1)),
+  );
+  const wav = escribirWav({ muestras, frecuencia, canales: 1 });
+  return { datos: Buffer.from(wav).toString('base64'), tipo: 'audio/wav' };
 }
 
 // ── Música ────────────────────────────────────────────────────────────────────

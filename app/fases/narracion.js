@@ -64,6 +64,9 @@ export async function narrarBloque({ bloque, pieza, config, senal }) {
       nombreVoz: n.nombreVoz,
       velocidad: n.velocidad,
       tono: n.tono,
+      // El mismo brief en TODAS las llamadas: es lo que mantiene parejo al narrador
+      // a lo largo de quince minutos con las voces que interpretan (§7.9).
+      estilo: n.estilo,
     },
     { senal },
   );

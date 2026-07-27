@@ -82,6 +82,9 @@ export const PREDETERMINADA = {
     // §7.9: apagado por defecto. Encenderlo trae las Chirp y compañía, que suenan
     // mejor en una frase y peor en quince minutos.
     vocesExpresivas: false,
+    // Solo lo usan las voces de Gemini, que aceptan una indicación de entrega.
+    // Mandar SIEMPRE la misma es lo que más acerca la llamada 23 a la llamada 1.
+    estilo: 'Narra en tono documental, sobrio y parejo, ritmo constante, sin dramatizar.',
     velocidad: 0.96,
     tono: -1,
     // §7.8: un dedal de silencio delante de la primera toma de cada llamada. Sin

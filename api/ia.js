@@ -141,12 +141,20 @@ async function despachar(modo, c) {
     }
 
     case 'voz': {
-      const a = await proveedor.voz({
-        texto: exigir(c, 'texto'),
-        nombreVoz: c.nombreVoz,
-        velocidad: c.velocidad,
-        tono: c.tono,
-      });
+      // Dos caminos, un solo resultado: WAV PCM. Quién lo genera lo decide la voz
+      // elegida, y aguas abajo nadie tiene que enterarse.
+      const a = proveedor.esVozGemini(c.nombreVoz)
+        ? await proveedor.vozGemini({
+            texto: exigir(c, 'texto'),
+            nombreVoz: c.nombreVoz,
+            estilo: c.estilo,
+          })
+        : await proveedor.voz({
+            texto: exigir(c, 'texto'),
+            nombreVoz: c.nombreVoz,
+            velocidad: c.velocidad,
+            tono: c.tono,
+          });
       // La narración se devuelve al navegador porque ahí se mide su duración real y
       // se corta por los silencios (§4.5). Un bloque de 45 s en PCM a 24 kHz son
       // ~2,1 MB: cabe en la respuesta. Bloques más largos no, y por eso son de 45 s.

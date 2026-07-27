@@ -1056,6 +1056,7 @@ function pintarAjustes() {
   pon('velocidad', Math.round(P.config.narracion.velocidad * 100));
   $('v-velocidad').textContent = P.config.narracion.velocidad.toFixed(2);
   $('expresivas').checked = !!P.config.narracion.vocesExpresivas;
+  $('estilo').value = P.config.narracion.estilo || '';
   $('marca-texto').value = P.config.marca.texto;
   $('vertical').value = P.config.formato.vertical ? '1' : '0';
 }
@@ -1083,6 +1084,7 @@ accion(
     P.config.formato.vertical = $('vertical').value === '1';
     if ($('voz').value) P.config.narracion.nombreVoz = $('voz').value;
     P.config.narracion.vocesExpresivas = $('expresivas').checked;
+    P.config.narracion.estilo = $('estilo').value.trim();
     P.config.texto.modelo = $('m-texto').value;
     P.titulo = $('titulo').value.trim() || P.titulo;
 
@@ -1154,6 +1156,9 @@ accion(
       nombreVoz: voz,
       velocidad: Number($('velocidad').value) / 100,
       tono: P.config.narracion.tono,
+      // La muestra se genera igual que la narración de verdad: si el estilo no
+      // entrara aquí, lo que se oye al probar no sería lo que se va a generar.
+      estilo: $('estilo').value.trim(),
     });
     const a = $('muestra-voz');
     a.src = `data:audio/wav;base64,${r.datos}`;
