@@ -165,7 +165,13 @@ async function despachar(modo, c) {
       return { disponibles: await proveedor.modelosDisponibles(), enUso: proveedor.modelosEnUso() };
 
     case 'voz.catalogo':
-      return { voces: await proveedor.vocesDisponibles(c.idioma || 'es', !!c.expresivas) };
+      return {
+        voces: await proveedor.vocesDisponibles(
+          c.idioma || 'es',
+          !!c.expresivas,
+          c.genero === undefined ? 'MALE' : c.genero,
+        ),
+      };
 
     case 'musica': {
       const m = await proveedor.musica({

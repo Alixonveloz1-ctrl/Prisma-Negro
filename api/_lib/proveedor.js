@@ -340,7 +340,7 @@ const ES_EXPRESIVA = /chirp|studio|journey/i;
  * APAGADAS por defecto. Pero la decisión es de quien narra, no mía: quien quiera
  * oírlas las enciende, y la etiqueta le dice cuál es cuál.
  */
-export async function vocesDisponibles(idioma = 'es', expresivas = false) {
+export async function vocesDisponibles(idioma = 'es', expresivas = false, genero = 'MALE') {
   const token = await tokenDeAcceso();
   const r = await fetch(`${VOZ_API}/voices?languageCode=${encodeURIComponent(idioma)}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -351,7 +351,7 @@ export async function vocesDisponibles(idioma = 'es', expresivas = false) {
   const GENEROS = { MALE: 'masculina', FEMALE: 'femenina', NEUTRAL: 'neutra' };
 
   const deGemini = expresivas
-    ? VOCES_GEMINI.map(([n, c]) => ({
+    ? VOCES_GEMINI.filter(([, , g]) => !genero || g === genero).map(([n, c]) => ({
         nombre: `${PREFIJO_GEMINI}${n}`,
         region: 'gemini',
         genero: '',
@@ -369,6 +369,9 @@ export async function vocesDisponibles(idioma = 'es', expresivas = false) {
     // otro narrador. Y fuera las expresivas de entrega variable, que en narración
     // larga cambian de tono entre llamadas (§7.9).
     .filter((v) => REGIONES_LATINAS[v.languageCodes?.[0]])
+    // El canal narra con voz masculina. Filtrar aquí y no en la pantalla evita que
+    // una voz descartada llegue a estar seleccionable por un descuido.
+    .filter((v) => !genero || v.ssmlGender === genero)
     .filter((v) => expresivas || !ES_EXPRESIVA.test(v.name))
     .map((v) => {
       const reg = v.languageCodes?.[0] || '';
@@ -411,14 +414,42 @@ export async function vocesDisponibles(idioma = 'es', expresivas = false) {
 
 // Las voces que ofrece Gemini TTS. Es una lista cerrada del proveedor, no del
 // idioma: cada una habla el idioma del texto que se le da.
+// El género no lo devuelve la API para estas voces —solo da la lista de nombres—,
+// así que va aquí, tomado de la documentación de voces del proveedor. Si alguna
+// suena distinta a lo que dice esta tabla, se corrige aquí y en ningún otro sitio.
 export const VOCES_GEMINI = [
-  ['Kore', 'firme'], ['Charon', 'informativa'], ['Orus', 'firme'], ['Enceladus', 'susurrada'],
-  ['Iapetus', 'clara'], ['Umbriel', 'tranquila'], ['Algieba', 'suave'], ['Despina', 'suave'],
-  ['Erinome', 'clara'], ['Algenib', 'grave'], ['Rasalgethi', 'informativa'], ['Achernar', 'suave'],
-  ['Alnilam', 'firme'], ['Schedar', 'pareja'], ['Gacrux', 'madura'], ['Zephyr', 'brillante'],
-  ['Puck', 'animada'], ['Fenrir', 'excitable'], ['Leda', 'juvenil'], ['Aoede', 'ligera'],
-  ['Callirrhoe', 'relajada'], ['Autonoe', 'brillante'], ['Laomedeia', 'animada'],
-  ['Sadaltager', 'entendida'], ['Sulafat', 'cálida'],
+  // Masculinas
+  ['Charon', 'informativa', 'MALE'],
+  ['Orus', 'firme', 'MALE'],
+  ['Algenib', 'grave', 'MALE'],
+  ['Alnilam', 'firme', 'MALE'],
+  ['Rasalgethi', 'informativa', 'MALE'],
+  ['Iapetus', 'clara', 'MALE'],
+  ['Schedar', 'pareja', 'MALE'],
+  ['Umbriel', 'tranquila', 'MALE'],
+  ['Algieba', 'suave', 'MALE'],
+  ['Enceladus', 'susurrada', 'MALE'],
+  ['Achird', 'cercana', 'MALE'],
+  ['Zubenelgenubi', 'informal', 'MALE'],
+  ['Sadachbia', 'viva', 'MALE'],
+  ['Sadaltager', 'entendida', 'MALE'],
+  ['Puck', 'animada', 'MALE'],
+  ['Fenrir', 'excitable', 'MALE'],
+  // Femeninas
+  ['Kore', 'firme', 'FEMALE'],
+  ['Zephyr', 'brillante', 'FEMALE'],
+  ['Leda', 'juvenil', 'FEMALE'],
+  ['Aoede', 'ligera', 'FEMALE'],
+  ['Callirrhoe', 'relajada', 'FEMALE'],
+  ['Autonoe', 'brillante', 'FEMALE'],
+  ['Despina', 'suave', 'FEMALE'],
+  ['Erinome', 'clara', 'FEMALE'],
+  ['Laomedeia', 'animada', 'FEMALE'],
+  ['Achernar', 'suave', 'FEMALE'],
+  ['Gacrux', 'madura', 'FEMALE'],
+  ['Pulcherrima', 'directa', 'FEMALE'],
+  ['Vindemiatrix', 'amable', 'FEMALE'],
+  ['Sulafat', 'cálida', 'FEMALE'],
 ];
 
 const PREFIJO_GEMINI = 'gemini:';

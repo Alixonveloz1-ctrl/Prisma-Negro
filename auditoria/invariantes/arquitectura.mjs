@@ -393,6 +393,20 @@ export const invariantes = [
       if (!/expresiva/.test(cuerpo)) {
         fallos.push('Una voz expresiva no viaja marcada: no se puede avisar en pantalla.');
       }
+      // El canal narra con voz masculina. El filtro va en el catálogo, no en la
+      // pantalla: filtrar al pintar deja voces descartadas seleccionables por un
+      // descuido, y la que manda es la que está guardada en la configuración.
+      if (!/genero\s*=\s*'MALE'/.test(t)) {
+        fallos.push('El catálogo de voces no filtra por género masculino por defecto.');
+      }
+      if (!/ssmlGender === genero/.test(cuerpo)) {
+        fallos.push('El filtro de género no se aplica a las voces de Cloud TTS.');
+      }
+      // Y las de Gemini tienen que traer su género: la API no lo devuelve para
+      // ellas, así que si la tabla no lo lleva, el filtro no las toca.
+      if (!/'MALE'\]/.test(t) || !/'FEMALE'\]/.test(t)) {
+        fallos.push('La tabla de voces de Gemini no declara el género de cada voz.');
+      }
       return fallos;
     },
     // El sabotaje quita la región de la etiqueta, que es justo lo que esta
