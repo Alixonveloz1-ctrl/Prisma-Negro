@@ -99,6 +99,7 @@ export async function construirContexto() {
   );
   const { PREDETERMINADA } = await import('../app/config.js');
   const { NOMBRES } = await import('../api/_lib/entorno.js');
+  const { CATALOGO } = await import('../comun/modelos.mjs');
   const p = proyectoDePrueba();
   const hoja = construirHoja({ pieza: p.id, tomas: p.tomas, escenas: p.escenas });
 
@@ -119,6 +120,9 @@ export async function construirContexto() {
     // pueda sabotear: desde que la configuración se lee por tabla en vez de con
     // `process.env.X` literales, comprobar solo los literales no comprobaba nada.
     nombresEntorno: structuredClone(NOMBRES),
+    // La tabla de generadores. Entra por el contexto por lo mismo: una invariante
+    // que la mira importándola no puede romperse a propósito, y salía «ciega».
+    catalogo: structuredClone(CATALOGO),
     // Las funciones puras entran por el contexto en vez de importarse dentro de cada
     // invariante. Así una invariante que comprueba un COMPORTAMIENTO también se
     // puede romper a propósito: se le cambia la función por una averiada y tiene que
@@ -164,4 +168,11 @@ export function editando(ctx, ruta, transformar) {
   const actual = ctx.fuentes.get(ruta);
   if (actual === undefined) throw new Error(`La auditoría no encuentra ${ruta} para romperlo.`);
   return conFuente(ctx, ruta, transformar(actual));
+}
+
+/** Copia del contexto con el catálogo de generadores modificado, para `--romper`. */
+export function conCatalogo(ctx, transformar) {
+  const catalogo = structuredClone(ctx.catalogo);
+  transformar(catalogo);
+  return { ...ctx, catalogo };
 }

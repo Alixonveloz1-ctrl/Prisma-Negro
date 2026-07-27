@@ -15,6 +15,7 @@
 import { tokenDeAcceso, olvidarToken } from './token.js';
 import { clavePrivada, proyecto, olvidarCuenta } from './cuenta.js';
 import { valor as valorEntorno, nombrePrincipal } from './entorno.js';
+import { PREDETERMINADO, grafiasDe, etiquetaDe } from '../../comun/modelos.mjs';
 
 const RAIZ_ALMACEN = 'https://storage.googleapis.com/storage/v1';
 
@@ -95,22 +96,33 @@ export async function probarCadena() {
   // modelo configurado exista ni que esta cuenta pueda usarlo.
   try {
     const region = valorEntorno('regionIA', 'us-central1');
-    const modelo = process.env.MODELO_TEXTO || 'gemini-2.5-pro';
-    const url =
-      `https://${region}-aiplatform.googleapis.com/v1/projects/${proyecto()}` +
-      `/locations/${region}/publishers/google/models/${modelo}:generateContent`;
+    // Se prueba EL MISMO director que va a escribir, con las mismas grafías y en el
+    // mismo orden. Probar un modelo fijo distinto del que se usa es un diagnóstico
+    // que sale verde mientras la herramienta falla.
+    const eleccion = process.env.MODELO_TEXTO || PREDETERMINADO.texto;
+    const grafias = grafiasDe('texto', eleccion);
 
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: 'ok' }] }],
-        generationConfig: { maxOutputTokens: 1, temperature: 0 },
-      }),
-    });
+    let r;
+    let modelo = grafias[0];
+    for (const id of grafias) {
+      modelo = id;
+      r = await fetch(
+        `https://${region}-aiplatform.googleapis.com/v1/projects/${proyecto()}` +
+          `/locations/${region}/publishers/google/models/${id}:generateContent`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: 'ok' }] }],
+            generationConfig: { maxOutputTokens: 1, temperature: 0 },
+          }),
+        },
+      );
+      if (r.ok || (r.status !== 404 && r.status !== 403)) break;
+    }
 
     if (r.ok) {
-      pasos.push(paso('modelos', true, `El modelo de texto responde (${modelo}).`));
+      pasos.push(paso('modelos', true, `${etiquetaDe('texto', eleccion)} responde (${modelo}).`));
     } else {
       const d = await r.json().catch(() => ({}));
       const msg = d?.error?.message || `HTTP ${r.status}`;

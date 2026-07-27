@@ -155,6 +155,7 @@ async function despachar(modo, c) {
             texto: exigir(c, 'texto'),
             nombreVoz: c.nombreVoz,
             estilo: c.estilo,
+            modelo: c.modelo,
           })
         : await proveedor.voz({
             texto: exigir(c, 'texto'),
@@ -169,14 +170,9 @@ async function despachar(modo, c) {
     }
 
     case 'modelos.catalogo':
-    {
-      const cat = await proveedor.modelosDisponibles();
-      // `porSondeo` e `intentos` se sacan a la raíz: estaban dentro de `disponibles`
-      // y la pantalla los leía de la raíz, así que el aviso no salía nunca y parecía
-      // que el catálogo iba bien cuando estaba cayendo al respaldo.
-      const { porSondeo, intentos, ...disponibles } = cat;
-      return { disponibles, porSondeo: !!porSondeo, intentos: intentos || [], enUso: proveedor.modelosEnUso() };
-    }
+      // La tabla, tal cual. Sin llamadas a la nube y sin sorpresas: lo que hay aquí
+      // es lo que sale en los desplegables, en este orden, siempre.
+      return { disponibles: proveedor.modelosDisponibles(), enUso: proveedor.modelosEnUso() };
 
     case 'voz.catalogo':
       return {

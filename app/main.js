@@ -15,7 +15,7 @@
 import { llamar, ponerClave, ponerModeloTexto, ponerModelos } from './api.js';
 import * as estado from './estado.js';
 import { Cola } from './cola.js';
-import { mejorModeloTexto, etiquetaModelo, ordenarFamilia, equilibradoDe } from './config.js';
+import { etiquetaDe } from '../comun/modelos.mjs';
 import { segmentarVerificado } from '../comun/segmentar.mjs';
 import { TEMAS, EPOCAS, EPOCA_POR_DEFECTO, temaPorId, epocaPorId } from '../comun/temas.mjs';
 import { ESTILOS, estiloPorId } from '../comun/estilos.mjs';
@@ -184,73 +184,50 @@ async function arrancar() {
 }
 
 /**
- * Los modelos que este proyecto tiene DE VERDAD, preguntándoselo al proveedor.
+ * Pinta los tres desplegables de generadores desde el catálogo.
  *
- * Una lista escrita a mano acaba ofreciendo modelos retirados y escondiendo los
- * nuevos, y desde la pantalla no hay forma de saber cuál de las dos cosas pasa.
+ * El catálogo es una tabla fija (`comun/modelos.mjs`), así que esto no descubre
+ * nada: enseña lo que hay, en el orden en que está escrito, y respeta lo que el
+ * usuario eligió. Lo que él elige es lo que se usa; la aplicación no lo corrige
+ * ni lo sube sola por su cuenta.
  */
 async function cargarModelos() {
   try {
     const r = await llamar('modelos.catalogo');
-    const ids = (r.disponibles?.texto || []).map((m) => m.id);
-    const mejor = mejorModeloTexto(ids);
+    let cambio = false;
 
-    // Mientras la elección sea automática, se revisa en CADA carga y sube sola.
-    //
-    // No basta con «si está vacío»: un proyecto guardado ayer trae el mejor modelo
-    // DE AYER, y con esa condición se quedaría ahí para siempre. Es el §7.2 —un
-    // arreglo que no llega porque el valor guardado lo tapa— aplicado al modelo.
-    if (!P.config.texto.aMano && mejor && P.config.texto.modelo !== mejor) {
-      const antes = P.config.texto.modelo;
-      P.config.texto.modelo = mejor;
-      ponerModeloTexto(mejor);
-      await guardar();
-      if (antes) avisar('proyecto', `El director sube de ${antes} a ${mejor}.`, 'bueno');
-    }
-
-    const sel = $('m-texto');
-    sel.innerHTML = '';
-    for (const id of ids) {
-      const o = document.createElement('option');
-      o.value = id;
-      o.textContent = etiquetaModelo(id, mejor);
-      if (id === P.config.texto.modelo) o.selected = true;
-      sel.appendChild(o);
-    }
-    $('modelo-en-uso').textContent =
-      `Escribe con: ${P.config.texto.modelo || r.enUso?.texto || '—'}` +
-      (r.porSondeo ? ` · ${ids.length} encontrados preguntando uno a uno` : '');
-
-    // Imagen y clips: la misma historia, pero sin elección propia se coge el
-    // EQUILIBRADO, no el mejor. Entre gamas de una misma versión hay mucha
-    // diferencia de precio, y el generador de imagen se llama ochenta veces por
-    // documental —el de clips, doce—, así que ahí el más caro no es el sensato.
     for (const [familia, selector, guardado] of [
+      ['texto', 'm-texto', 'texto'],
       ['imagen', 'm-imagen', 'imagenModelo'],
       ['video', 'm-video', 'videoModelo'],
     ]) {
-      const lista = ordenarFamilia((r.disponibles?.[familia] || []).map((m) => m.id));
-      if (!lista.length) continue;
+      const filas = r.disponibles?.[familia] || [];
+      if (!filas.length) continue;
 
       const cfg = P.config[guardado];
-      if (!cfg.aMano) {
-        const eq = equilibradoDe(lista.map((m) => m.id));
-        if (eq && cfg.modelo !== eq) {
-          cfg.modelo = eq;
-          await guardar();
-        }
+      // Sin elección guardada se coge la que el catálogo trae por defecto. Con
+      // elección guardada NO SE TOCA: es lo que se pidió —que la aplicación
+      // obligue el generador elegido— y además evita el §7.2 al revés, que la
+      // pantalla te cambie el modelo por debajo cada vez que abres los ajustes.
+      if (!cfg.modelo || !filas.some((f) => f.id === cfg.modelo)) {
+        cfg.modelo = r.enUso?.[familia] || filas[0].id;
+        cambio = true;
       }
+
       const s = $(selector);
       s.innerHTML = '';
-      for (const m of lista) {
+      for (const f of filas) {
         const o = document.createElement('option');
-        o.value = m.id;
-        o.textContent = m.etiqueta;
-        if (m.id === cfg.modelo) o.selected = true;
+        o.value = f.id;
+        o.textContent = f.etiqueta;
+        if (f.id === cfg.modelo) o.selected = true;
         s.appendChild(o);
       }
     }
-    // Que la elección entre en vigor sin recargar.
+    if (cambio) await guardar();
+
+    $('modelo-en-uso').textContent = etiquetaDe('texto', P.config.texto.modelo);
+    ponerModeloTexto(P.config.texto.modelo);
     ponerModelos({ imagen: P.config.imagenModelo.modelo, video: P.config.videoModelo.modelo });
     P.config.imagen.modelo = P.config.imagenModelo.modelo || P.config.imagen.modelo;
     P.config.movimiento.modelo = P.config.videoModelo.modelo || P.config.movimiento.modelo;

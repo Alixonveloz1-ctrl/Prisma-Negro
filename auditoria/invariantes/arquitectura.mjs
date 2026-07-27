@@ -8,7 +8,7 @@
 // comprobando nada (§9) — en el proyecto de origen una de ellas medía el bloque de
 // código equivocado durante semanas y siempre pasaba.
 
-import { editando, conFuente, conConfig } from '../contexto.mjs';
+import { editando, conFuente, conConfig, conCatalogo } from '../contexto.mjs';
 
 const fuente = (ctx, ruta) => ctx.fuentes.get(ruta) || '';
 const archivosDe = (ctx, prefijo) =>
@@ -286,62 +286,73 @@ export const invariantes = [
   },
 
   {
-    nombre: 'ningun-modelo-escrito-a-mano',
-    dice: 'Ninguna familia de modelos se lista a mano. Una lista escrita dice lo que se creía el día que se escribió: dejó al director dos generaciones atrás y ofrecía dos generadores de imagen sin decir qué hacían ni cuánto costaban.',
-    async comprobar(ctx) {
-      const cfg = fuente(ctx, 'app/config.js');
+    nombre: 'cada-generador-sale-una-sola-vez',
+    dice: 'Dos filas del catálogo no pueden llamarse igual ni compartir un identificador. El desplegable de clips enseñaba «Veo 3.1 Fast» dos veces porque Vertex publica el mismo modelo con dos grafías y las dos entraban como opciones distintas.',
+    comprobar(ctx) {
       const fallos = [];
+      const idsVistos = new Map();
 
-      // Ni catálogo, ni valores por defecto de modelo escritos en la configuración.
-      if (/export const MODELOS\s*=/.test(cfg)) {
-        fallos.push('Vuelve a haber un catálogo de modelos escrito a mano en la configuración.');
-      }
-      for (const m of cfg.matchAll(/modelo:\s*'([a-z][\w.-]{6,})'/gi)) {
-        fallos.push(`La configuración fija el modelo «${m[1]}» a mano: envejece solo.`);
-      }
-
-      // Y el sondeo tiene que cubrir las cuatro familias que se eligen.
-      const prov = fuente(ctx, 'api/_lib/proveedor.js');
-      for (const f of ['texto', 'imagen', 'video', 'voz']) {
-        if (!new RegExp(`\\b${f}:\\s*\\[`).test(prov)) {
-          fallos.push(`El sondeo de modelos no tiene candidatos de «${f}».`);
+      for (const [familia, filas] of Object.entries(ctx.catalogo)) {
+        const claves = new Set();
+        const etiquetas = new Set();
+        for (const f of filas) {
+          if (claves.has(f.clave)) fallos.push(`En «${familia}» la clave «${f.clave}» sale dos veces.`);
+          claves.add(f.clave);
+          if (etiquetas.has(f.etiqueta)) {
+            fallos.push(`En «${familia}» la etiqueta «${f.etiqueta}» sale dos veces: son dos filas indistinguibles en pantalla.`);
+          }
+          etiquetas.add(f.etiqueta);
+          if (!f.ids?.length) fallos.push(`«${f.clave}» no tiene ninguna grafía con la que llamarlo.`);
+          for (const id of f.ids || []) {
+            // La misma grafía en dos filas significa que una de las dos cobra lo
+            // que no es: el usuario cree elegir Lite y paga la cara.
+            if (idsVistos.has(id)) {
+              fallos.push(`El identificador «${id}» está en «${idsVistos.get(id)}» y en «${f.clave}».`);
+            }
+            idsVistos.set(id, f.clave);
+          }
         }
       }
       return fallos;
     },
+    // Se rompe duplicando una grafía entre dos filas: es exactamente el fallo que
+    // hizo salir «Veo 3.1 Fast» dos veces en el desplegable.
     romper: (ctx) =>
-      editando(ctx, 'app/config.js', (t) => t.replace('imagenModelo: { modelo:', "imagenModelo: { modelo: 'gemini-2.5-flash-image'")),
+      conCatalogo(ctx, (c) => {
+        c.video[2].ids = [...c.video[1].ids];
+      }),
   },
 
   {
-    nombre: 'el-sondeo-de-modelos-no-genera-nada',
-    dice: 'Preguntar qué modelos hay no puede costar dinero. Una imagen de prueba por candidato se pagaría cada vez que alguien abre los ajustes, y un video mucho más.',
+    nombre: 'el-catalogo-no-se-sondea',
+    dice: 'Los generadores salen de la tabla, no de preguntarle a la nube. Sondear enseñaba grafías en vez de generadores: salía UN generador de imagen habiendo tres, y los de video salían repetidos.',
     comprobar(ctx) {
       const prov = fuente(ctx, 'api/_lib/proveedor.js');
-      const i = prov.indexOf('async function probarCandidatos');
-      if (i < 0) return ['No existe el sondeo de modelos.'];
-      const cuerpo = prov.slice(i, prov.indexOf('\n}', i));
+      const main = fuente(ctx, 'app/main.js');
       const fallos = [];
 
-      // El cuerpo de la petición tiene que ser inválido a propósito.
-      if (!/contents: \[\]|instances: \[\]/.test(cuerpo)) {
-        fallos.push('El sondeo manda una petición que podría generar de verdad.');
+      if (/probarCandidatos|const CANDIDATOS\s*=/.test(prov)) {
+        fallos.push('Ha vuelto el sondeo de modelos.');
       }
-      if (/parts: \[\{ text/.test(cuerpo)) {
-        fallos.push('El sondeo manda contenido real: eso genera y se paga.');
+      // Y el catálogo tiene que entregarse sin pedir un token: si vuelve a haber
+      // una llamada a la nube, los ajustes vuelven a tardar y a fallar solos.
+      const i = prov.indexOf('export function modelosDisponibles');
+      if (i < 0) fallos.push('No se entrega el catálogo.');
+      else {
+        const cuerpo = prov.slice(i, prov.indexOf('\n}', i));
+        if (/await|fetch\(/.test(cuerpo)) fallos.push('Entregar el catálogo llama a la nube.');
+        if (!/CATALOGO/.test(cuerpo)) fallos.push('El catálogo entregado no sale de la tabla.');
       }
-      // Y tiene que distinguir «no existe» de «existe pero la petición está mal».
-      if (!/404/.test(cuerpo)) {
-        fallos.push('El sondeo no distingue el 404 del resto: no sabe si el modelo existe.');
+      // La pantalla tampoco puede reordenar ni filtrar: el orden de la tabla es el
+      // orden en que se decide, de más barato a más caro.
+      if (/ordenarFamilia|equilibradoDe|mejorModeloTexto/.test(main)) {
+        fallos.push('La pantalla reordena el catálogo en vez de enseñarlo tal cual.');
       }
       return fallos;
     },
     romper: (ctx) =>
       editando(ctx, 'api/_lib/proveedor.js', (t) =>
-        t.replace(
-          "const cuerpo = ruta === 'generateContent' ? { contents: [] } : { instances: [] };",
-          "const cuerpo = { contents: [{ role: 'user', parts: [{ text: 'ok' }] }] };",
-        ),
+        t.replace('export function modelosDisponibles() {', 'export function modelosDisponibles() {\n  await fetch(base());'),
       ),
   },
 
@@ -562,57 +573,45 @@ export const invariantes = [
   },
 
   {
-    nombre: 'el-director-usa-el-mejor-modelo-disponible',
-    dice: 'El modelo de texto —«el director»— se elige automáticamente como el mejor que el proyecto tenga. Un identificador fijo envejece: el que había se quedó dos generaciones atrás sin que nadie lo notara.',
+    nombre: 'la-eleccion-de-generador-manda',
+    dice: 'El generador que elige la persona es el que se usa, y no se lo cambia nadie. La aplicación llegó a re-elegirlo en cada carga «para subirlo sola», y eso es cambiarle el precio a alguien por debajo sin avisar.',
     async comprobar(ctx) {
-      const { mejorModeloTexto, puntuarModelo } = await import('../../app/config.js');
+      const { CATALOGO, PREDETERMINADO, grafiasDe } = await import('../../comun/modelos.mjs');
       const fallos = [];
 
-      // Un Pro nuevo gana a un Pro viejo; un Pro gana a un Flash de su generación;
-      // y una versión de dos cifras no se lee como menor que una de una.
-      const casos = [
-        [['gemini-2.5-pro', 'gemini-3.1-pro'], 'gemini-3.1-pro'],
-        [['gemini-3.1-flash', 'gemini-3.1-pro'], 'gemini-3.1-pro'],
-        [['gemini-3.1-pro', 'gemini-3.10-pro'], 'gemini-3.10-pro'],
-        [['gemini-4.0-flash', 'gemini-3.1-pro'], 'gemini-4.0-flash'],
-        [['gemini-3.1-pro-preview', 'gemini-3.1-pro'], 'gemini-3.1-pro'],
-      ];
-      for (const [lista, esperado] of casos) {
-        const sale = mejorModeloTexto(lista);
-        if (sale !== esperado) {
-          fallos.push(`De [${lista.join(', ')}] elige ${sale} y debería elegir ${esperado}.`);
+      // Toda familia que se elige tiene fila, y su predeterminado existe.
+      for (const f of ['texto', 'imagen', 'video', 'voz']) {
+        const filas = CATALOGO[f] || [];
+        if (!filas.length) fallos.push(`El catálogo no tiene ningún generador de «${f}».`);
+        else if (!filas.some((x) => x.clave === PREDETERMINADO[f])) {
+          fallos.push(`El predeterminado de «${f}» («${PREDETERMINADO[f]}») no está en el catálogo.`);
         }
       }
-      if (puntuarModelo('') !== 0) fallos.push('Un identificador vacío no puntúa cero.');
 
-      // Y la pantalla tiene que ESCRIBIR esa elección, no solo enseñarla (§7.3).
+      // Una elección válida se respeta exactamente.
+      const suyo = grafiasDe('video', 'veo-3.1-lite');
+      if (!suyo.every((g) => /lite/.test(g))) {
+        fallos.push(`Elegir Veo 3.1 Lite acaba llamando a ${suyo.join(', ')}.`);
+      }
+      // Y una guardada de una versión anterior —un identificador crudo— también.
+      const viejo = grafiasDe('imagen', 'gemini-2.5-flash-image');
+      if (!viejo.includes('gemini-2.5-flash-image')) {
+        fallos.push('Una elección guardada como identificador de Vertex deja de respetarse.');
+      }
+
+      // Y la pantalla no puede re-elegir por encima de lo guardado.
       const main = fuente(ctx, 'app/main.js');
-      if (!/P\.config\.texto\.modelo = mejor/.test(main)) {
-        fallos.push('La elección automática no se guarda en la configuración.');
-      }
-      // Y tiene que REVISARSE en cada carga mientras sea automática. Con la
-      // condición «solo si está vacío», un proyecto guardado ayer se queda con el
-      // mejor modelo de ayer para siempre: §7.2, un arreglo que no llega porque el
-      // valor guardado lo tapa.
-      if (/if \(!P\.config\.texto\.modelo &&/.test(main)) {
-        fallos.push('El modelo solo se elige si está vacío: un proyecto viejo nunca subiría.');
-      }
-      if (!/aMano/.test(main) || !/aMano/.test(fuente(ctx, 'app/config.js'))) {
-        fallos.push('No se distingue la elección automática de la elección a mano.');
-      }
-
-      // El respaldo del catálogo tiene que PREGUNTAR, no traer una lista escrita.
-      const prov = fuente(ctx, 'api/_lib/proveedor.js');
-      if (!/probarCandidatos/.test(prov)) {
-        fallos.push('Sin listado, el catálogo no pregunta a los modelos uno a uno.');
-      }
-      if (/const RESERVA\s*=/.test(prov)) {
-        fallos.push('Queda una lista de modelos escrita a mano: envejece sola y nadie se entera.');
+      const i = main.indexOf('async function cargarModelos');
+      const cuerpo = main.slice(i, main.indexOf('\nfunction ', i));
+      if (!/!cfg\.modelo \|\| !filas\.some/.test(cuerpo)) {
+        fallos.push('La pantalla pisa la elección guardada en vez de respetarla.');
       }
       return fallos;
     },
     romper: (ctx) =>
-      editando(ctx, 'app/main.js', (t) => t.replace('P.config.texto.modelo = mejor;', '')),
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace('if (!cfg.modelo || !filas.some((f) => f.id === cfg.modelo)) {', 'if (true) {'),
+      ),
   },
 
   {

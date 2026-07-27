@@ -34,7 +34,7 @@ export function ponerModelos({ imagen, video }) {
   if (video !== undefined) modelos.video = String(video || '');
 }
 
-const MODO_A_FAMILIA = { texto: 'texto', imagen: 'imagen', 'video.iniciar': 'video' };
+const MODO_A_FAMILIA = { texto: 'texto', imagen: 'imagen', 'video.iniciar': 'video', voz: 'voz' };
 
 export function hayClave() {
   return !!claveAcceso;

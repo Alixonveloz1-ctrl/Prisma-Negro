@@ -16,6 +16,9 @@ import { valor as valorEntorno } from './entorno.js';
 // El mismo escritor de WAV que usa el navegador: una sola forma de audio en todo el
 // sistema, venga del camino que venga.
 import { escribirWav } from '../../comun/audio.mjs';
+// El catálogo de generadores. Fijo y escrito a mano a propósito: ver la cabecera
+// de ese archivo, que cuenta los dos fallos que tuvo sondearlo.
+import { CATALOGO, PREDETERMINADO, grafiasDe, etiquetaDe } from '../../comun/modelos.mjs';
 
 // §6: los generadores de video tienen listas CERRADAS de duración. Se pide la más
 // cercana a lo que dura la locución y se congela el último fotograma para el resto.
@@ -31,6 +34,50 @@ function region() {
 
 function base() {
   return `https://${region()}-aiplatform.googleapis.com/v1/projects/${proyecto()}/locations/${region()}/publishers/google/models`;
+}
+
+/**
+ * Una llamada al modelo que el usuario eligió, probando sus grafías conocidas.
+ *
+ * Vertex publica el mismo modelo con dos nombres —el de preview y el definitivo—
+ * y cuál está vivo cambia con el tiempo sin avisar. El usuario eligió UN
+ * generador, no una grafía: aquí se prueba la preferida y, solo si contesta «eso
+ * no existe» (404) o «no lo tienes» (403), se prueba la siguiente.
+ *
+ * La que conteste se recuerda mientras viva la función, así que esto cuesta un
+ * viaje de más UNA vez, y nunca genera nada de más: un 404 no cobra.
+ *
+ * Cualquier otro error —cuota, contenido rechazado, petición mal formada— se
+ * lanza tal cual. Reintentar con otra grafía ahí solo escondería el motivo real.
+ */
+const GRAFIA_BUENA = new Map();
+
+async function conGrafias(familia, clave, hacer) {
+  const grafias = grafiasDe(familia, clave);
+  if (!grafias.length) throw new Error(`No hay ningún generador de ${familia} en el catálogo.`);
+
+  const recordada = GRAFIA_BUENA.get(`${familia}:${clave}`);
+  const orden = recordada ? [recordada, ...grafias.filter((g) => g !== recordada)] : grafias;
+
+  let ultimo;
+  for (const id of orden) {
+    try {
+      const salida = await hacer(id);
+      GRAFIA_BUENA.set(`${familia}:${clave}`, id);
+      return salida;
+    } catch (e) {
+      if (e.estado !== 404 && e.estado !== 403) throw e;
+      ultimo = e;
+    }
+  }
+  // Se acabaron las grafías. El mensaje dice QUÉ eligió el usuario, no un
+  // identificador que él nunca escribió.
+  const e = new Error(
+    `«${etiquetaDe(familia, clave)}» no está disponible en este proyecto de Google Cloud. ` +
+      `Se probó como: ${grafias.join(', ')}.`,
+  );
+  e.estado = ultimo?.estado || 404;
+  throw e;
 }
 
 async function pedir(url, cuerpo) {
@@ -80,10 +127,8 @@ export async function texto({
   buscarEnInternet = false,
   modelo: pedido = '',
 }) {
-  // El proyecto puede fijar su modelo; si no, manda el del entorno. Poder cambiarlo
-  // desde la pantalla evita tener que tocar variables de entorno y redesplegar solo
-  // para probar un modelo nuevo.
-  const modelo = pedido || process.env.MODELO_TEXTO || 'gemini-2.5-pro';
+  // Lo que eligió el usuario en la pantalla. Sin elección, el mejor director.
+  const eleccion = pedido || process.env.MODELO_TEXTO || PREDETERMINADO.texto;
 
   // Con búsqueda en internet NO se pide salida estructurada: la herramienta de
   // búsqueda y el esquema de respuesta no conviven en todas las versiones del
@@ -103,7 +148,9 @@ export async function texto({
   if (sistema) cuerpo.systemInstruction = { parts: [{ text: sistema }] };
   if (buscarEnInternet) cuerpo.tools = [{ googleSearch: {} }];
 
-  const datos = await pedir(`${base()}/${modelo}:generateContent`, cuerpo);
+  const datos = await conGrafias('texto', eleccion, (id) =>
+    pedir(`${base()}/${id}:generateContent`, cuerpo),
+  );
   const candidato = datos?.candidates?.[0];
   const partes = candidato?.content?.parts || [];
   const salida = partes.map((p) => p.text || '').join('');
@@ -172,7 +219,7 @@ function extraerJson(texto) {
 const TOPE_REFERENCIA_BYTES = 1.2 * 1024 * 1024;
 
 export async function imagen({ instruccion, referencias = [], aspecto = '16:9', modelo: pedido = '' }) {
-  const modelo = pedido || process.env.MODELO_IMAGEN || 'gemini-2.5-flash-image';
+  const eleccion = pedido || process.env.MODELO_IMAGEN || PREDETERMINADO.imagen;
 
   for (const [i, ref] of referencias.entries()) {
     const bytes = Buffer.byteLength(ref.datos || '', 'base64');
@@ -191,13 +238,15 @@ export async function imagen({ instruccion, referencias = [], aspecto = '16:9', 
     { text: instruccion },
   ];
 
-  const datos = await pedir(`${base()}/${modelo}:generateContent`, {
-    contents: [{ role: 'user', parts }],
-    generationConfig: {
-      responseModalities: ['IMAGE'],
-      imageConfig: { aspectRatio: aspecto },
-    },
-  });
+  const datos = await conGrafias('imagen', eleccion, (id) =>
+    pedir(`${base()}/${id}:generateContent`, {
+      contents: [{ role: 'user', parts }],
+      generationConfig: {
+        responseModalities: ['IMAGE'],
+        imageConfig: { aspectRatio: aspecto },
+      },
+    }),
+  );
 
   const salida = (datos?.candidates?.[0]?.content?.parts || []).find((p) => p.inlineData);
   if (!salida) {
@@ -225,7 +274,7 @@ export function duracionMasCercana(segundos) {
 }
 
 export async function videoIniciar({ instruccion, fotograma, segundos = 6, aspecto = '16:9', modelo: pedido = '' }) {
-  const modelo = pedido || process.env.MODELO_VIDEO || 'veo-3.1-generate-preview';
+  const eleccion = pedido || process.env.MODELO_VIDEO || PREDETERMINADO.video;
   const duracion = duracionMasCercana(segundos);
 
   const instancia = { prompt: instruccion };
@@ -236,10 +285,12 @@ export async function videoIniciar({ instruccion, fotograma, segundos = 6, aspec
     };
   }
 
-  const datos = await pedir(`${base()}/${modelo}:predictLongRunning`, {
-    instances: [instancia],
-    parameters: { durationSeconds: duracion, aspectRatio: aspecto, sampleCount: 1 },
-  });
+  const datos = await conGrafias('video', eleccion, (id) =>
+    pedir(`${base()}/${id}:predictLongRunning`, {
+      instances: [instancia],
+      parameters: { durationSeconds: duracion, aspectRatio: aspecto, sampleCount: 1 },
+    }),
+  );
 
   if (!datos.name) throw new Error('El generador de video no devolvió un identificador de operación.');
   return { operacion: cifrar(datos.name), duracion };
@@ -247,8 +298,20 @@ export async function videoIniciar({ instruccion, fotograma, segundos = 6, aspec
 
 export async function videoConsultar(referencia) {
   const nombre = descifrar(referencia);
-  const modelo = process.env.MODELO_VIDEO || 'veo-3.1-generate-preview';
-  const datos = await pedir(`${base()}/${modelo}:fetchPredictOperation`, { operationName: nombre });
+  // El modelo NO se adivina ni se lee de la configuración: viene dentro del propio
+  // identificador de la operación, que es quien sabe con qué generador se arrancó.
+  //
+  // Antes esto usaba un modelo fijo. Mientras solo hubo uno, funcionó. En cuanto se
+  // puede elegir Lite o Fast, preguntar por el clip de Lite en la ruta de la versión
+  // cara es preguntarle a quien no lo tiene: la consulta falla y el clip se queda
+  // colgado sin que nada diga por qué.
+  const enLaOperacion = /\/models\/([^/]+)\//.exec(nombre);
+  if (!enLaOperacion) {
+    throw new Error('El identificador de la operación de video no dice con qué modelo se arrancó.');
+  }
+  const datos = await pedir(`${base()}/${enLaOperacion[1]}:fetchPredictOperation`, {
+    operationName: nombre,
+  });
 
   if (!datos.done) return { listo: false };
   if (datos.error) {
@@ -455,8 +518,8 @@ export const VOCES_GEMINI = [
 const PREFIJO_GEMINI = 'gemini:';
 export const esVozGemini = (v) => String(v || '').startsWith(PREFIJO_GEMINI);
 
-export async function vozGemini({ texto: t, nombreVoz, estilo = '' }) {
-  const modelo = process.env.MODELO_VOZ_GEMINI || 'gemini-2.5-flash-preview-tts';
+export async function vozGemini({ texto: t, nombreVoz, estilo = '', modelo: pedido = '' }) {
+  const eleccion = pedido || process.env.MODELO_VOZ_GEMINI || PREDETERMINADO.voz;
   const voz = String(nombreVoz).replace(PREFIJO_GEMINI, '') || 'Kore';
 
   // §7.9: estas voces interpretan cada llamada por su cuenta. Mandar SIEMPRE la
@@ -465,13 +528,15 @@ export async function vozGemini({ texto: t, nombreVoz, estilo = '' }) {
   // grande, y el usuario puede afinarla desde los ajustes.
   const brief = estilo || 'Narra en tono documental, sobrio y parejo, ritmo constante, sin dramatizar.';
 
-  const datos = await pedir(`${base()}/${modelo}:generateContent`, {
-    contents: [{ role: 'user', parts: [{ text: `${brief}\n\n${t}` }] }],
-    generationConfig: {
-      responseModalities: ['AUDIO'],
-      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voz } } },
-    },
-  });
+  const datos = await conGrafias('voz', eleccion, (id) =>
+    pedir(`${base()}/${id}:generateContent`, {
+      contents: [{ role: 'user', parts: [{ text: `${brief}\n\n${t}` }] }],
+      generationConfig: {
+        responseModalities: ['AUDIO'],
+        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voz } } },
+      },
+    }),
+  );
 
   const parte = (datos?.candidates?.[0]?.content?.parts || []).find((p) => p.inlineData);
   if (!parte) {
@@ -496,11 +561,13 @@ export async function vozGemini({ texto: t, nombreVoz, estilo = '' }) {
 // la ficha de escena.
 
 export async function musica({ instruccion, segundos = 30 }) {
-  const modelo = process.env.MODELO_MUSICA || 'lyria-002';
-  const datos = await pedir(`${base()}/${modelo}:predict`, {
-    instances: [{ prompt: instruccion }],
-    parameters: { sample_count: 1, duration_seconds: Math.min(Math.max(segundos, 10), 120) },
-  });
+  const eleccion = process.env.MODELO_MUSICA || PREDETERMINADO.musica;
+  const datos = await conGrafias('musica', eleccion, (id) =>
+    pedir(`${base()}/${id}:predict`, {
+      instances: [{ prompt: instruccion }],
+      parameters: { sample_count: 1, duration_seconds: Math.min(Math.max(segundos, 10), 120) },
+    }),
+  );
 
   const p = datos?.predictions?.[0];
   const b64 = p?.bytesBase64Encoded || p?.audioContent;
@@ -510,173 +577,27 @@ export async function musica({ instruccion, segundos = 30 }) {
 
 // ── Catálogo de modelos ───────────────────────────────────────────────────────
 //
-// Qué modelos tiene DE VERDAD este proyecto, preguntándoselo al proveedor en vez de
-// llevar una lista escrita a mano que envejece sola.
+// Ya no se sondea nada. La lista está en `comun/modelos.mjs`, escrita a mano, y la
+// cabecera de ese archivo cuenta por qué: sondear enseñaba GRAFÍAS —una por
+// nombre técnico— cuando lo que se elige es un GENERADOR. Salía un generador de
+// imagen habiendo tres, y Veo 3.1 Fast salía dos veces.
 //
-// El listado de modelos de publicador ha cambiado de forma varias veces y no todas
-// las regiones responden a la misma. La primera versión de esto usaba una sola URL
-// y daba 404, y el usuario se quedaba con el selector vacío sin saber por qué. Se
-// prueban las formas conocidas por orden y se usa la primera que conteste; si
-// ninguna lo hace, se devuelve una lista de reserva Y se dice que es de reserva, en
-// vez de dejar el desplegable en blanco.
+// Esto se limita a entregar la tabla tal cual, más cuál está elegido por defecto.
+// No hay ninguna llamada a la nube: los ajustes abren al instante.
 
-function urlsDelCatalogo() {
-  const R = region();
-  const P = proyecto();
-  return [
-    `https://${R}-aiplatform.googleapis.com/v1beta1/projects/${P}/locations/${R}/publishers/google/models`,
-    `https://${R}-aiplatform.googleapis.com/v1/projects/${P}/locations/${R}/publishers/google/models`,
-    `https://${R}-aiplatform.googleapis.com/v1beta1/publishers/google/models`,
-    `https://${R}-aiplatform.googleapis.com/v1/publishers/google/models`,
-  ];
-}
-
-// Los candidatos que se PRUEBAN uno a uno cuando el listado no contesta.
-//
-// Esto no es una lista de lo que hay: es una lista de lo que se pregunta. A cada uno
-// se le manda una petición mínima y se queda el que responde. Preguntar es la única
-// forma de saberlo de verdad —una lista escrita a mano dice lo que yo creía el día
-// que la escribí, y eso fue justo lo que dejó al director dos generaciones atrás—.
-//
-// Que sobre un candidato no cuesta nada: un modelo que no existe contesta 404 al
-// instante. Que falte, sí cuesta. Así que la lista peca de larga a propósito.
-const CANDIDATOS = {
-  texto: [
-    'gemini-3.1-pro', 'gemini-3.1-flash',
-    'gemini-3-pro', 'gemini-3-flash',
-    'gemini-3.0-pro', 'gemini-3.0-flash',
-    'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite',
-    'gemini-2.0-flash', 'gemini-2.0-flash-lite',
-  ],
-  imagen: [
-    'gemini-3-pro-image-preview', 'gemini-3-pro-image',
-    'gemini-3-flash-image-preview', 'gemini-3-flash-image',
-    'gemini-2.5-flash-image', 'gemini-2.0-flash-preview-image-generation',
-    'imagen-4.0-ultra-generate-001', 'imagen-4.0-generate-001', 'imagen-4.0-fast-generate-001',
-    'imagen-3.0-generate-002',
-  ],
-  video: [
-    'veo-3.1-generate-preview', 'veo-3.1-fast-generate-preview', 'veo-3.1-lite-generate-preview',
-    'veo-3.1-generate-001', 'veo-3.1-fast-generate-001', 'veo-3.1-lite-generate-001',
-    'veo-3.0-generate-001', 'veo-3.0-fast-generate-001',
-    'veo-2.0-generate-001',
-  ],
-  voz: [
-    'gemini-3.1-flash-tts-preview', 'gemini-3-flash-tts-preview', 'gemini-3-flash-tts',
-    'gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts',
-  ],
-  musica: ['lyria-002', 'lyria-realtime-exp'],
-};
-
-export async function modelosDisponibles() {
-  const token = await tokenDeAcceso();
-  const intentos = [];
-
-  for (const url of urlsDelCatalogo()) {
-    let r;
-    try {
-      r = await fetch(`${url}?pageSize=400`, { headers: { Authorization: `Bearer ${token}` } });
-    } catch (e) {
-      intentos.push(`${url.split('/v1')[1]}: ${e.message}`);
-      continue;
-    }
-    if (!r.ok) {
-      intentos.push(`…${url.slice(url.indexOf('/v1'))}: HTTP ${r.status}`);
-      continue;
-    }
-    const datos = await r.json().catch(() => ({}));
-    const lista = datos.publisherModels || datos.models || [];
-    const salida = clasificar(lista.map((m) => String(m.name || m.versionId || '').split('/').pop()));
-    if (salida.texto?.length) return { ...salida, deReserva: false };
-    intentos.push(`…${url.slice(url.indexOf('/v1'))}: contestó sin modelos de texto`);
-  }
-
-  // El listado no contesta. Se pregunta a los modelos uno a uno: es más lento pero
-  // es la verdad, no una suposición.
-  const familias = await Promise.all(
-    ['texto', 'imagen', 'video', 'voz', 'musica'].map(async (f) => [f, await probarCandidatos(token, f)]),
-  );
-  return {
-    ...clasificar(familias.flatMap(([, ids]) => ids)),
-    porSondeo: true,
-    // Qué se intentó, para que el fallo se pueda arreglar en vez de solo verse.
-    intentos,
-  };
-}
-
-/**
- * Pregunta a cada candidato si existe, SIN GENERAR NADA.
- *
- * Esto es lo importante: una imagen de prueba por candidato costaría dinero cada vez
- * que alguien abre los ajustes, y un video de prueba costaría mucho. Así que se manda
- * una petición deliberadamente INVÁLIDA y se mira el error:
- *
- *   404 / 403  → el modelo no existe o no lo tienes
- *   400        → el modelo EXISTE y ha rechazado la petición por inválida
- *   200 / 429  → existe
- *
- * Distinguir «no está» de «está pero le mandaste basura» es toda la prueba, y no
- * cuesta un céntimo.
- *
- * Todas van a la vez: en serie serían treinta segundos y esto corre dentro de una
- * función con sesenta.
- */
-async function probarCandidatos(token, familia) {
-  // Cuerpos vacíos a propósito: válidos como JSON, inválidos como petición.
-  const ruta = familia === 'video' ? 'predictLongRunning' : familia === 'musica' ? 'predict' : 'generateContent';
-  const cuerpo = ruta === 'generateContent' ? { contents: [] } : { instances: [] };
-
-  const uno = async (id) => {
-    try {
-      const r = await fetch(`${base()}/${id}:${ruta}`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(cuerpo),
-      });
-      if (r.status === 404 || r.status === 403) return null;
-      // Cualquier otra cosa —incluido el 400 por petición inválida— significa que el
-      // modelo está ahí.
-      return id;
-    } catch {
-      return null;
-    }
-  };
-  return (await Promise.all((CANDIDATOS[familia] || []).map(uno))).filter(Boolean);
-}
-
-function clasificar(ids) {
-  const familia = (n) =>
-    /veo/i.test(n) ? 'video'
-      : /-tts/i.test(n) ? 'voz'
-      : /image|imagen/i.test(n) ? 'imagen'
-      : /lyria|music/i.test(n) ? 'musica'
-      : /gemini/i.test(n) ? 'texto'
-      : null;
-
+export function modelosDisponibles() {
   const salida = {};
-  for (const id of ids) {
-    if (!id) continue;
-    // Fuera lo que no admite peticiones normales: ofrecer un modelo que va a fallar
-    // es peor que no ofrecerlo.
-    if (/-tuning|embedding|@\d|-it$|vision$/i.test(id)) continue;
-    const f = familia(id);
-    if (!f) continue;
-    (salida[f] ||= []).push({ id, etiqueta: id });
-  }
-  for (const f of Object.keys(salida)) {
-    const vistos = new Set();
-    salida[f] = salida[f]
-      .filter((m) => !vistos.has(m.id) && vistos.add(m.id))
-      // Los más nuevos primero: es lo que casi siempre se quiere.
-      .sort((a, b) => b.id.localeCompare(a.id, 'en', { numeric: true }));
+  for (const [familia, filas] of Object.entries(CATALOGO)) {
+    salida[familia] = filas.map((f) => ({ id: f.clave, etiqueta: f.etiqueta }));
   }
   return salida;
 }
 
-/** Cuál se está usando ahora mismo, para poder enseñarlo al lado del selector. */
+/** Cuál se usa si nadie elige. */
 export const modelosEnUso = () => ({
-  texto: process.env.MODELO_TEXTO || 'gemini-2.5-pro',
-  imagen: process.env.MODELO_IMAGEN || 'gemini-2.5-flash-image',
-  video: process.env.MODELO_VIDEO || 'veo-3.1-generate-preview',
-  musica: process.env.MODELO_MUSICA || 'lyria-002',
+  texto: process.env.MODELO_TEXTO || PREDETERMINADO.texto,
+  imagen: process.env.MODELO_IMAGEN || PREDETERMINADO.imagen,
+  video: process.env.MODELO_VIDEO || PREDETERMINADO.video,
+  voz: process.env.MODELO_VOZ_GEMINI || PREDETERMINADO.voz,
+  musica: process.env.MODELO_MUSICA || PREDETERMINADO.musica,
 });

@@ -16,16 +16,15 @@
 
 import { PREDETERMINADO as SEGMENTACION } from '../comun/segmentar.mjs';
 import { ESTILOS, ESTILO_POR_DEFECTO } from '../comun/estilos.mjs';
+import { PREDETERMINADO as MODELO } from '../comun/modelos.mjs';
 
-// Ya no hay catálogo de modelos escrito a mano.
+// Los generadores viven en `comun/modelos.mjs`, en una tabla fija.
 //
-// Lo hubo, y fue el fallo: la lista decía lo que yo creía el día que la escribí,
-// así que el director se quedó dos generaciones atrás sin que nadie lo notara y los
-// generadores de imagen y video ofrecían dos opciones con nombres que no decían ni
-// qué hacían ni cuánto costaban.
-//
-// Ahora se le pregunta al proyecto qué tiene —`modelos.catalogo`— y se ordena por
-// versión y por gama con `ordenarFamilia`, que está al final de este archivo.
+// Aquí solo se guarda CUÁL eligió el usuario, con la clave del catálogo —
+// `nano-banana-2`, `veo-3.1-fast`— y no con el identificador técnico de Vertex.
+// Esa diferencia importa: los identificadores cambian de grafía cuando un modelo
+// sale de preview, y guardar la grafía dejaría la elección apuntando a un nombre
+// muerto. La clave no cambia nunca.
 
 export const PREDETERMINADA = {
   version: 3,
@@ -38,23 +37,14 @@ export const PREDETERMINADA = {
     vertical: false,
   },
 
-  // Un modelo por familia, elegido de los que el proyecto TIENE de verdad. Vacío =
-  // lo elige la herramienta.
-  imagenModelo: { modelo: '', aMano: false },
-  videoModelo: { modelo: '', aMano: false },
-  vozModelo: { modelo: '', aMano: false },
+  // El generador elegido en cada familia, por su clave del catálogo. Vacío = la
+  // primera carga pone el predeterminado. A partir de ahí manda lo que se eligió:
+  // la aplicación no lo cambia sola nunca.
+  imagenModelo: { modelo: MODELO.imagen },
+  videoModelo: { modelo: MODELO.video },
+  vozModelo: { modelo: MODELO.voz },
 
-  texto: {
-    // El modelo que se está usando. Se elige de los que el proyecto TIENE de verdad.
-    modelo: '',
-    // Si lo eligió la persona o lo eligió la herramienta.
-    //
-    // §7.2 en estado puro: si esto no existiera, un proyecto guardado con el mejor
-    // modelo DE ENTONCES se quedaría ahí para siempre, y salir un modelo nuevo no le
-    // llegaría nunca. Mientras sea automático se revisa en cada carga y sube solo;
-    // en cuanto se toca el desplegable, manda la persona y no se toca más.
-    aMano: false,
-  },
+  texto: { modelo: MODELO.texto },
 
   segmentacion: { ...SEGMENTACION },
 
@@ -239,86 +229,4 @@ export function pintarSelector(select, opciones, idActual) {
   }
   // Quien llama DEBE escribir esto en la configuración.
   return elegido;
-}
-
-// ── El mejor modelo de texto ──────────────────────────────────────────────────
-
-export function puntuarModelo(id) {
-  const m = /gemini-(\d+)(?:[.-](\d+))?/i.exec(id || '');
-  if (!m) return 0;
-  const version = Number(m[1]) * 100 + Number(m[2] || 0);
-  const gama = /flash-?lite/i.test(id) ? 1 : /flash/i.test(id) ? 2 : /pro/i.test(id) ? 3 : 0;
-  // Lo experimental empata con su versión pero pierde el desempate.
-  const estable = /preview|exp/i.test(id) ? 0 : 1;
-  return version * 100 + gama * 10 + estable;
-}
-
-/** El mejor de una lista de identificadores. */
-export function mejorModeloTexto(ids) {
-  return [...(ids || [])].sort((a, b) => puntuarModelo(b) - puntuarModelo(a))[0] || '';
-}
-
-/** La etiqueta del desplegable de texto. */
-export function etiquetaModelo(id, mejor) {
-  const bonito = String(id)
-    .replace(/^gemini-/, 'Gemini ')
-    .replace(/-(pro|flash-lite|flash)/i, (_, g) => ' ' + g.replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase()))
-    .replace(/-(preview|exp).*/i, ' (previo)');
-  if (id === mejor) return `${bonito} — el mejor director`;
-  if (/flash-?lite/i.test(id)) return `${bonito} — el más barato`;
-  if (/flash/i.test(id)) return `${bonito} — rápido y barato`;
-  return bonito;
-}
-
-// ── Gama de un modelo ─────────────────────────────────────────────────────────
-//
-// Entre los generadores de imagen y de video de una misma versión hay mucha
-// diferencia de precio, y el identificador no lo dice: «veo-3.1-lite-generate-001»
-// y «veo-3.1-generate-001» se parecen y cuestan cosas muy distintas. La etiqueta
-// tiene que decirlo, porque es la decisión que se toma en ese desplegable.
-
-export function gamaDe(id) {
-  const s = String(id).toLowerCase();
-  if (/-lite/.test(s)) return { nivel: 1, etiqueta: 'el más económico' };
-  if (/-fast/.test(s)) return { nivel: 2, etiqueta: 'equilibrado' };
-  if (/-ultra|-pro/.test(s)) return { nivel: 4, etiqueta: 'máxima calidad' };
-  if (/-flash/.test(s)) return { nivel: 2, etiqueta: 'rápido y barato' };
-  return { nivel: 3, etiqueta: 'calidad alta' };
-}
-
-export function versionDe(id) {
-  const m = /(\d+)(?:[.-](\d+))?/.exec(String(id).replace(/^[a-z-]+/i, '')) ;
-  return m ? Number(m[1]) * 100 + Number(m[2] || 0) : 0;
-}
-
-/**
- * Ordena una familia: primero la versión, después la gama.
- * Y etiqueta marcando la generación anterior, que es lo que uno quiere evitar sin
- * darse cuenta.
- */
-export function ordenarFamilia(ids) {
-  const maxVersion = Math.max(0, ...ids.map(versionDe));
-  // La gama más alta DENTRO de la versión más nueva es «máxima calidad», se llame
-  // «pro» o no lleve sufijo: en Veo la cara es la que no lleva apellido.
-  const topeGama = Math.max(0, ...ids.filter((i) => versionDe(i) === maxVersion).map((i) => gamaDe(i).nivel));
-  return [...ids]
-    .sort((a, b) => versionDe(b) - versionDe(a) || gamaDe(b).nivel - gamaDe(a).nivel)
-    .map((id) => {
-      const g = gamaDe(id);
-      const viejo = versionDe(id) < maxVersion;
-      if (!viejo && g.nivel === topeGama && topeGama >= 3) g.etiqueta = 'máxima calidad';
-      const bonito = id
-        .replace(/^veo-/, 'Veo ')
-        .replace(/^gemini-/, 'Gemini ')
-        .replace(/^imagen-/, 'Imagen ')
-        .replace(/-generate.*$|-preview$/i, '')
-        .replace(/-(lite|fast|pro|ultra|flash|image|tts)/gi, (_, w) => ' ' + w.replace(/^./, (c) => c.toUpperCase()));
-      return { id, etiqueta: `${bonito} — ${viejo ? 'generación anterior' : g.etiqueta}`, viejo, gama: g.nivel };
-    });
-}
-
-/** El equilibrado de una familia: la gama media de la versión más nueva. */
-export function equilibradoDe(ids) {
-  const nuevos = ordenarFamilia(ids).filter((m) => !m.viejo);
-  return (nuevos.find((m) => m.gama === 2) || nuevos[Math.floor(nuevos.length / 2)] || nuevos[0])?.id || '';
 }
