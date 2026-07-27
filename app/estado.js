@@ -90,13 +90,95 @@ export function sanear(bruto) {
     ? p.piezas.map((z, n) => sanearPieza(z, n, p))
     : [piezaVacia(p.id, p.titulo)];
 
+  // Mudanza de los proyectos de antes: el caso, el tema y las fichas vivían en el
+  // proyecto. Se pasan a la primera pieza, que es de donde eran. Solo si esa pieza
+  // no los trae ya, para no pisar nada.
+  const primera = p.piezas[0];
+  if (!primera.caso && p.caso) primera.caso = p.caso;
+  if (!primera.tema && p.tema) primera.tema = p.tema;
+  if (!primera.fichas.length && p.fichas.length) primera.fichas = p.fichas;
+  if (!primera.creado) primera.creado = p.creado;
+  for (const z of p.piezas) z.fichas = z.fichas.map(sanearFicha);
+
+  // Cuál se está mirando. Si apunta a una que ya no está, la primera.
+  p.piezaActiva = p.piezas.some((z) => z.id === p.piezaActiva) ? p.piezaActiva : p.piezas[0].id;
+
   return p;
 }
 
+/**
+ * Abre una pieza nueva y la deja activa. La anterior no se toca: queda en el
+ * historial, con su caso, sus fichas y su guion intactos.
+ *
+ * `vieneDe` marca una continuación: hereda el tratamiento del padre —para que se
+ * vea y suene igual— y le da derecho a reutilizar su material (§3).
+ */
+export function abrirPieza(proyecto, { caso = null, titulo = '', vieneDe = null } = {}) {
+  const n = proyecto.piezas.length + 1;
+  const z = piezaVacia(idPieza(n), titulo || caso?.titulo || 'Sin título');
+  z.creado = Date.now();
+  z.caso = caso;
+  z.tema = caso ? `${caso.titulo}. ${caso.sinopsis || ''}`.trim() : '';
+  z.vieneDe = vieneDe;
+
+  if (vieneDe) {
+    const padre = proyecto.piezas.find((x) => x.id === vieneDe);
+    if (padre) {
+      // La continuación es del MISMO caso: hereda su caso, sus fichas y su
+      // tratamiento. Volver a investigar lo mismo sería pagar dos veces por lo que
+      // ya se sabe, y un tratamiento nuevo haría que la segunda parte no se
+      // pareciera a la primera.
+      z.caso = caso || padre.caso;
+      z.tema = z.tema || padre.tema;
+      z.fichas = [...padre.fichas];
+      z.tratamiento = padre.tratamiento;
+      z.titulo = titulo || `${padre.titulo} · continuación`;
+    }
+  }
+
+  proyecto.piezas.push(z);
+  proyecto.piezaActiva = z.id;
+  return z;
+}
+
+/** La cadena de piezas de la que esta desciende, de la más cercana a la más lejana. */
+export function ascendencia(proyecto, pieza) {
+  const salida = [];
+  const vistos = new Set();
+  let actual = pieza;
+  while (actual?.vieneDe && !vistos.has(actual.vieneDe)) {
+    vistos.add(actual.vieneDe);
+    actual = proyecto.piezas.find((z) => z.id === actual.vieneDe);
+    if (actual) salida.push(actual);
+  }
+  return salida;
+}
+
+/**
+ * Una pieza es UN CASO, entero.
+ *
+ * Antes el caso, las fichas y el tema vivían en el proyecto y las piezas solo
+ * llevaban el guion. Con eso, elegir un caso nuevo dejaba las fichas del anterior
+ * donde estaban, la investigación siguiente se FUSIONABA con ellas y el director
+ * acababa leyendo dos casos a la vez. Se vio en pantalla: entre los cuidados de un
+ * caso salió «no mezclar este caso con los datos sobre el incendio de la discoteca
+ * Kiss», que era el caso de antes.
+ *
+ * Ahora cada caso trae lo suyo dentro. Elegir otro caso abre otra pieza, y la
+ * anterior queda en el historial en vez de contaminar.
+ */
 function piezaVacia(id, titulo) {
   return {
     id,
     titulo: titulo || '',
+    // Lo del caso, que antes estaba en el proyecto.
+    caso: null,
+    tema: '',
+    fichas: [],
+    creado: 0,
+    // Si esta pieza continúa a otra: de ahí salen el tratamiento heredado y el
+    // material que se puede reutilizar en vez de volver a pagarlo.
+    vieneDe: null,
     guion: '',
     tomas: [],
     escenas: [],
@@ -113,6 +195,9 @@ function sanearPieza(bruto, n, proyecto) {
   z.guion = String(z.guion || '');
   z.tomas = Array.isArray(z.tomas) ? z.tomas.map((t, i) => sanearToma(t, i, proyecto)) : [];
   z.escenas = Array.isArray(z.escenas) ? z.escenas : [];
+  z.fichas = Array.isArray(z.fichas) ? z.fichas : [];
+  z.tema = String(z.tema || '');
+  z.creado = Number(z.creado) || 0;
   return z;
 }
 

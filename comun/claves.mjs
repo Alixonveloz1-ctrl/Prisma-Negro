@@ -115,5 +115,12 @@ export function tomaDelFotograma(toma, tomas) {
 
 /** La clave del fotograma que le toca a una toma, con la reutilización ya resuelta. */
 export function claveFotograma(pieza, toma, tomas) {
+  // Una toma heredada apunta a la imagen de OTRA PIEZA: es una continuación que
+  // reutiliza un plano del caso anterior. La clave ya viene entera —lleva su pieza
+  // dentro— así que se usa tal cual y no se compone.
+  //
+  // Se mira ANTES que `reusa` a propósito: heredar es más fuerte que reusar dentro
+  // de la pieza, porque la imagen ya existe y ya está pagada.
+  if (toma.heredado) return toma.heredado;
   return claveToma(pieza, tomaDelFotograma(toma, tomas).i, 'img');
 }

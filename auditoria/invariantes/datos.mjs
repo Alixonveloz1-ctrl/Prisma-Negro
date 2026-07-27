@@ -500,4 +500,77 @@ export const invariantes = [
         t.replace("if (candidato?.finishReason === 'MAX_TOKENS') {", 'if (false) {'),
       ),
   },
+
+  {
+    nombre: 'cada-caso-lleva-sus-fichas-dentro',
+    dice: 'El caso, el tema y las fichas son de la pieza, no del proyecto. Estando en el proyecto, elegir un caso nuevo dejaba las fichas del anterior y la investigación se fusionaba con ellas: en pantalla salió «no mezclar este caso con los datos de la discoteca Kiss», que era el caso de antes.',
+    async comprobar(ctx) {
+      const estado = await import('../../app/estado.js');
+      const fallos = [];
+
+      // Un proyecto de los de antes migra: lo del proyecto pasa a su pieza.
+      const viejo = estado.sanear({
+        id: 'p01',
+        caso: { titulo: 'Caso A', sinopsis: 'x' },
+        fichas: [{ afirmacion: 'a', fuente: 's' }],
+        piezas: [{ id: 'p01', titulo: 'A' }],
+      });
+      if (viejo.piezas[0].caso?.titulo !== 'Caso A') fallos.push('El caso no baja a su pieza al migrar.');
+      if (viejo.piezas[0].fichas.length !== 1) fallos.push('Las fichas no bajan a su pieza al migrar.');
+
+      // Y abrir otro caso NO toca el anterior.
+      const nuevo = estado.abrirPieza(viejo, { caso: { titulo: 'Caso B', sinopsis: 'y' } });
+      if (nuevo.fichas.length) fallos.push(`El caso nuevo nace con ${nuevo.fichas.length} fichas del anterior.`);
+      if (viejo.piezas[0].fichas.length !== 1) fallos.push('Abrir un caso nuevo se llevó las fichas del anterior.');
+      if (viejo.piezaActiva !== nuevo.id) fallos.push('El caso nuevo no queda abierto.');
+
+      // La continuación SÍ hereda: volver a investigar lo mismo es pagar dos veces.
+      const cont = estado.abrirPieza(viejo, { vieneDe: viejo.piezas[0].id });
+      if (cont.fichas.length !== 1) fallos.push('Una continuación no hereda las fichas de su caso.');
+      if (estado.ascendencia(viejo, cont)[0]?.id !== viejo.piezas[0].id) {
+        fallos.push('Una continuación no sabe de qué pieza viene.');
+      }
+      // Y la pantalla tiene que leer las fichas DE LA PIEZA.
+      if (/\bP\.fichas\b/.test(fuente(ctx, 'app/main.js'))) {
+        fallos.push('La pantalla sigue leyendo las fichas del proyecto.');
+      }
+      return fallos;
+    },
+    romper: (ctx) => editando(ctx, 'app/main.js', (t) => t.replace('pieza().fichas', 'P.fichas')),
+  },
+
+  {
+    nombre: 'una-continuacion-no-vuelve-a-pagar-lo-que-ya-existe',
+    dice: 'Una continuación del mismo caso vuelve a los mismos sitios. Regenerar esos planos es pagar dos veces por la misma imagen, y encima sale distinta —que en un documental se nota—.',
+    comprobar(ctx) {
+      const { heredables, planificarImagenes: planificar, claveFotograma } = ctx.fn;
+      const fallos = [];
+      const plano = (lugar, enc, luz) => ({ lugar, encuadre: enc, luz, descripcion: 'd', sujetos: [] });
+
+      const padre = { id: 'p01', titulo: 'Padre', tomas: [{ i: 0, imagen: 'ok', plano: plano('la fachada', 'plano general', 'noche') }] };
+      const tomas = [
+        { i: 0, imagen: null, plano: plano('la fachada', 'plano general', 'noche') },
+        { i: 1, imagen: null, plano: plano('la fachada', 'plano general', 'día') },
+      ];
+      const h = heredables(tomas, [padre]);
+      if (h.length !== 1 || h[0].i !== 0) fallos.push(`Heredan ${h.length} tomas y debería heredar solo la que coincide.`);
+
+      tomas[0].heredado = 'p01/t000/img';
+      tomas[0].imagen = 'ok';
+      // Ni con «rehacer todo» se vuelve a generar: es lo que la hace útil.
+      if (planificar(tomas, { soloLasQueFaltan: false }).some((t) => t.i === 0)) {
+        fallos.push('Una toma heredada se vuelve a generar, y a pagar.');
+      }
+      // Y la hoja tiene que abrir la imagen de la OTRA pieza.
+      if (claveFotograma('p02', tomas[0], tomas) !== 'p01/t000/img') {
+        fallos.push(`La toma heredada apunta a ${claveFotograma('p02', tomas[0], tomas)} en vez de a la del padre.`);
+      }
+      return fallos;
+    },
+    // Se rompe como si `claveFotograma` no mirara lo heredado: la continuación
+    // apuntaría a una imagen de su propia pieza, que no existe, y habría que
+    // generarla otra vez.
+    romper: (ctx) =>
+      conFuncion(ctx, 'claveFotograma', (pieza, toma) => `${pieza}/t${String(toma.i).padStart(3, '0')}/img`),
+  },
 ];

@@ -34,11 +34,48 @@ import * as local from '../local.js';
  */
 export function planificar(tomas, { soloLasQueFaltan = true } = {}) {
   return tomas.filter((t) => {
+    // Heredada de otra pieza: la imagen ya existe y ya está pagada. Ni con
+    // «rehacer todo» se vuelve a generar, que es justo lo que la hace útil.
+    if (t.heredado) return false;
     if (t.reusa !== null && t.reusa !== undefined) return false;
     if (!t.plano) return false;
     return soloLasQueFaltan ? t.imagen !== 'ok' : true;
   });
 }
+
+/**
+ * Qué planos de las piezas anteriores sirven para esta.
+ *
+ * Una continuación del mismo caso vuelve a los mismos sitios: la fachada, el
+ * pasillo, la carretera. Volver a generarlos es pagar dos veces por la misma
+ * imagen —y encima sale distinta, que en un documental se nota—.
+ *
+ * Se compara el LUGAR y el ENCUADRE, que es lo que hace que dos planos se vean
+ * iguales. La luz no: la misma fachada de noche y de día es otro plano.
+ */
+export function heredables(tomas, piezasAnteriores) {
+  const antes = new Map();
+  for (const z of piezasAnteriores) {
+    for (const t of z.tomas || []) {
+      if (t.imagen !== 'ok' || !t.plano) continue;
+      const k = huellaDePlano(t);
+      if (k && !antes.has(k)) antes.set(k, { pieza: z.id, i: t.i, titulo: z.titulo });
+    }
+  }
+  const salida = [];
+  for (const t of tomas) {
+    if (t.heredado || t.imagen === 'ok' || !t.plano) continue;
+    const c = antes.get(huellaDePlano(t));
+    if (c) salida.push({ i: t.i, de: c });
+  }
+  return salida;
+}
+
+const huellaDePlano = (t) =>
+  [t.plano?.lugar, t.plano?.encuadre, t.plano?.luz]
+    .map((x) => String(x || '').trim().toLowerCase())
+    .filter(Boolean)
+    .join(' · ');
 
 /**
  * Elige las referencias de una toma (§4.6).

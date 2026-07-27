@@ -32,6 +32,7 @@ import * as metadatos from './fases/metadatos.js';
 import * as montajeFase from './fases/montaje.js';
 import * as previa from './previa.js';
 import * as local from './local.js';
+import { claveToma } from '../comun/claves.mjs';
 
 const $ = (id) => document.getElementById(id);
 
@@ -118,7 +119,16 @@ function accion(boton, hacer, donde = 'paso4') {
 }
 
 const guardar = () => estado.guardar(P);
-const pieza = () => P.piezas[0];
+const pieza = () => estado.piezaDe(P, P.piezaActiva);
+
+/**
+ * Las fichas, el caso y el tema son DE LA PIEZA, no del proyecto.
+ *
+ * Estaban en el proyecto, y por eso elegir un caso nuevo dejaba las fichas del
+ * anterior en su sitio: la investigación siguiente se fusionaba con ellas y el
+ * director leía dos casos a la vez.
+ */
+const fichas = () => pieza().fichas;
 
 // ── Acceso ────────────────────────────────────────────────────────────────────
 
@@ -320,7 +330,7 @@ function pintarTodo() {
   pintarFiltros();
   $('titulo').value = P.titulo;
   $('guion').value = pieza().guion;
-  $('nombre-proyecto').textContent = P.caso?.titulo || P.titulo;
+  $('nombre-proyecto').textContent = pieza().caso?.titulo || P.titulo;
   $('cabecera-movil').textContent = `${pieza().tomas.length} tomas`;
   pintarCasoElegido();
   pintarFichas();
@@ -330,6 +340,14 @@ function pintarTodo() {
   pintarAjustes();
   pintarPasos();
   pintarPestanas();
+  pintarHistorial();
+  // La previa preparada es de la pieza que estaba abierta: al cambiar de caso ya no
+  // vale, y dejarla puesta enseñaría el documental anterior como si fuera este.
+  if (preparada && preparada.hoja?.pieza !== pieza().id) {
+    preparada = null;
+    pintarPorTipo();
+    pintarTiras();
+  }
 }
 
 /**
@@ -342,13 +360,13 @@ function pintarTodo() {
 function pintarPasos() {
   const t = pieza().tomas;
   const hay = {
-    caso: !!P.caso,
+    caso: !!pieza().caso,
     guion: !!pieza().guion.trim() && t.length > 0,
     generado: t.length > 0 && t.every((x) => x.audio === 'ok') && t.every((x) => x.reusa !== null || x.imagen === 'ok'),
     montado: !!pieza().montaje,
   };
 
-  hay.fichas = P.fichas.length > 0;
+  hay.fichas = pieza().fichas.length > 0;
   hay.tratamiento = !!pieza().tratamiento;
 
   const marcar = (n, hecho, listo) => {
@@ -443,7 +461,7 @@ function pintarCasos() {
     casos
       .map(
         (c, i) =>
-          `<button class="caso${P.caso?.titulo === c.titulo ? ' elegido' : ''}" data-caso="${i}">` +
+          `<button class="caso${pieza().caso?.titulo === c.titulo ? ' elegido' : ''}" data-caso="${i}">` +
           `<div class="cq"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="width:13px;height:13px"><path d="M20 6L9 17l-5-5"/></svg></div>` +
           `<div class="lam">${escapar(c.imagenSugerida.slice(0, 110))}</div>` +
           `<div class="cb"><b>${escapar(c.titulo)}</b><p>${escapar(c.gancho)}</p>` +
@@ -457,20 +475,39 @@ function pintarCasos() {
   document.querySelectorAll('[data-caso]').forEach((b) => {
     b.onclick = async () => {
       const c = casos[Number(b.dataset.caso)];
-      P.caso = c;
-      P.tema = `${c.titulo}. ${c.sinopsis}`;
+      const z = pieza();
+
+      // Elegir un caso ABRE UNA PIEZA NUEVA, salvo que la de ahora esté sin
+      // estrenar. Antes se escribía encima: quedaban las fichas del caso anterior
+      // y la investigación siguiente se fusionaba con ellas, así que el director
+      // acababa leyendo dos casos a la vez. La pieza anterior se queda en el
+      // historial, entera, por si se quiere volver.
+      const virgen = !z.caso && !z.fichas.length && !z.guion;
+      if (virgen) {
+        z.caso = c;
+        z.tema = `${c.titulo}. ${c.sinopsis}`;
+        z.titulo = c.titulo;
+        if (!z.creado) z.creado = Date.now();
+      } else {
+        estado.abrirPieza(P, { caso: c });
+      }
       P.titulo = c.titulo;
-      pieza().titulo = c.titulo;
       await guardar();
       pintarCasos();
       pintarTodo();
-      avisar('paso2', `Caso elegido: ${c.titulo}. Ya puedes generar el guion.`, 'bueno');
+      avisar(
+        'paso2',
+        virgen
+          ? `Caso elegido: ${c.titulo}. Ya puedes investigarlo.`
+          : `Caso nuevo: ${c.titulo}. El anterior queda guardado en el historial.`,
+        'bueno',
+      );
     };
   });
 }
 
 function pintarCasoElegido() {
-  const c = P.caso;
+  const c = pieza().caso;
   $('caso-elegido').innerHTML = c
     ? `<div class="ficha"><div class="cab">${escapar(c.cuando)} · ${escapar(c.donde)}` +
       `${c.documentado ? '<span class="pastilla p-ok">documentado</span>' : '<span class="pastilla p-aviso">poco documentado</span>'}</div>` +
@@ -480,19 +517,19 @@ function pintarCasoElegido() {
         : '') +
       `</div>`
     : '<p class="nota">Todavía no has elegido un caso. Ve a Inicio y busca casos.</p>';
-  $('cuenta-fichas').textContent = P.fichas.length ? `${P.fichas.length} fichas` : '';
+  $('cuenta-fichas').textContent = pieza().fichas.length ? `${pieza().fichas.length} fichas` : '';
 }
 
 // ── Paso 2: fichas y guion ────────────────────────────────────────────────────
 
 async function buscarFichas(mas) {
-  if (!P.caso) throw new Error('Elige un caso primero, en Inicio.');
+  if (!pieza().caso) throw new Error('Elige un caso primero, en Inicio.');
   const nuevas = await investigacion.investigar({
-    tema: P.tema,
+    tema: pieza().tema,
     cuantas: 12,
-    yaTengo: mas ? P.fichas : [],
+    yaTengo: mas ? pieza().fichas : [],
   });
-  P.fichas = mas ? [...P.fichas, ...nuevas] : nuevas;
+  pieza().fichas = mas ? [...pieza().fichas, ...nuevas] : nuevas;
   await guardar();
   pintarFichas();
   pintarReparto();
@@ -503,8 +540,8 @@ accion('b-fichas', () => buscarFichas(false), 'investigacion');
 accion('b-mas-fichas', () => buscarFichas(true), 'investigacion');
 
 function pintarFichas() {
-  $('fichas').innerHTML = P.fichas.length
-    ? P.fichas
+  $('fichas').innerHTML = pieza().fichas.length
+    ? pieza().fichas
         .map(
           (f) =>
             `<div class="ficha"><div class="cab">` +
@@ -529,17 +566,17 @@ function pintarFichas() {
 accion(
   'b-investigar-fondo',
   async () => {
-    if (!P.caso) throw new Error('Elige un caso primero, en el paso 1.');
+    if (!pieza().caso) throw new Error('Elige un caso primero, en el paso 1.');
 
     const r = await colaInvestiga.ejecutar(
       'investigación',
       investigacion.ANGULOS_DE_INVESTIGACION,
-      (angulo, _i, senal) => investigacion.investigarAngulo({ caso: P.caso, angulo, senal }),
+      (angulo, _i, senal) => investigacion.investigarAngulo({ caso: pieza().caso, angulo, senal }),
       {
         // Cada ángulo se guarda al terminar: se puede detener a mitad y lo buscado
         // no se pierde ni se vuelve a pagar (§4).
         alTerminarUno: async (fichas) => {
-          P.fichas = investigacion.fusionarFichas([P.fichas, fichas]);
+          pieza().fichas = investigacion.fusionarFichas([pieza().fichas, fichas]);
           await guardar();
           pintarFichas();
           pintarReparto();
@@ -550,17 +587,17 @@ accion(
     pintarCasoElegido();
     pintarPasos();
     if (r.fallos.length) {
-      avisar('paso2', `${P.fichas.length} fichas. ${r.fallos.length} ángulos fallaron; vuelve a darle.`, 'malo');
+      avisar('paso2', `${pieza().fichas.length} fichas. ${r.fallos.length} ángulos fallaron; vuelve a darle.`, 'malo');
       return registro('paso2', r.fallos.map((f) => `· ${f.error}`));
     }
-    avisar('paso2', `${P.fichas.length} fichas de ${r.total} ángulos. Ya puedes generar el guion.`, 'bueno');
+    avisar('paso2', `${pieza().fichas.length} fichas de ${r.total} ángulos. Ya puedes generar el guion.`, 'bueno');
   },
   'paso2',
 );
 
 /** De qué tipo son las fuentes que sostienen el documental. */
 function pintarReparto() {
-  const r = investigacion.reparto(P.fichas);
+  const r = investigacion.reparto(pieza().fichas);
   const NOMBRE = {
     oficial: 'oficiales', judicial: 'judiciales', policial: 'policiales',
     prensa: 'prensa', academica: 'académicas', testimonio: 'testimonios', otra: 'otras',
@@ -589,8 +626,8 @@ accion(
   'b-dirigir-pieza',
   async () => {
     const tr = await director.dirigirPieza({
-      caso: P.caso,
-      fichas: P.fichas,
+      caso: pieza().caso,
+      fichas: pieza().fichas,
       minutos: Number($('minutos').value) || 10,
     });
     pieza().tratamiento = tr;
@@ -638,18 +675,18 @@ function pintarTratamiento() {
 accion(
   'b-generar-guion',
   async () => {
-    if (!P.caso) throw new Error('Elige un caso primero.');
-    if (!P.fichas.length) {
+    if (!pieza().caso) throw new Error('Elige un caso primero.');
+    if (!pieza().fichas.length) {
       throw new Error(
         'Todavía no hay fichas. Dale a «Investigar a fondo» primero: el guion se ' +
           'escribe a partir de ellas, y sin fichas sería opinión, no documental.',
       );
     }
     if (!pieza().tratamiento) throw new Error('Dirige la pieza primero: el guion sale del tratamiento.');
-    avisar('paso3', `${P.fichas.length} fichas. Escribiendo el guion…`);
+    avisar('paso3', `${pieza().fichas.length} fichas. Escribiendo el guion…`);
     const texto = await guionFase.escribirGuion({
-      tema: P.tema,
-      fichas: P.fichas,
+      tema: pieza().tema,
+      fichas: pieza().fichas,
       minutos: Number($('minutos').value) || 10,
       tratamiento: pieza().tratamiento,
       alAvanzar: (n, total) => avisar('paso3', `Escribiendo el acto ${n} de ${total}…`),
@@ -662,23 +699,28 @@ accion(
     pieza().escenas = r.escenas;
     await guardar();
     pintarTodo();
+    // La conclusión va DONDE FUE EL PROGRESO.
+    //
+    // Iba a la caja del paso 2 mientras el progreso escribía en la del 3, así que
+    // arriba ponía «terminado» y abajo seguía poniendo «escribiendo el acto 4 de
+    // 4…» para siempre. Un aviso que no se limpia solo es un aviso que miente.
     avisar(
-      'paso2',
-      `Guion de ${guionFase.contarPalabras(texto)} palabras (~${Math.round(guionFase.contarPalabras(texto) / 145)} min), ` +
-        `partido en ${r.tomas.length} tomas y ${r.escenas.length} escenas. ` +
+      'paso3',
+      `Guion listo: ${guionFase.contarPalabras(texto)} palabras (~${Math.round(guionFase.contarPalabras(texto) / 145)} min), ` +
+        `${r.tomas.length} tomas y ${r.escenas.length} escenas. ` +
         `Léelo en Guion antes de generar: es el insumo del que sale todo.`,
       'bueno',
     );
   },
-  'paso2',
+  'paso3',
 );
 
 accion(
   'b-escribir',
   async () => {
     const texto = await guionFase.escribirGuion({
-      tema: P.tema,
-      fichas: P.fichas,
+      tema: pieza().tema,
+      fichas: pieza().fichas,
       minutos: Number($('minutos').value) || 10,
       tratamiento: pieza().tratamiento,
       alAvanzar: (n, total) => avisar('guion', `Escribiendo el acto ${n} de ${total}…`),
@@ -793,7 +835,7 @@ accion(
     const tomas = await direccion.dirigir({
       tomas: pieza().tomas,
       escenas: pieza().escenas,
-      tema: P.tema,
+      tema: pieza().tema,
       config: P.config,
       tratamiento: pieza().tratamiento,
       // Son varias llamadas y algunas tardan: sin esto parece que se ha colgado.
@@ -829,7 +871,7 @@ async function asegurarDireccion() {
   pieza().tomas = await direccion.dirigir({
     tomas: pieza().tomas,
     escenas: pieza().escenas,
-    tema: P.tema,
+    tema: pieza().tema,
     config: P.config,
     tratamiento: pieza().tratamiento,
     alAvanzar: (hechas, total) => avisar('paso4', `Dirigiendo… ${hechas} de ${total} tomas.`),
@@ -1242,6 +1284,117 @@ async function rehacerMusica(n) {
   avisar('previa', 'Música rehecha. Vuelve a preparar para oírla.', 'bueno');
 }
 
+/**
+ * El historial de casos.
+ *
+ * Cada caso es una pieza y todas se quedan. Elegir un caso nuevo ya no pisa el
+ * anterior: se puede volver a él, mirarlo, o pedirle una continuación.
+ */
+function pintarHistorial() {
+  const caja = $('historial');
+  if (!caja) return;
+  const piezas = [...P.piezas].sort((a, b) => (b.creado || 0) - (a.creado || 0));
+  $('cuenta-historial').textContent = piezas.length > 1 ? `${piezas.length}` : '';
+
+  caja.className = 'hist';
+  caja.innerHTML = '';
+  for (const z of piezas) {
+    const padres = estado.ascendencia(P, z);
+    const palabras = (z.guion || '').trim() ? guionFase.contarPalabras(z.guion) : 0;
+    const partes = [
+      z.fichas.length ? `${z.fichas.length} fichas` : 'sin investigar',
+      palabras ? `${palabras} palabras` : 'sin guion',
+      z.tomas.length ? `${z.tomas.length} tomas` : '',
+      z.tomas.filter((t) => t.imagen === 'ok').length ? `${z.tomas.filter((t) => t.imagen === 'ok').length} imágenes` : '',
+    ].filter(Boolean);
+
+    const b = document.createElement('button');
+    if (z.id === P.piezaActiva) b.className = 'on';
+    b.innerHTML =
+      `<b>${escapar(z.titulo || z.caso?.titulo || 'Sin título')}</b>` +
+      `<span>${padres.length ? `continuación de «${escapar(padres[0].titulo)}» · ` : ''}${partes.join(' · ')}</span>`;
+    b.onclick = async () => {
+      P.piezaActiva = z.id;
+      P.titulo = z.titulo || P.titulo;
+      await guardar();
+      pintarTodo();
+      avisar('historial', `Abierto: ${z.titulo}.`, 'bueno');
+    };
+    caja.appendChild(b);
+  }
+}
+
+/**
+ * Una continuación: otro video del MISMO caso.
+ *
+ * Hereda el caso, las fichas y el tratamiento del padre. Lo primero porque volver
+ * a investigar lo mismo es pagar dos veces por lo que ya se sabe; lo último para
+ * que la segunda parte se vea y suene como la primera.
+ *
+ * Y el material del padre queda a mano para reutilizarlo: la imagen de un lugar
+ * que ya salió no se paga otra vez (§3).
+ */
+accion(
+  'b-continuacion',
+  async () => {
+    const padre = pieza();
+    if (!padre.caso) throw new Error('Este caso todavía no tiene nada. Elige un caso primero.');
+    if (!padre.guion.trim()) {
+      throw new Error('Escribe el guion de este caso antes de pedirle una continuación.');
+    }
+    const z = estado.abrirPieza(P, { vieneDe: padre.id });
+    await guardar();
+    pintarTodo();
+    avisar(
+      'historial',
+      `Abierta la continuación de «${padre.titulo}» con ${z.fichas.length} fichas y el ` +
+        `mismo tratamiento. Escribe el guion: el director sabe lo que ya se contó.`,
+      'bueno',
+    );
+  },
+  'historial',
+);
+
+/**
+ * Marca las tomas cuyo plano ya existe en una pieza anterior.
+ *
+ * No genera nada ni gasta: solo apunta a lo que ya está en el almacén. Se hace a
+ * mano y con el número delante porque es una decisión —dos planos «parecidos» no
+ * siempre valen— y porque enseñar cuántas imágenes te ahorras es lo que hace que
+ * merezca la pena mirarlo.
+ */
+accion(
+  'b-reutilizar',
+  async () => {
+    const z = pieza();
+    if (!z.tomas.length) throw new Error('Este caso todavía no tiene tomas dirigidas.');
+    const padres = estado.ascendencia(P, z);
+    if (!padres.length) {
+      throw new Error('Este caso no continúa a ninguno: no hay imágenes anteriores que reutilizar.');
+    }
+
+    const puede = imagenFase.heredables(z.tomas, padres);
+    if (!puede.length) {
+      return avisar('historial', 'Ningún plano de este guion coincide con los del caso anterior.', 'bueno');
+    }
+    for (const { i, de } of puede) {
+      const t = z.tomas.find((x) => x.i === i);
+      if (t) {
+        t.heredado = claveToma(de.pieza, de.i, 'img');
+        t.imagen = 'ok';
+      }
+    }
+    await guardar();
+    pintarTodo();
+    avisar(
+      'historial',
+      `${puede.length} tomas reutilizan una imagen del caso anterior. Esas ya no se generan ni se pagan.`,
+      'bueno',
+    );
+  },
+  'historial',
+);
+
 function pintarTiras() {
   const tomas = preparada?.tomas || [];
   $('cuenta-previa').textContent = tomas.length ? `${tomas.length}` : '';
@@ -1284,7 +1437,7 @@ function pintarTiras() {
 const PASOS_AUTO = [
   {
     nombre: 'investigación',
-    hace_falta: () => !P.fichas.length,
+    hace_falta: () => !pieza().fichas.length,
     hacer: () => $('b-investigar-fondo').click(),
   },
   { nombre: 'dirección', hace_falta: () => !pieza().tratamiento, hacer: () => $('b-dirigir-pieza').click() },
@@ -1298,7 +1451,7 @@ const PASOS_AUTO = [
 accion(
   'b-producir',
   async () => {
-    if (!P.caso) throw new Error('Elige un caso primero, en el paso 1.');
+    if (!pieza().caso) throw new Error('Elige un caso primero, en el paso 1.');
 
     // Los clips de movimiento NO entran aquí a propósito: son la fase más cara con
     // diferencia (§4.7) y arrancarlos sin preguntar es la forma de despertarse con
@@ -1402,11 +1555,11 @@ accion(
   'b-metadatos',
   async () => {
     const m = await metadatos.generarMetadatos({
-      tema: P.tema,
+      tema: pieza().tema,
       guion: pieza().guion,
       tomas: pieza().tomas,
       escenas: pieza().escenas,
-      fichas: P.fichas,
+      fichas: pieza().fichas,
     });
     pieza().metadatos = m;
     await guardar();

@@ -140,9 +140,12 @@ async function funcionesPuras() {
   const mod = await import('../comun/modelos.mjs');
   const dir = await import('../app/fases/direccion.js');
   const gui = await import('../app/fases/guion.js');
+  const img = await import('../app/fases/imagen.js');
   return {
     repartirPorTramos: dir.repartirPorTramos,
     actosDe: gui.actosDe,
+    heredables: img.heredables,
+    planificarImagenes: img.planificar,
     contarPalabras: gui.contarPalabras,
     normalizar: cfg.normalizar,
     duracionValida: mod.duracionValida,
@@ -152,6 +155,7 @@ async function funcionesPuras() {
     segmentar: seg.segmentar,
     verificarCobertura: seg.verificarCobertura,
     tomaDelFotograma: cla.tomaDelFotograma,
+    claveFotograma: cla.claveFotograma,
     construirHoja: hoj.construirHoja,
   };
 }
