@@ -183,13 +183,17 @@ async function cargarModelos() {
     const ids = (r.disponibles?.texto || []).map((m) => m.id);
     const mejor = mejorModeloTexto(ids);
 
-    // Sin elección explícita se coge EL MEJOR, no el que hubiera escrito en el
-    // servidor. El identificador fijo se quedó dos generaciones atrás sin que nadie
-    // lo notara, y el director es justo donde no hay que ahorrar.
-    if (!P.config.texto.modelo && mejor) {
+    // Mientras la elección sea automática, se revisa en CADA carga y sube sola.
+    //
+    // No basta con «si está vacío»: un proyecto guardado ayer trae el mejor modelo
+    // DE AYER, y con esa condición se quedaría ahí para siempre. Es el §7.2 —un
+    // arreglo que no llega porque el valor guardado lo tapa— aplicado al modelo.
+    if (!P.config.texto.aMano && mejor && P.config.texto.modelo !== mejor) {
+      const antes = P.config.texto.modelo;
       P.config.texto.modelo = mejor;
       ponerModeloTexto(mejor);
       await guardar();
+      if (antes) avisar('proyecto', `El director sube de ${antes} a ${mejor}.`, 'bueno');
     }
 
     const sel = $('m-texto');
@@ -202,8 +206,8 @@ async function cargarModelos() {
       sel.appendChild(o);
     }
     $('modelo-en-uso').textContent =
-      (r.deReserva ? 'Lista de reserva: el catálogo de tu nube no respondió. ' : '') +
-      `Escribe con: ${P.config.texto.modelo || r.enUso?.texto || '—'}`;
+      `Escribe con: ${P.config.texto.modelo || r.enUso?.texto || '—'}` +
+      (r.porSondeo ? ` · ${ids.length} encontrados preguntando uno a uno` : '');
   } catch (e) {
     $('modelo-en-uso').textContent = `No se pudo leer el catálogo: ${e.message}`;
   }
@@ -1098,6 +1102,9 @@ accion(
     if ($('voz').value) P.config.narracion.nombreVoz = $('voz').value;
     P.config.narracion.vocesExpresivas = $('expresivas').checked;
     P.config.narracion.estilo = $('estilo').value.trim();
+    // Tocar el desplegable es elegir a mano: a partir de aquí manda la persona y la
+    // herramienta deja de subirlo sola.
+    if ($('m-texto').value !== P.config.texto.modelo) P.config.texto.aMano = true;
     P.config.texto.modelo = $('m-texto').value;
     P.titulo = $('titulo').value.trim() || P.titulo;
 

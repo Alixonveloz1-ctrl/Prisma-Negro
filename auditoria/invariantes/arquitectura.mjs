@@ -558,6 +558,25 @@ export const invariantes = [
       if (!/P\.config\.texto\.modelo = mejor/.test(main)) {
         fallos.push('La elección automática no se guarda en la configuración.');
       }
+      // Y tiene que REVISARSE en cada carga mientras sea automática. Con la
+      // condición «solo si está vacío», un proyecto guardado ayer se queda con el
+      // mejor modelo de ayer para siempre: §7.2, un arreglo que no llega porque el
+      // valor guardado lo tapa.
+      if (/if \(!P\.config\.texto\.modelo &&/.test(main)) {
+        fallos.push('El modelo solo se elige si está vacío: un proyecto viejo nunca subiría.');
+      }
+      if (!/aMano/.test(main) || !/aMano/.test(fuente(ctx, 'app/config.js'))) {
+        fallos.push('No se distingue la elección automática de la elección a mano.');
+      }
+
+      // El respaldo del catálogo tiene que PREGUNTAR, no traer una lista escrita.
+      const prov = fuente(ctx, 'api/_lib/proveedor.js');
+      if (!/probarCandidatos/.test(prov)) {
+        fallos.push('Sin listado, el catálogo no pregunta a los modelos uno a uno.');
+      }
+      if (/const RESERVA\s*=/.test(prov)) {
+        fallos.push('Queda una lista de modelos escrita a mano: envejece sola y nadie se entera.');
+      }
       return fallos;
     },
     romper: (ctx) =>

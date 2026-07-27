@@ -531,15 +531,22 @@ function urlsDelCatalogo() {
   ];
 }
 
-// La lista de reserva. Solo se usa si el proveedor no contesta a ninguna forma del
-// listado, y la pantalla avisa de que es de reserva para que nadie crea que ese es
-// el catálogo real de su cuenta.
-const RESERVA = {
-  texto: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'],
-  imagen: ['gemini-2.5-flash-image', 'imagen-4.0-generate-001', 'imagen-3.0-generate-002'],
-  video: ['veo-3.1-generate-preview', 'veo-3.0-generate-001', 'veo-2.0-generate-001'],
-  musica: ['lyria-002'],
-};
+// Los candidatos que se PRUEBAN uno a uno cuando el listado no contesta.
+//
+// Esto no es una lista de lo que hay: es una lista de lo que se pregunta. A cada uno
+// se le manda una petición mínima y se queda el que responde. Preguntar es la única
+// forma de saberlo de verdad —una lista escrita a mano dice lo que yo creía el día
+// que la escribí, y eso fue justo lo que dejó al director dos generaciones atrás—.
+//
+// Que sobre un candidato no cuesta nada: un modelo que no existe contesta 404 al
+// instante. Que falte, sí cuesta. Así que la lista peca de larga a propósito.
+const CANDIDATOS_TEXTO = [
+  'gemini-3.1-pro', 'gemini-3.1-flash',
+  'gemini-3-pro', 'gemini-3-flash',
+  'gemini-3.0-pro', 'gemini-3.0-flash',
+  'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite',
+  'gemini-2.0-flash', 'gemini-2.0-flash-lite',
+];
 
 export async function modelosDisponibles() {
   const token = await tokenDeAcceso();
@@ -564,12 +571,43 @@ export async function modelosDisponibles() {
     intentos.push(`…${url.slice(url.indexOf('/v1'))}: contestó sin modelos de texto`);
   }
 
+  // El listado no contesta. Se pregunta a los modelos uno a uno: es más lento pero
+  // es la verdad, no una suposición.
+  const vivos = await probarCandidatos(token);
   return {
-    ...clasificar(Object.values(RESERVA).flat()),
-    deReserva: true,
+    ...clasificar(vivos),
+    porSondeo: true,
     // Qué se intentó, para que el fallo se pueda arreglar en vez de solo verse.
     intentos,
   };
+}
+
+/**
+ * Pregunta a cada candidato si existe, con la petición más pequeña posible.
+ *
+ * Un modelo que no está devuelve 404 al instante, así que sobrar candidatos no
+ * cuesta. Todas van a la vez: en serie serían diez segundos y esto corre dentro de
+ * una función con sesenta.
+ */
+async function probarCandidatos(token) {
+  const uno = async (id) => {
+    try {
+      const r = await fetch(`${base()}/${id}:generateContent`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: 'ok' }] }],
+          generationConfig: { maxOutputTokens: 1, temperature: 0 },
+        }),
+      });
+      // 200 es que existe y responde. 429 es que existe y está saturado —también
+      // cuenta—. 404 y 403 son que no lo tienes.
+      return r.ok || r.status === 429 ? id : null;
+    } catch {
+      return null;
+    }
+  };
+  return (await Promise.all(CANDIDATOS_TEXTO.map(uno))).filter(Boolean);
 }
 
 function clasificar(ids) {

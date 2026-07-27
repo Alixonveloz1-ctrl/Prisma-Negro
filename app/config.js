@@ -62,10 +62,17 @@ export const PREDETERMINADA = {
     vertical: false,
   },
 
-  // Vacío = el que tenga el servidor en MODELO_TEXTO. Se elige en Ajustes de una
-  // lista de los que el proyecto de la nube TIENE de verdad, no de una escrita a
-  // mano que envejece sola.
-  texto: { modelo: '' },
+  texto: {
+    // El modelo que se está usando. Se elige de los que el proyecto TIENE de verdad.
+    modelo: '',
+    // Si lo eligió la persona o lo eligió la herramienta.
+    //
+    // §7.2 en estado puro: si esto no existiera, un proyecto guardado con el mejor
+    // modelo DE ENTONCES se quedaría ahí para siempre, y salir un modelo nuevo no le
+    // llegaría nunca. Mientras sea automático se revisa en cada carga y sube solo;
+    // en cuanto se toca el desplegable, manda la persona y no se toca más.
+    aMano: false,
+  },
 
   segmentacion: { ...SEGMENTACION },
 

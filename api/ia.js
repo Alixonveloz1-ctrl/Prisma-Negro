@@ -162,7 +162,14 @@ async function despachar(modo, c) {
     }
 
     case 'modelos.catalogo':
-      return { disponibles: await proveedor.modelosDisponibles(), enUso: proveedor.modelosEnUso() };
+    {
+      const cat = await proveedor.modelosDisponibles();
+      // `porSondeo` e `intentos` se sacan a la raíz: estaban dentro de `disponibles`
+      // y la pantalla los leía de la raíz, así que el aviso no salía nunca y parecía
+      // que el catálogo iba bien cuando estaba cayendo al respaldo.
+      const { porSondeo, intentos, ...disponibles } = cat;
+      return { disponibles, porSondeo: !!porSondeo, intentos: intentos || [], enUso: proveedor.modelosEnUso() };
+    }
 
     case 'voz.catalogo':
       return {
