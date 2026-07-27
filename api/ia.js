@@ -1,0 +1,295 @@
+// LA ÚNICA PUERTA (§2 del plano).
+//
+// Un solo endpoint con un campo `modo`. Es la única pieza que tiene la credencial.
+// Hace tres cosas: firma un token con la cuenta de servicio, reenvía la petición, y
+// censura la respuesta.
+//
+// El censor se instala en la PRIMERA LÍNEA del manejador, sobreescribiendo
+// `res.json` una sola vez. A partir de ahí no hay forma de saltárselo por olvido:
+// todo `res.json(...)` de este archivo —y de cualquier cosa que lo llame— sale
+// censurado y con el tamaño comprobado.
+//
+// §1: el usuario no lee registros de la nube desde el teléfono. Cualquier fallo
+// tiene que explicarse en pantalla, con palabras. Por eso todo error que sale de
+// aquí es una frase, no un código.
+
+import { instalarCensor } from './_lib/censor.js';
+import * as almacen from './_lib/almacen.js';
+import * as proveedor from './_lib/proveedor.js';
+import * as montador from './_lib/montador.js';
+
+const TOPE_PETICION = 4.5 * 1024 * 1024;
+
+export default async function handler(req, res) {
+  // ── Primera línea. No mover. ────────────────────────────────────────────────
+  instalarCensor(res);
+
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Allow', 'POST, OPTIONS');
+    return res.status(204).end();
+  }
+  if (req.method !== 'POST') {
+    return res.status(405).json({ ok: false, error: 'Esta puerta solo acepta POST.' });
+  }
+
+  let cuerpo = req.body;
+  if (typeof cuerpo === 'string') {
+    try {
+      cuerpo = JSON.parse(cuerpo);
+    } catch {
+      return res.status(400).json({ ok: false, error: 'El cuerpo de la petición no es JSON válido.' });
+    }
+  }
+  if (!cuerpo || typeof cuerpo !== 'object') {
+    return res.status(400).json({ ok: false, error: 'Falta el cuerpo de la petición.' });
+  }
+
+  const { modo } = cuerpo;
+  if (!modo) {
+    return res.status(400).json({ ok: false, error: 'Falta el campo «modo».' });
+  }
+
+  // El modo «salud» es el único que no pide clave: es el que te dice, desde el
+  // teléfono, qué falta por configurar.
+  if (modo !== 'salud') {
+    const esperada = process.env.CLAVE_ACCESO;
+    if (!esperada) {
+      return res.status(500).json({
+        ok: false,
+        error: 'Falta CLAVE_ACCESO en el entorno. Sin ella la herramienta queda abierta a cualquiera.',
+      });
+    }
+    if (cuerpo.clave !== esperada) {
+      return res.status(401).json({ ok: false, error: 'Clave de acceso incorrecta.' });
+    }
+  }
+
+  try {
+    const salida = await despachar(modo, cuerpo);
+    return res.status(200).json({ ok: true, ...salida });
+  } catch (err) {
+    // §7.1: cuando un fallo no cuadra, sospecha del tamaño antes que del reloj.
+    const msg = String(err?.message || err);
+    const esTamano = /413|too large|payload|entity too large/i.test(msg);
+    return res.status(esTamano ? 413 : 500).json({
+      ok: false,
+      error: esTamano
+        ? `${msg} — probablemente sea el tope de 4,5 MB, no un tiempo agotado.`
+        : msg,
+    });
+  }
+}
+
+async function despachar(modo, c) {
+  switch (modo) {
+    // ── Diagnóstico ───────────────────────────────────────────────────────────
+    case 'salud':
+      return { configuracion: revisarConfiguracion() };
+
+    // ── Modelos ───────────────────────────────────────────────────────────────
+    case 'texto':
+      return await proveedor.texto({
+        instruccion: exigir(c, 'instruccion'),
+        sistema: c.sistema,
+        esquema: c.esquema,
+        temperatura: c.temperatura,
+        maxTokens: c.maxTokens,
+      });
+
+    case 'imagen': {
+      const img = await proveedor.imagen({
+        instruccion: exigir(c, 'instruccion'),
+        referencias: c.referencias || [],
+        aspecto: c.aspecto,
+      });
+      // Se sube en el mismo viaje: así el navegador nunca es dueño del original
+      // (§1: el almacén es la única fuente de verdad) y no hay una imagen que
+      // «se generó» pero no está en ningún sitio (§7.12).
+      if (c.guardarEn) {
+        const r = await almacen.subir(c.guardarEn, Buffer.from(img.datos, 'base64'), img.tipo);
+        return { guardado: r, referencia: almacen.referenciaDe(c.guardarEn), ...(c.devolver ? img : {}) };
+      }
+      return img;
+    }
+
+    case 'video.iniciar':
+      return await proveedor.videoIniciar({
+        instruccion: exigir(c, 'instruccion'),
+        fotograma: c.fotograma,
+        segundos: c.segundos,
+        aspecto: c.aspecto,
+      });
+
+    case 'video.consultar': {
+      const r = await proveedor.videoConsultar(exigir(c, 'operacion'));
+      if (r.listo && c.guardarEn) {
+        const g = await almacen.subir(c.guardarEn, Buffer.from(r.datos, 'base64'), r.tipo);
+        return { listo: true, guardado: g, referencia: almacen.referenciaDe(c.guardarEn) };
+      }
+      return r;
+    }
+
+    case 'voz': {
+      const a = await proveedor.voz({
+        texto: exigir(c, 'texto'),
+        nombreVoz: c.nombreVoz,
+        velocidad: c.velocidad,
+        tono: c.tono,
+      });
+      // La narración se devuelve al navegador porque ahí se mide su duración real y
+      // se corta por los silencios (§4.5). Un bloque de 45 s en PCM a 24 kHz son
+      // ~2,1 MB: cabe en la respuesta. Bloques más largos no, y por eso son de 45 s.
+      return a;
+    }
+
+    case 'voz.catalogo':
+      return { voces: await proveedor.vocesDisponibles(c.idioma || 'es') };
+
+    case 'musica': {
+      const m = await proveedor.musica({
+        instruccion: exigir(c, 'instruccion'),
+        segundos: c.segundos,
+      });
+      if (c.guardarEn) {
+        const g = await almacen.subir(c.guardarEn, Buffer.from(m.datos, 'base64'), m.tipo);
+        return { guardado: g, referencia: almacen.referenciaDe(c.guardarEn) };
+      }
+      return m;
+    }
+
+    // ── Almacén ───────────────────────────────────────────────────────────────
+    case 'subir': {
+      const datos = Buffer.from(exigir(c, 'datos'), 'base64');
+      if (datos.byteLength > TOPE_PETICION) {
+        throw new Error('Lo que intentas subir pasa de 4,5 MB. Súbelo por trozos.');
+      }
+      const r = await almacen.subir(exigir(c, 'clave'), datos, c.tipo || 'application/octet-stream');
+      return { guardado: r, referencia: almacen.referenciaDe(r.clave) };
+    }
+
+    case 'bajar': {
+      const r = await almacen.bajarTrozo(exigir(c, 'clave'), c.desde, c.hasta);
+      if (!r) return { existe: false };
+      return {
+        existe: true,
+        datos: r.datos.toString('base64'),
+        desde: r.desde,
+        hasta: r.hasta,
+        total: r.total,
+      };
+    }
+
+    case 'ficha':
+      return { ficha: await almacen.ficha(exigir(c, 'clave')) };
+
+    case 'fichas':
+      return { fichas: await almacen.fichas(exigir(c, 'claves')) };
+
+    case 'listar':
+      return { materiales: await almacen.listar(c.prefijo || '') };
+
+    case 'borrar':
+      return { borrado: await almacen.borrar(exigir(c, 'clave')) };
+
+    // ── Proyecto ──────────────────────────────────────────────────────────────
+    case 'proyecto.guardar': {
+      const json = JSON.stringify(exigir(c, 'proyecto'));
+      const r = await almacen.subir(
+        `${exigir(c, 'id')}/proyecto`,
+        Buffer.from(json),
+        'application/json',
+      );
+      return { guardado: r };
+    }
+
+    case 'proyecto.cargar': {
+      const buf = await almacen.bajar(`${exigir(c, 'id')}/proyecto`);
+      if (!buf) return { existe: false };
+      return { existe: true, proyecto: JSON.parse(buf.toString('utf8')) };
+    }
+
+    case 'proyecto.listar': {
+      const todo = await almacen.listar('');
+      const ids = [...new Set(todo.filter((m) => m.clave.endsWith('/proyecto')).map((m) => m.clave.split('/')[0]))];
+      return { proyectos: ids };
+    }
+
+    // ── Montaje ───────────────────────────────────────────────────────────────
+    case 'montar.comprobar':
+      return await montador.comprobarMaterial(exigir(c, 'hoja'));
+
+    case 'montar.lanzar': {
+      // Comprobación previa OBLIGATORIA (§7.6). No se lanza el trabajo pesado sin
+      // saber que está todo, y si falta algo se dice qué falta por su nombre.
+      const previa = await montador.comprobarMaterial(exigir(c, 'hoja'));
+      if (!previa.completo) {
+        throw new Error(
+          `Faltan ${previa.faltan.length} de ${previa.total} materiales y el montaje ` +
+            `fallaría sin decir por qué. Falta: ${previa.faltan.slice(0, 12).join(', ')}` +
+            (previa.faltan.length > 12 ? ` y ${previa.faltan.length - 12} más.` : '.'),
+        );
+      }
+      return await montador.lanzar({
+        pieza: exigir(c, 'pieza'),
+        hoja: c.hoja,
+        guionFfmpeg: exigir(c, 'guionFfmpeg'),
+      });
+    }
+
+    case 'montar.estado':
+      return await montador.estado(exigir(c, 'ejecucion'));
+
+    case 'montar.registro':
+      return await montador.registro(exigir(c, 'ejecucion'), c.lineas);
+
+    default:
+      throw new Error(`Modo desconocido: «${modo}».`);
+  }
+}
+
+function exigir(c, campo) {
+  const v = c[campo];
+  if (v === undefined || v === null || v === '') {
+    throw new Error(`Falta el campo «${campo}» para el modo «${c.modo}».`);
+  }
+  return v;
+}
+
+/**
+ * Qué falta por configurar, dicho con palabras (§1).
+ * El usuario no abre paneles de la nube desde el teléfono para averiguar por qué no
+ * funciona: se lo decimos aquí.
+ */
+function revisarConfiguracion() {
+  const necesarias = {
+    GCP_CUENTA_SERVICIO: 'el correo de la cuenta de servicio',
+    GCP_CLAVE_PRIVADA: 'la clave privada de la cuenta de servicio',
+    GCP_PROYECTO: 'el identificador del proyecto en la nube',
+    ALMACEN_NOMBRE: 'el nombre del almacén donde vive todo lo generado',
+    CLAVE_REFERENCIAS: 'la clave para cifrar las referencias opacas',
+    CLAVE_ACCESO: 'la contraseña para entrar a la herramienta',
+  };
+  const opcionales = {
+    MONTADOR_JOB: 'el nombre del contenedor de montaje (solo hace falta para montar)',
+    GCP_NUMERO_PROYECTO: 'el número de proyecto (mejora el censurado de los identificadores)',
+  };
+
+  const faltan = Object.entries(necesarias)
+    .filter(([k]) => !process.env[k])
+    .map(([k, q]) => ({ variable: k, es: q }));
+  const flojas = Object.entries(opcionales)
+    .filter(([k]) => !process.env[k])
+    .map(([k, q]) => ({ variable: k, es: q }));
+
+  return {
+    lista: faltan.length === 0,
+    faltan,
+    incompletas: flojas,
+    modelos: {
+      texto: process.env.MODELO_TEXTO || 'gemini-2.5-pro',
+      imagen: process.env.MODELO_IMAGEN || 'gemini-2.5-flash-image',
+      video: process.env.MODELO_VIDEO || 'veo-3.1-generate-preview',
+      musica: process.env.MODELO_MUSICA || 'lyria-002',
+    },
+  };
+}

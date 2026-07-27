@@ -1,0 +1,163 @@
+// El contexto de la auditoría.
+//
+// Reúne todo lo que las invariantes necesitan mirar: el árbol de fuentes, y un
+// montaje completo hecho con datos sintéticos. Lo segundo es lo que permite
+// comprobar afirmaciones sobre el guion de ffmpeg sin generar ni un segundo de
+// video de verdad (§10, el consejo que ahorra días).
+
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const RAIZ = join(fileURLToPath(new URL('.', import.meta.url)), '..');
+
+const CARPETAS = ['api', 'app', 'comun', 'montador', 'auditoria', 'banco'];
+const EXTENSIONES = ['.js', '.mjs', '.sh', '.html', '.json'];
+// Sin extensión pero muy leídos por la auditoría. El Dockerfile faltaba, y la
+// invariante que comprueba que el contenedor no lleva credenciales estaba pasando
+// sobre un archivo que ni siquiera se había leído: lo cazó `--romper`.
+const SUELTOS = ['Dockerfile'];
+const IGNORAR = ['node_modules', '.git', '.vercel', 'salida'];
+
+function recorrer(dir, salida) {
+  for (const nombre of readdirSync(dir)) {
+    if (IGNORAR.includes(nombre)) continue;
+    const ruta = join(dir, nombre);
+    const st = statSync(ruta);
+    if (st.isDirectory()) recorrer(ruta, salida);
+    else if (EXTENSIONES.some((e) => nombre.endsWith(e)) || SUELTOS.includes(nombre)) {
+      salida.set(relative(RAIZ, ruta), readFileSync(ruta, 'utf8'));
+    }
+  }
+}
+
+export function leerFuentes() {
+  const salida = new Map();
+  for (const c of CARPETAS) {
+    try {
+      recorrer(join(RAIZ, c), salida);
+    } catch {
+      /* la carpeta puede no existir todavía */
+    }
+  }
+  for (const suelto of ['index.html', 'package.json', 'vercel.json', '.env.example']) {
+    try {
+      salida.set(suelto, readFileSync(join(RAIZ, suelto), 'utf8'));
+    } catch {
+      /* opcional */
+    }
+  }
+  return salida;
+}
+
+/**
+ * Un proyecto sintético: tomas con movimiento y sin él, reutilización de
+ * fotogramas, varias escenas con música. Lo bastante variado para que el guion de
+ * ffmpeg ejercite todos los caminos.
+ */
+export function proyectoDePrueba() {
+  const tomas = [];
+  for (let i = 0; i < 12; i++) {
+    tomas.push({
+      i,
+      escena: i < 5 ? 0 : i < 9 ? 1 : 2,
+      texto: `Texto de la toma ${i}. Una frase más para darle cuerpo.`,
+      segundos: 4 + (i % 5),
+      medida: true,
+      plano: {
+        encuadre: 'plano general',
+        movimientoCamara: ['fijo', 'acercamiento lento', 'paneo derecha', 'alejamiento lento'][i % 4],
+        lugar: i < 5 ? 'el puerto' : 'la sala del archivo',
+        luz: 'luz de tarde',
+        sujetos: [],
+        descripcion: `Descripción visual de la toma ${i}.`,
+      },
+      // Dos tomas comparten fotograma: dos tomas con el mismo plano no se pagan dos
+      // veces (§3), y el guion tiene que apuntar al fotograma de la dueña.
+      reusa: i === 3 ? 1 : i === 7 ? 5 : null,
+      movimiento: i === 2 || i === 10,
+      audio: 'ok',
+      imagen: 'ok',
+      video: 'ok',
+      tipoImagen: 'reconstruccion',
+    });
+  }
+  return {
+    id: 'p01',
+    tomas,
+    escenas: [
+      { n: 0, titulo: 'El puerto' },
+      { n: 1, titulo: 'El archivo' },
+      { n: 2, titulo: 'La sentencia' },
+    ],
+  };
+}
+
+export async function construirContexto() {
+  const { construirHoja, guionFfmpeg, clavesDeLaHoja, componerManifiesto } = await import(
+    '../comun/hoja.mjs'
+  );
+  const { PREDETERMINADA, MODELOS } = await import('../app/config.js');
+  const p = proyectoDePrueba();
+  const hoja = construirHoja({ pieza: p.id, tomas: p.tomas, escenas: p.escenas });
+
+  return {
+    raiz: RAIZ,
+    fuentes: leerFuentes(),
+    proyecto: p,
+    hoja,
+    guion: guionFfmpeg(hoja),
+    claves: clavesDeLaHoja(hoja),
+    manifiesto: componerManifiesto(hoja, (c) => `gs://ALMACEN/prefijo/${c}`),
+    // Los valores vivos entran en el contexto en vez de importarse dentro de cada
+    // invariante. Así una invariante que mira un valor por defecto TAMBIÉN se puede
+    // romper a propósito, que es la regla de oro del §9: una comprobación que nunca
+    // ha fallado no está comprobando nada.
+    config: structuredClone(PREDETERMINADA),
+    modelos: structuredClone(MODELOS),
+    // Las funciones puras entran por el contexto en vez de importarse dentro de cada
+    // invariante. Así una invariante que comprueba un COMPORTAMIENTO también se
+    // puede romper a propósito: se le cambia la función por una averiada y tiene que
+    // cazarla. Sin esto, esas invariantes no se podían demostrar y salían marcadas
+    // como ciegas — que es exactamente lo que pasó la primera vez.
+    fn: await funcionesPuras(),
+  };
+}
+
+async function funcionesPuras() {
+  const seg = await import('../comun/segmentar.mjs');
+  const cla = await import('../comun/claves.mjs');
+  const hoj = await import('../comun/hoja.mjs');
+  return {
+    segmentar: seg.segmentar,
+    verificarCobertura: seg.verificarCobertura,
+    tomaDelFotograma: cla.tomaDelFotograma,
+    construirHoja: hoj.construirHoja,
+  };
+}
+
+/** Copia del contexto con una función pura sustituida, para `--romper`. */
+export function conFuncion(ctx, nombre, averiada) {
+  return { ...ctx, fn: { ...ctx.fn, [nombre]: averiada } };
+}
+
+/** Copia del contexto con la configuración modificada, para `--romper`. */
+export function conConfig(ctx, transformar) {
+  const config = structuredClone(ctx.config);
+  transformar(config);
+  return { ...ctx, config };
+}
+
+/** Copia superficial del contexto con las fuentes modificadas, para `--romper`. */
+export function conFuente(ctx, ruta, contenido) {
+  const fuentes = new Map(ctx.fuentes);
+  fuentes.set(ruta, contenido);
+  return { ...ctx, fuentes };
+}
+
+/** Aplica una transformación al contenido de un archivo. */
+export function editando(ctx, ruta, transformar) {
+  const actual = ctx.fuentes.get(ruta);
+  if (actual === undefined) throw new Error(`La auditoría no encuentra ${ruta} para romperlo.`);
+  return conFuente(ctx, ruta, transformar(actual));
+}

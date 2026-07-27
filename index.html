@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<!-- §1: se trabaja SOLO desde un teléfono. No hay computadora. La interfaz es la
+     herramienta entera: nada de «corre este comando», nada de editar archivos a
+     mano, ningún paso manual repetitivo. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Prisma Negro</title>
+<style>
+/* §7.13 — LA ANCHURA ES UNA INVARIANTE, NO UN DETALLE DE ESTILO.
+   Un selector sin ancho máximo hacía que la página entera se moviera a los lados en
+   el teléfono. La auditoría comprueba estas reglas. */
+*, *::before, *::after { box-sizing: border-box; max-width: 100%; }
+html, body { overflow-x: hidden; }
+
+:root {
+  --fondo: #0d0f12;
+  --panel: #16191f;
+  --borde: #262b34;
+  --texto: #e6e8ec;
+  --tenue: #8b93a1;
+  --acento: #d8a657;
+  --malo: #e5484d;
+  --bueno: #3dd68c;
+  --radio: 12px;
+}
+
+body {
+  margin: 0;
+  padding: 0 0 6rem;
+  background: var(--fondo);
+  color: var(--texto);
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+header {
+  position: sticky; top: 0; z-index: 10;
+  padding: .9rem 1rem calc(.9rem + env(safe-area-inset-top));
+  padding-top: max(.9rem, env(safe-area-inset-top));
+  background: rgba(13,15,18,.92);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--borde);
+  display: flex; align-items: center; gap: .6rem;
+}
+header h1 { font-size: 1.05rem; margin: 0; font-weight: 650; letter-spacing: -.01em; }
+header .sub { color: var(--tenue); font-size: .78rem; margin-left: auto; text-align: right; }
+
+main { padding: 1rem; max-width: 900px; margin: 0 auto; }
+
+section {
+  background: var(--panel);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 1rem;
+  margin-bottom: .9rem;
+}
+section > h2 {
+  font-size: .95rem; margin: 0 0 .2rem; font-weight: 650;
+  display: flex; align-items: center; gap: .5rem;
+}
+section > .porque { color: var(--tenue); font-size: .8rem; margin: 0 0 .8rem; }
+
+label { display: block; font-size: .82rem; color: var(--tenue); margin: .7rem 0 .25rem; }
+
+input, select, textarea, button {
+  font: inherit; color: var(--texto);
+  background: #0f1216;
+  border: 1px solid var(--borde);
+  border-radius: 9px;
+  padding: .6rem .7rem;
+  width: 100%;
+  /* Un selector sin esto movía la página entera a los lados. §7.13. */
+  max-width: 100%;
+}
+textarea { min-height: 9rem; resize: vertical; font-size: .92rem; line-height: 1.6; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--acento); outline-offset: -1px; }
+
+button {
+  background: #1d222a; cursor: pointer; font-weight: 600;
+  /* Objetivo táctil cómodo con el pulgar. */
+  min-height: 44px;
+}
+button:active { background: #262c36; }
+button[disabled] { opacity: .45; cursor: default; }
+button.principal { background: var(--acento); color: #1a1206; border-color: var(--acento); }
+button.peligro { color: var(--malo); }
+
+.fila { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .7rem; }
+.fila > * { flex: 1 1 auto; min-width: 0; }
+
+.barra { height: 6px; background: #0f1216; border-radius: 99px; overflow: hidden; margin-top: .6rem; }
+.barra > i { display: block; height: 100%; background: var(--acento); width: 0; transition: width .25s; }
+
+.aviso {
+  border-left: 3px solid var(--acento);
+  background: #1a1509; color: #f0dcb4;
+  padding: .6rem .7rem; border-radius: 6px;
+  font-size: .85rem; margin-top: .7rem;
+  /* Los mensajes largos del backend no pueden ensanchar la página. */
+  overflow-wrap: anywhere;
+}
+.aviso.malo { border-color: var(--malo); background: #1d0f10; color: #ffc9cb; }
+.aviso.bueno { border-color: var(--bueno); background: #0d1a14; color: #b6f0d4; }
+
+.registro {
+  font: .74rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: #0a0c0f; border: 1px solid var(--borde); border-radius: 8px;
+  padding: .6rem; margin-top: .6rem;
+  max-height: 14rem; overflow: auto;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+.cifras { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: .6rem; }
+.cifra { font-size: .78rem; color: var(--tenue); }
+.cifra b { display: block; font-size: 1.15rem; color: var(--texto); font-weight: 650; }
+
+.tomas { margin-top: .8rem; display: grid; gap: .5rem; }
+.toma {
+  border: 1px solid var(--borde); border-radius: 9px; padding: .6rem;
+  font-size: .85rem; background: #12151a;
+}
+.toma .cab { display: flex; gap: .4rem; align-items: center; color: var(--tenue); font-size: .72rem; margin-bottom: .3rem; flex-wrap: wrap; }
+.toma p { margin: 0; overflow-wrap: anywhere; }
+
+.pastilla {
+  font-size: .68rem; padding: .1rem .4rem; border-radius: 99px;
+  border: 1px solid var(--borde); color: var(--tenue); white-space: nowrap;
+}
+.pastilla.ok { color: var(--bueno); border-color: #1c4433; }
+.pastilla.falta { color: var(--malo); border-color: #4a2023; }
+.pastilla.tipo { color: var(--acento); border-color: #4a3a18; }
+
+table { width: 100%; border-collapse: collapse; font-size: .82rem; display: block; overflow-x: auto; }
+td, th { text-align: left; padding: .35rem .5rem; border-bottom: 1px solid var(--borde); }
+
+.oculto { display: none !important; }
+nav.pasos { display: flex; gap: .35rem; overflow-x: auto; padding-bottom: .3rem; margin-bottom: .9rem; }
+nav.pasos button { width: auto; flex: 0 0 auto; font-size: .8rem; padding: .45rem .7rem; min-height: 38px; }
+nav.pasos button.activo { background: var(--acento); color: #1a1206; border-color: var(--acento); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Prisma&nbsp;Negro</h1>
+  <div class="sub" id="cabecera">sin proyecto</div>
+</header>
+
+<main>
+  <!-- ── Acceso ───────────────────────────────────────────────────────── -->
+  <section id="s-acceso">
+    <h2>Entrar</h2>
+    <p class="porque">
+      La herramienta gasta la cuota de tu nube. Sin contraseña, cualquiera que
+      encuentre la dirección la gasta por ti.
+    </p>
+    <label for="clave">Contraseña</label>
+    <input id="clave" type="password" autocomplete="current-password" inputmode="text">
+    <div class="fila">
+      <button class="principal" id="b-entrar">Entrar</button>
+    </div>
+    <div id="salud"></div>
+  </section>
+
+  <div id="app" class="oculto">
+    <nav class="pasos" id="pasos"></nav>
+
+    <!-- ── Proyecto ───────────────────────────────────────────────────── -->
+    <section id="p-proyecto" class="paso">
+      <h2>Proyecto</h2>
+      <p class="porque">Todo lo que generes vive en tu nube. Esto es solo una copia.</p>
+      <label for="titulo">Título</label>
+      <input id="titulo" placeholder="El incendio del puerto">
+      <label for="tema">Tema del documental</label>
+      <textarea id="tema" style="min-height:5rem" placeholder="Qué quieres contar, y desde qué ángulo."></textarea>
+      <div class="fila">
+        <button id="b-guardar">Guardar</button>
+        <button id="b-subir">Guardar en la nube</button>
+      </div>
+      <div class="fila">
+        <button id="b-abrir">Abrir de la nube</button>
+        <button id="b-nuevo" class="peligro">Nuevo</button>
+      </div>
+      <div id="aviso-proyecto"></div>
+    </section>
+
+    <!-- ── Investigación ──────────────────────────────────────────────── -->
+    <section id="p-investigacion" class="paso oculto">
+      <h2>Investigación</h2>
+      <p class="porque">
+        Hecho, fuente, fecha y cita textual. El guion se escribe después, y cada
+        afirmación apunta a una ficha. Sin esto no hay documental, hay opinión.
+      </p>
+      <div class="fila">
+        <button class="principal" id="b-investigar">Buscar fichas</button>
+        <button id="b-mas-fichas">Buscar más</button>
+      </div>
+      <div id="fichas"></div>
+    </section>
+
+    <!-- ── Guion ──────────────────────────────────────────────────────── -->
+    <section id="p-guion" class="paso oculto">
+      <h2>Guion</h2>
+      <p class="porque">
+        Es el insumo del que sale todo lo demás. Puedes editarlo a mano.
+        «## » abre una escena; una línea en blanco separa tomas.
+      </p>
+      <label for="minutos">Duración objetivo (minutos)</label>
+      <input id="minutos" type="number" min="3" max="40" value="10" inputmode="numeric">
+      <div class="fila">
+        <button class="principal" id="b-escribir">Escribir el guion</button>
+      </div>
+      <label for="guion">Guion</label>
+      <textarea id="guion" spellcheck="false"></textarea>
+      <div class="fila">
+        <button id="b-segmentar">Partir en tomas</button>
+      </div>
+      <div id="aviso-guion"></div>
+    </section>
+
+    <!-- ── Tomas ──────────────────────────────────────────────────────── -->
+    <section id="p-tomas" class="paso oculto">
+      <h2>Tomas</h2>
+      <p class="porque">La toma es la unidad de todo. Cada fase se genera por separado y solo cobra lo que genera.</p>
+      <div class="cifras" id="cifras-tomas"></div>
+      <div class="fila">
+        <button class="principal" id="b-dirigir">Dirección (1 llamada)</button>
+      </div>
+      <div id="aviso-tomas"></div>
+      <div class="tomas" id="lista-tomas"></div>
+    </section>
+
+    <!-- ── Generación ─────────────────────────────────────────────────── -->
+    <section id="p-generar" class="paso oculto">
+      <h2>Generar</h2>
+      <p class="porque">
+        Puedes detener a mitad y reanudar: cada unidad terminada se guarda antes de
+        pasar a la siguiente.
+      </p>
+      <div id="resumen-coste" class="cifras"></div>
+
+      <div class="fila"><button class="principal" id="b-narrar">Narración</button></div>
+      <div class="fila"><button class="principal" id="b-imagenes">Imágenes</button></div>
+      <div class="fila"><button class="principal" id="b-movimiento">Movimiento (caro)</button></div>
+      <div class="fila"><button class="principal" id="b-musica">Música</button></div>
+      <div class="fila"><button id="b-marca">Subir la marca del canal</button></div>
+
+      <div class="barra"><i id="barra"></i></div>
+      <div id="progreso" class="cifra" style="margin-top:.4rem"></div>
+      <div class="fila"><button class="peligro" id="b-detener" disabled>Detener</button></div>
+      <div id="aviso-generar"></div>
+    </section>
+
+    <!-- ── Montaje ────────────────────────────────────────────────────── -->
+    <section id="p-montaje" class="paso oculto">
+      <h2>Montaje</h2>
+      <p class="porque">
+        Se comprueba que está todo ANTES de arrancar. Si falta algo, se dice qué
+        falta por su nombre en vez de fallar con un número media hora después.
+      </p>
+      <div class="fila">
+        <button id="b-revisar">Revisar antes de montar</button>
+        <button class="principal" id="b-montar">Montar</button>
+      </div>
+      <div id="aviso-montaje"></div>
+      <div class="fila"><button id="b-bajar" disabled>Bajar el video</button></div>
+    </section>
+
+    <!-- ── Publicación ────────────────────────────────────────────────── -->
+    <section id="p-publicar" class="paso oculto">
+      <h2>Publicación</h2>
+      <p class="porque">
+        Las marcas de tiempo salen de las duraciones medidas, no de un modelo
+        estimando minutos.
+      </p>
+      <div class="fila">
+        <button class="principal" id="b-metadatos">Título, descripción y etiquetas</button>
+        <button id="b-miniatura">Miniatura</button>
+      </div>
+      <div id="salida-metadatos"></div>
+    </section>
+
+    <!-- ── Ajustes ────────────────────────────────────────────────────── -->
+    <section id="p-ajustes" class="paso oculto">
+      <h2>Ajustes</h2>
+      <p class="porque">La proporción de tomas con movimiento es la palanca principal del presupuesto.</p>
+
+      <label for="m-imagen">Modelo de imagen</label>
+      <select id="m-imagen"></select>
+
+      <label for="m-video">Modelo de movimiento</label>
+      <select id="m-video"></select>
+
+      <label for="voz">Voz del narrador</label>
+      <select id="voz"></select>
+      <p class="porque" style="margin:.4rem 0 0">
+        Para narración larga conviene una voz de entrega fija: las expresivas
+        cambian de tono en cada llamada, y eso son quince minutos con un narrador
+        distinto cada cuarenta y cinco segundos.
+      </p>
+
+      <label for="proporcion">Tomas con movimiento: <b id="v-proporcion">15%</b></label>
+      <input id="proporcion" type="range" min="0" max="60" value="15">
+
+      <label for="objetivo">Segundos por toma: <b id="v-objetivo">11</b></label>
+      <input id="objetivo" type="range" min="5" max="20" value="11">
+
+      <label for="marca-texto">Marca del canal (la dibuja el navegador, no el modelo)</label>
+      <input id="marca-texto" placeholder="PRISMA NEGRO">
+
+      <label for="vertical">Formato</label>
+      <select id="vertical">
+        <option value="0">Horizontal 16:9</option>
+        <option value="1">Vertical 9:16</option>
+      </select>
+
+      <div class="fila"><button id="b-ajustes">Guardar ajustes</button></div>
+    </section>
+  </div>
+</main>
+
+<script type="module" src="/app/main.js"></script>
+</body>
+</html>

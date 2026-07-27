@@ -1,0 +1,17 @@
+{
+  "name": "prisma-negro",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Estudio de documentales generativos: de un tema a un video terminado, desde un teléfono.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "auditar": "node auditoria/auditar.mjs",
+    "auditar:romper": "node auditoria/auditar.mjs --romper",
+    "banco": "node banco/banco.mjs",
+    "banco:limpiar": "node banco/banco.mjs --limpiar",
+    "prueba": "npm run auditar && npm run banco"
+  }
+}
