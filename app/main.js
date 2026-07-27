@@ -1055,6 +1055,7 @@ function pintarAjustes() {
   pon('objetivo', P.config.segmentacion.segundosObjetivo, 'v-objetivo');
   pon('velocidad', Math.round(P.config.narracion.velocidad * 100));
   $('v-velocidad').textContent = P.config.narracion.velocidad.toFixed(2);
+  $('expresivas').checked = !!P.config.narracion.vocesExpresivas;
   $('marca-texto').value = P.config.marca.texto;
   $('vertical').value = P.config.formato.vertical ? '1' : '0';
 }
@@ -1062,6 +1063,13 @@ function pintarAjustes() {
 $('proporcion').addEventListener('input', (e) => ($('v-proporcion').textContent = `${e.target.value}%`));
 $('objetivo').addEventListener('input', (e) => ($('v-objetivo').textContent = e.target.value));
 $('velocidad').addEventListener('input', (e) => ($('v-velocidad').textContent = (e.target.value / 100).toFixed(2)));
+// Recargar el catálogo al momento: si hubiera que guardar ajustes primero, parecería
+// que el interruptor no hace nada.
+$('expresivas').addEventListener('change', async (e) => {
+  P.config.narracion.vocesExpresivas = e.target.checked;
+  await guardar();
+  cargarVoces();
+});
 
 accion(
   'b-ajustes',
@@ -1074,6 +1082,7 @@ accion(
     P.config.marca.texto = $('marca-texto').value.trim();
     P.config.formato.vertical = $('vertical').value === '1';
     if ($('voz').value) P.config.narracion.nombreVoz = $('voz').value;
+    P.config.narracion.vocesExpresivas = $('expresivas').checked;
     P.config.texto.modelo = $('m-texto').value;
     P.titulo = $('titulo').value.trim() || P.titulo;
 
@@ -1157,7 +1166,10 @@ accion(
 /** §7.10: el catálogo de voces llega filtrado y con la región en la etiqueta. */
 async function cargarVoces() {
   try {
-    const r = await llamar('voz.catalogo', { idioma: 'es' });
+    const r = await llamar('voz.catalogo', {
+      idioma: 'es',
+      expresivas: !!P.config.narracion.vocesExpresivas,
+    });
     const sel = $('voz');
     sel.innerHTML = '';
     for (const v of r.voces) {

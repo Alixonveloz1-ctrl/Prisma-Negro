@@ -205,6 +205,10 @@ input[type=range]{padding:0;accent-color:var(--violeta-2);border:none;background
 @media (max-width:520px){.rejilla-filtros{grid-template-columns:1fr}}
 .rejilla-filtros label{margin-top:0}
 
+/* ── Interruptor ────────────────────────────────────────────────────────── */
+.interruptor{display:flex;align-items:center;gap:9px;margin:12px 0 0;text-transform:none;letter-spacing:0;font-size:13.5px;color:var(--tinta-2);font-weight:500;cursor:pointer}
+.interruptor input{width:18px;height:18px;flex:none;accent-color:var(--violeta-2);margin:0}
+
 /* ── Reparto de fuentes ─────────────────────────────────────────────────── */
 .reparto{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
 
@@ -553,6 +557,10 @@ nav.abajo button svg{width:22px;height:22px}
           <h2>Narración</h2>
           <label for="voz">Voz</label>
           <select id="voz"></select>
+          <label class="interruptor" for="expresivas">
+            <input type="checkbox" id="expresivas">
+            <span>Incluir voces expresivas (Chirp)</span>
+          </label>
           <div class="fila-btn" style="margin-top:9px">
             <button class="btn chico" id="b-probar-voz">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9z"/></svg>

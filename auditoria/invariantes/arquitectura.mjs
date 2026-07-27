@@ -370,11 +370,23 @@ export const invariantes = [
       if (!/REGIONES_LATINAS/.test(t)) {
         fallos.push('No hay una lista explícita de las regiones que valen.');
       }
+      // §7.9: las de entrega variable pueden ofrecerse, pero NUNCA por defecto. La
+      // decisión es de quien narra; el valor por defecto es el que no arruina una
+      // narración de quince minutos.
+      if (!/expresivas\s*=\s*false/.test(t)) {
+        fallos.push('Las voces expresivas no vienen apagadas por defecto (§7.9).');
+      }
+      if (!/expresiva/.test(cuerpo)) {
+        fallos.push('Una voz expresiva no viaja marcada: no se puede avisar en pantalla.');
+      }
       return fallos;
     },
+    // El sabotaje quita la región de la etiqueta, que es justo lo que esta
+    // invariante guarda. El de antes buscaba una plantilla en una sola línea y dejó
+    // de encajar al reformatear: lo marcó `--romper` como ciega.
     romper: (ctx) =>
       editando(ctx, 'api/_lib/proveedor.js', (t) =>
-        t.replace(/etiqueta: `[^`]*`/, 'etiqueta: v.name'),
+        t.replace(/\$\{REGIONES_LATINAS\[reg\]\}/g, ''),
       ),
   },
 

@@ -325,7 +325,19 @@ export async function voz({ texto: t, nombreVoz, velocidad = 1.0, tono = 0 }) {
 // de España en medio de una narración latina se oye como otro narrador.
 const REGIONES_LATINAS = { 'es-US': 'Latino', 'es-MX': 'México', 'es-419': 'Latino' };
 
-export async function vocesDisponibles(idioma = 'es') {
+// Las de entrega VARIABLE. Suenan mejor en una frase suelta y peor en quince
+// minutos, porque cada llamada la interpretan de nuevo (§7.9).
+const ES_EXPRESIVA = /chirp|studio|journey/i;
+
+/**
+ * @param expresivas  Incluir las voces de entrega variable (Chirp, Studio, Journey).
+ *
+ * §7.9 dice que en narración larga estas voces interpretan cada llamada como una
+ * actuación nueva y la voz cambia cada cuarenta y cinco segundos. Por eso van
+ * APAGADAS por defecto. Pero la decisión es de quien narra, no mía: quien quiera
+ * oírlas las enciende, y la etiqueta le dice cuál es cuál.
+ */
+export async function vocesDisponibles(idioma = 'es', expresivas = false) {
   const token = await tokenDeAcceso();
   const r = await fetch(`${VOZ_API}/voices?languageCode=${encodeURIComponent(idioma)}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -343,19 +355,31 @@ export async function vocesDisponibles(idioma = 'es') {
     // otro narrador. Y fuera las expresivas de entrega variable, que en narración
     // larga cambian de tono entre llamadas (§7.9).
     .filter((v) => REGIONES_LATINAS[v.languageCodes?.[0]])
-    .filter((v) => !/chirp|studio|journey/i.test(v.name))
+    .filter((v) => expresivas || !ES_EXPRESIVA.test(v.name))
     .map((v) => {
       const reg = v.languageCodes?.[0] || '';
+      const variable = ES_EXPRESIVA.test(v.name);
       return {
         nombre: v.name,
         region: reg,
         genero: GENEROS[v.ssmlGender] || '',
+        // Que viaje marcada es lo que permite avisar en pantalla en vez de que se
+        // descubra oyendo el video montado con quince narradores distintos.
+        expresiva: variable,
         // La etiqueta lleva la región y el género dentro: sin eso, dos voces
         // distintas se ven idénticas en el desplegable.
-        etiqueta: `${v.name.split('-').slice(2).join('-')} · ${REGIONES_LATINAS[reg]} · ${GENEROS[v.ssmlGender] || ''}`,
+        etiqueta:
+          `${v.name.split('-').slice(2).join('-')} · ${REGIONES_LATINAS[reg]} · ` +
+          `${GENEROS[v.ssmlGender] || ''}${variable ? ' · expresiva' : ''}`,
       };
     })
-    .sort((a, b) => a.genero.localeCompare(b.genero) || a.nombre.localeCompare(b.nombre));
+    // Las de entrega fija primero: son las que sirven para narrar quince minutos.
+    .sort(
+      (a, b) =>
+        Number(a.expresiva) - Number(b.expresiva) ||
+        a.genero.localeCompare(b.genero) ||
+        a.nombre.localeCompare(b.nombre),
+    );
 }
 
 // ── Música ────────────────────────────────────────────────────────────────────

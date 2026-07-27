@@ -79,6 +79,9 @@ export const PREDETERMINADA = {
     // cada llamada como una actuación nueva y la voz cambia cada cuarenta y cinco
     // segundos. En quince minutos de narración eso es inaceptable.
     nombreVoz: 'es-US-Neural2-B',
+    // §7.9: apagado por defecto. Encenderlo trae las Chirp y compañía, que suenan
+    // mejor en una frase y peor en quince minutos.
+    vocesExpresivas: false,
     velocidad: 0.96,
     tono: -1,
     // §7.8: un dedal de silencio delante de la primera toma de cada llamada. Sin
