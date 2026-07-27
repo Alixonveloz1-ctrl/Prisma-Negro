@@ -10,6 +10,115 @@
 
 import { llamar } from '../api.js';
 
+// ── Paso 1: buscar casos reales ───────────────────────────────────────────────
+//
+// Antes de que haya tema, hay una BÚSQUEDA. La herramienta sale a internet, trae
+// cinco casos reales que dan para documental, y la persona elige uno. De ahí en
+// adelante todo lo demás cuelga de esa elección.
+//
+// Se busca de verdad —con la herramienta de búsqueda del modelo—, no de memoria: un
+// modelo recordando casos inventa fechas y nombres con total aplomo, y en un
+// documental eso es el fallo que hunde el canal (§8.2).
+
+const ESQUEMA_CASOS = {
+  type: 'object',
+  properties: {
+    casos: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          titulo: { type: 'string' },
+          gancho: { type: 'string' },
+          sinopsis: { type: 'string' },
+          cuando: { type: 'string' },
+          donde: { type: 'string' },
+          porQueFunciona: { type: 'string' },
+          imagenSugerida: { type: 'string' },
+          documentado: { type: 'boolean' },
+        },
+        required: ['titulo', 'gancho', 'sinopsis', 'cuando', 'donde', 'porQueFunciona', 'imagenSugerida', 'documentado'],
+      },
+    },
+  },
+  required: ['casos'],
+};
+
+/**
+ * Trae cinco casos reales entre los que elegir.
+ *
+ * `tema` es opcional: sin él busca casos abiertos; con él, casos de ese terreno.
+ */
+export async function buscarCasos({ tema = '', evitar = [], cuantos = 5, senal } = {}) {
+  const yaVistos = evitar.length
+    ? `\n\nNO propongas ninguno de estos, ya se descartaron:\n${evitar.map((t) => `- ${t}`).join('\n')}`
+    : '';
+
+  const r = await llamar(
+    'texto',
+    {
+      // La búsqueda de verdad. Sin esto el modelo tira de memoria y se inventa las
+      // fechas con una seguridad que engaña.
+      buscarEnInternet: true,
+      sistema:
+        'Eres documentalista de investigación. Buscas casos REALES, comprobables y ya ' +
+        'documentados en fuentes públicas, que den para un documental corto de 8 a 15 ' +
+        'minutos.\n\n' +
+        'Reglas:\n' +
+        '- Solo casos REALES. Nada de leyendas urbanas presentadas como hechos, ni ' +
+        'creepypastas, ni casos inventados. Si algo es folclore, no lo propongas.\n' +
+        '- Que estén documentados: prensa, expedientes, archivos, investigaciones.\n' +
+        '- Evita casos donde la única fuente sea un vídeo viral o un foro.\n' +
+        '- No propongas crímenes recientes con víctimas identificables vivas ni casos ' +
+        'con menores implicados.\n' +
+        '- Variedad: que los cinco no sean del mismo tipo ni de la misma época.',
+      instruccion:
+        (tema
+          ? `Busca casos reales relacionados con: ${tema}\n\n`
+          : 'Busca casos reales llamativos y bien documentados, de cualquier terreno: ' +
+            'desapariciones, fraudes, catástrofes evitables, experimentos, misterios ' +
+            'históricos resueltos, hallazgos.\n\n') +
+        `Devuelve ${cuantos} casos.\n\n` +
+        'Para cada uno:\n' +
+        '- titulo: título del documental, corto y concreto. Sin signos de exclamación.\n' +
+        '- gancho: una frase de lo que engancha, sin exagerar ni prometer de más.\n' +
+        '- sinopsis: 2 o 3 frases de qué pasó.\n' +
+        '- cuando / donde: fecha y lugar reales.\n' +
+        '- porQueFunciona: por qué da para documental visual.\n' +
+        '- imagenSugerida: descripción visual para la portada, SIN rostros de personas ' +
+        'reales identificables.\n' +
+        '- documentado: true solo si de verdad hay fuentes públicas sólidas.\n\n' +
+        'Responde ÚNICAMENTE con un objeto JSON así:\n' +
+        '{"casos":[{"titulo":"","gancho":"","sinopsis":"","cuando":"","donde":"",' +
+        '"porQueFunciona":"","imagenSugerida":"","documentado":true}]}' +
+        yaVistos,
+      esquema: ESQUEMA_CASOS,
+      temperatura: 0.85,
+      maxTokens: 6000,
+    },
+    { senal, reintentos: 1 },
+  );
+
+  const casos = (r.json?.casos || []).slice(0, cuantos).map((c, i) => ({
+    id: `c${Date.now().toString(36)}${i}`,
+    titulo: c.titulo || 'Sin título',
+    gancho: c.gancho || '',
+    sinopsis: c.sinopsis || '',
+    cuando: c.cuando || '',
+    donde: c.donde || '',
+    porQueFunciona: c.porQueFunciona || '',
+    imagenSugerida: c.imagenSugerida || '',
+    documentado: c.documentado !== false,
+    // Las fuentes que el modelo consultó de verdad, para poder volver a ellas.
+    fuentes: r.fuentes || [],
+  }));
+
+  if (!casos.length) {
+    throw new Error('La búsqueda no devolvió ningún caso. Prueba otra vez, o acota el tema.');
+  }
+  return casos;
+}
+
 const ESQUEMA = {
   type: 'object',
   properties: {

@@ -2,325 +2,545 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<!-- §1: se trabaja SOLO desde un teléfono. No hay computadora. La interfaz es la
-     herramienta entera: nada de «corre este comando», nada de editar archivos a
-     mano, ningún paso manual repetitivo. -->
+<!-- §1: se trabaja SOLO desde un teléfono. La interfaz es la herramienta entera. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<title>Prisma Negro</title>
+<meta name="theme-color" content="#0A0B10">
+<title>Prisma Negro · Generador de Documentales con IA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   PRISMA NEGRO · sistema visual
+   ═══════════════════════════════════════════════════════════════════════════ */
+:root{
+  --fondo:#0A0B10;
+  --fondo-2:#0E0F16;
+  --carta:#13141C;
+  --carta-2:#191B24;
+  --carta-3:#20222D;
+  --tinta:#ECEDF2;
+  --tinta-2:#9DA3B4;
+  --tinta-3:#6B7183;
+  --linea:rgba(255,255,255,.065);
+  --linea-2:rgba(255,255,255,.13);
+  --violeta:#6D5AE6;
+  --violeta-2:#8B7BFF;
+  --violeta-suave:rgba(109,90,230,.14);
+  --verde:#3DD68C;
+  --verde-suave:rgba(61,214,140,.13);
+  --oro:#E5A83B;
+  --oro-suave:rgba(229,168,59,.13);
+  --rojo:#F0555C;
+  --rojo-suave:rgba(240,85,92,.13);
+  --s1:0 1px 2px rgba(0,0,0,.4);
+  --s2:0 2px 8px rgba(0,0,0,.45);
+  --s3:0 8px 24px -6px rgba(0,0,0,.6);
+  --r-s:10px; --r-m:14px; --r-l:18px; --r-xl:22px;
+  --tr:170ms cubic-bezier(.4,0,.2,1);
+  --lateral:236px;
+}
+
 /* §7.13 — LA ANCHURA ES UNA INVARIANTE, NO UN DETALLE DE ESTILO.
-   Un selector sin ancho máximo hacía que la página entera se moviera a los lados en
-   el teléfono. La auditoría comprueba estas reglas. */
-*, *::before, *::after { box-sizing: border-box; max-width: 100%; }
-html, body { overflow-x: hidden; }
+   Un control sin ancho máximo movía la página entera a los lados en el teléfono.
+   La auditoría comprueba estas reglas. */
+*,*::before,*::after{box-sizing:border-box;max-width:100%}
+html,body{overflow-x:hidden}
+select,input,textarea,button{max-width:100%}
 
-:root {
-  --fondo: #0d0f12;
-  --panel: #16191f;
-  --borde: #262b34;
-  --texto: #e6e8ec;
-  --tenue: #8b93a1;
-  --acento: #d8a657;
-  --malo: #e5484d;
-  --bueno: #3dd68c;
-  --radio: 12px;
+html{-webkit-text-size-adjust:100%;background:var(--fondo)}
+body{
+  margin:0;background:var(--fondo);color:var(--tinta);
+  font-family:'Inter',system-ui,-apple-system,sans-serif;
+  font-size:15px;line-height:1.55;letter-spacing:-.009em;
+  -webkit-font-smoothing:antialiased;
+  padding-bottom:calc(84px + env(safe-area-inset-bottom));
+}
+.serif{font-family:'Instrument Serif',Georgia,serif;font-weight:400;letter-spacing:0}
+::selection{background:rgba(139,123,255,.32)}
+h1,h2,h3{margin:0}
+
+/* ── Estructura ─────────────────────────────────────────────────────────── */
+.marco{display:flex;min-height:100vh}
+
+aside{
+  display:none;width:var(--lateral);flex:none;
+  border-right:1px solid var(--linea);background:var(--fondo-2);
+  padding:22px 14px;position:sticky;top:0;height:100vh;
+  flex-direction:column;gap:3px;
+}
+aside .marca{padding:0 10px 26px}
+aside .marca b{display:block;font-size:20px;font-weight:700;letter-spacing:-.02em}
+aside .marca span{display:block;font-size:11.5px;color:var(--tinta-3);margin-top:3px}
+aside button{
+  appearance:none;background:none;border:none;cursor:pointer;width:100%;
+  display:flex;align-items:center;gap:11px;padding:10px 11px;border-radius:var(--r-s);
+  color:var(--tinta-2);font:inherit;font-size:14px;font-weight:500;text-align:left;
+  transition:var(--tr);
+}
+aside button:hover{background:var(--carta);color:var(--tinta)}
+aside button.on{background:var(--violeta-suave);color:var(--violeta-2);font-weight:600}
+aside button svg{width:18px;height:18px;flex:none}
+aside .usuario{
+  margin-top:auto;display:flex;align-items:center;gap:10px;padding:11px;
+  border-top:1px solid var(--linea);color:var(--tinta-2);font-size:13px;
 }
 
-body {
-  margin: 0;
-  padding: 0 0 6rem;
-  background: var(--fondo);
-  color: var(--texto);
-  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  -webkit-text-size-adjust: 100%;
+main{flex:1;min-width:0;padding:22px 18px 40px}
+.contenido{max-width:900px;margin:0 auto}
+
+/* ── Cabecera ───────────────────────────────────────────────────────────── */
+.saludo{margin-bottom:24px}
+.saludo h1{font-size:30px;font-weight:600;letter-spacing:-.028em;line-height:1.15}
+.saludo p{margin:7px 0 0;color:var(--tinta-2);font-size:15px}
+
+.movil-marca{display:flex;align-items:center;gap:10px;margin-bottom:20px}
+.movil-marca b{font-size:17px;font-weight:700;letter-spacing:-.02em}
+.movil-marca span{font-size:11px;color:var(--tinta-3);margin-left:auto}
+
+/* ── Tarjetas ───────────────────────────────────────────────────────────── */
+.panel{
+  background:var(--carta);border:1px solid var(--linea);border-radius:var(--r-l);
+  padding:18px;margin:0 0 14px;box-shadow:var(--s2);
+}
+.panel > h2{
+  font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--tinta-2);
+  font-weight:700;margin:0 0 14px;display:flex;align-items:center;gap:9px;
+}
+.panel > h2 .cuenta{margin-left:auto;color:var(--tinta-3);font-weight:600;letter-spacing:0;font-size:12px;text-transform:none}
+.nota{color:var(--tinta-2);font-size:13.5px;margin:0;line-height:1.6}
+.nota.chica{font-size:12.5px;color:var(--tinta-3)}
+
+/* ── El paso numerado: la pieza central del flujo ───────────────────────── */
+.paso{
+  background:var(--carta);border:1px solid var(--linea);border-radius:var(--r-l);
+  padding:18px;margin:0 0 12px;box-shadow:var(--s2);transition:var(--tr);
+}
+.paso.espera{opacity:.5}
+.paso.hecho{border-color:rgba(61,214,140,.25)}
+.paso-cab{display:flex;align-items:flex-start;gap:13px;flex-wrap:wrap}
+.paso-n{
+  width:28px;height:28px;flex:none;border-radius:9px;background:var(--violeta-suave);
+  color:var(--violeta-2);display:inline-flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;
+}
+.paso.hecho .paso-n{background:var(--verde-suave);color:var(--verde)}
+.paso-txt{flex:1;min-width:160px}
+.paso-txt h3{font-size:16.5px;font-weight:650;letter-spacing:-.015em}
+.paso-txt p{margin:4px 0 0;color:var(--tinta-2);font-size:13.5px;line-height:1.5}
+.paso-acc{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+@media (max-width:640px){
+  .paso-acc{width:100%;margin-top:12px}
+  .paso-acc .btn{flex:1 1 auto}
 }
 
-header {
-  position: sticky; top: 0; z-index: 10;
-  padding: .9rem 1rem calc(.9rem + env(safe-area-inset-top));
-  padding-top: max(.9rem, env(safe-area-inset-top));
-  background: rgba(13,15,18,.92);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--borde);
-  display: flex; align-items: center; gap: .6rem;
+/* ── Botones ────────────────────────────────────────────────────────────── */
+.btn{
+  appearance:none;border:1px solid var(--linea-2);background:var(--carta-2);color:var(--tinta);
+  font:inherit;font-size:14px;font-weight:600;letter-spacing:-.01em;
+  padding:10px 15px;border-radius:var(--r-s);cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  transition:var(--tr);box-shadow:var(--s1);white-space:nowrap;min-height:42px;
 }
-header h1 { font-size: 1.05rem; margin: 0; font-weight: 650; letter-spacing: -.01em; }
-header .sub { color: var(--tenue); font-size: .78rem; margin-left: auto; text-align: right; }
+.btn:hover{background:var(--carta-3);border-color:rgba(255,255,255,.2)}
+.btn:active{transform:scale(.985)}
+.btn svg{width:16px;height:16px;flex:none}
+.btn.primario{background:var(--violeta);border-color:var(--violeta);color:#fff;box-shadow:0 2px 14px rgba(109,90,230,.38)}
+.btn.primario:hover{background:#7B69EE}
+.btn.fantasma{background:transparent;box-shadow:none}
+.btn.fantasma:hover{background:rgba(255,255,255,.05)}
+.btn.peligro{background:transparent;border-color:transparent;color:var(--rojo);box-shadow:none}
+.btn.peligro:hover{background:var(--rojo-suave)}
+.btn.grande{width:100%;padding:14px;font-size:15px}
+.btn.chico{padding:7px 12px;font-size:12.5px;min-height:36px;border-radius:8px}
+.btn[disabled]{opacity:.35;cursor:default;transform:none!important}
+.fila-btn{display:flex;flex-wrap:wrap;gap:9px}
+:focus-visible{outline:2px solid var(--violeta-2);outline-offset:2px;border-radius:6px}
 
-main { padding: 1rem; max-width: 900px; margin: 0 auto; }
-
-section {
-  background: var(--panel);
-  border: 1px solid var(--borde);
-  border-radius: var(--radio);
-  padding: 1rem;
-  margin-bottom: .9rem;
+/* ── Campos ─────────────────────────────────────────────────────────────── */
+label{display:block;font-size:12px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--tinta-3);margin:16px 0 7px}
+input,select,textarea{
+  width:100%;background:var(--fondo-2);color:var(--tinta);
+  border:1px solid var(--linea-2);border-radius:var(--r-s);
+  padding:11px 13px;font:inherit;font-size:14.5px;transition:var(--tr);
 }
-section > h2 {
-  font-size: .95rem; margin: 0 0 .2rem; font-weight: 650;
-  display: flex; align-items: center; gap: .5rem;
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--violeta);box-shadow:0 0 0 3px var(--violeta-suave)}
+textarea{min-height:200px;resize:vertical;line-height:1.7;font-size:14.5px}
+select{appearance:none;background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239DA3B4' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;background-size:17px;padding-right:36px}
+input[type=range]{padding:0;accent-color:var(--violeta-2);border:none;background:none}
+
+/* ── Casos: las tarjetas que se eligen ──────────────────────────────────── */
+.casos{
+  display:grid;gap:11px;margin-top:14px;
+  grid-template-columns:repeat(auto-fill,minmax(144px,1fr));
 }
-section > .porque { color: var(--tenue); font-size: .8rem; margin: 0 0 .8rem; }
-
-label { display: block; font-size: .82rem; color: var(--tenue); margin: .7rem 0 .25rem; }
-
-input, select, textarea, button {
-  font: inherit; color: var(--texto);
-  background: #0f1216;
-  border: 1px solid var(--borde);
-  border-radius: 9px;
-  padding: .6rem .7rem;
-  width: 100%;
-  /* Un selector sin esto movía la página entera a los lados. §7.13. */
-  max-width: 100%;
+.caso{
+  border:1.5px solid var(--linea);border-radius:var(--r-m);overflow:hidden;
+  background:var(--carta-2);cursor:pointer;transition:var(--tr);
+  display:flex;flex-direction:column;text-align:left;padding:0;font:inherit;color:inherit;
+  position:relative;
 }
-textarea { min-height: 9rem; resize: vertical; font-size: .92rem; line-height: 1.6; }
-input:focus, select:focus, textarea:focus { outline: 2px solid var(--acento); outline-offset: -1px; }
-
-button {
-  background: #1d222a; cursor: pointer; font-weight: 600;
-  /* Objetivo táctil cómodo con el pulgar. */
-  min-height: 44px;
+.caso:hover{border-color:var(--linea-2);transform:translateY(-2px)}
+.caso.elegido{border-color:var(--violeta);box-shadow:0 0 0 3px var(--violeta-suave)}
+.caso .lam{
+  aspect-ratio:4/3;background:linear-gradient(145deg,#1B1D28,#0E0F16);
+  display:flex;align-items:center;justify-content:center;color:var(--tinta-3);
+  font-size:11px;padding:10px;text-align:center;line-height:1.4;border-bottom:1px solid var(--linea);
 }
-button:active { background: #262c36; }
-button[disabled] { opacity: .45; cursor: default; }
-button.principal { background: var(--acento); color: #1a1206; border-color: var(--acento); }
-button.peligro { color: var(--malo); }
-
-.fila { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .7rem; }
-.fila > * { flex: 1 1 auto; min-width: 0; }
-
-.barra { height: 6px; background: #0f1216; border-radius: 99px; overflow: hidden; margin-top: .6rem; }
-.barra > i { display: block; height: 100%; background: var(--acento); width: 0; transition: width .25s; }
-
-.aviso {
-  border-left: 3px solid var(--acento);
-  background: #1a1509; color: #f0dcb4;
-  padding: .6rem .7rem; border-radius: 6px;
-  font-size: .85rem; margin-top: .7rem;
-  /* Los mensajes largos del backend no pueden ensanchar la página. */
-  overflow-wrap: anywhere;
+.caso .lam img{width:100%;height:100%;object-fit:cover}
+.caso .cq{
+  position:absolute;top:9px;right:9px;width:24px;height:24px;border-radius:50%;
+  background:var(--violeta);color:#fff;display:none;align-items:center;justify-content:center;
+  box-shadow:0 2px 8px rgba(0,0,0,.5);
 }
-.aviso.malo { border-color: var(--malo); background: #1d0f10; color: #ffc9cb; }
-.aviso.bueno { border-color: var(--bueno); background: #0d1a14; color: #b6f0d4; }
+.caso.elegido .cq{display:flex}
+.caso .cb{padding:11px 12px 13px}
+.caso .cb b{display:block;font-size:13.5px;font-weight:650;line-height:1.35;letter-spacing:-.01em}
+.caso .cb p{margin:6px 0 0;font-size:12px;color:var(--tinta-2);line-height:1.5}
+.caso .cb .meta{margin-top:8px;font-size:11px;color:var(--tinta-3);display:flex;gap:6px;flex-wrap:wrap}
 
-.registro {
-  font: .74rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
-  background: #0a0c0f; border: 1px solid var(--borde); border-radius: 8px;
-  padding: .6rem; margin-top: .6rem;
-  max-height: 14rem; overflow: auto;
-  white-space: pre-wrap; overflow-wrap: anywhere;
+/* ── Pastillas y estados ────────────────────────────────────────────────── */
+.pastilla{
+  font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;
+  border:1px solid var(--linea-2);color:var(--tinta-2);white-space:nowrap;
+  display:inline-flex;align-items:center;gap:5px;
+}
+.pastilla.p-ok{color:var(--verde);border-color:rgba(61,214,140,.3);background:var(--verde-suave)}
+.pastilla.p-falta{color:var(--rojo);border-color:rgba(240,85,92,.3);background:var(--rojo-suave)}
+.pastilla.p-aviso{color:var(--oro);border-color:rgba(229,168,59,.3);background:var(--oro-suave)}
+.pastilla.p-tipo{color:var(--violeta-2);border-color:rgba(139,123,255,.3);background:var(--violeta-suave)}
+
+/* ── Avisos ─────────────────────────────────────────────────────────────── */
+.aviso{
+  border-left:3px solid var(--violeta);background:var(--violeta-suave);
+  padding:11px 13px;border-radius:8px;font-size:13.5px;margin-top:12px;
+  overflow-wrap:anywhere;line-height:1.55;
+}
+.aviso.malo{border-color:var(--rojo);background:var(--rojo-suave)}
+.aviso.bueno{border-color:var(--verde);background:var(--verde-suave)}
+.aviso b{font-weight:650}
+.aviso .comoarreglar{display:block;margin-top:5px;opacity:.85;font-size:12.5px}
+
+.registro{
+  font:12px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace;
+  background:#06070C;border:1px solid var(--linea);border-radius:var(--r-s);
+  padding:11px 13px;margin-top:11px;max-height:220px;overflow:auto;
+  white-space:pre-wrap;overflow-wrap:anywhere;color:var(--tinta-2);
 }
 
-.cifras { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: .6rem; }
-.cifra { font-size: .78rem; color: var(--tenue); }
-.cifra b { display: block; font-size: 1.15rem; color: var(--texto); font-weight: 650; }
+/* ── Cifras ─────────────────────────────────────────────────────────────── */
+.cifras{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:11px}
+.cifra{background:var(--fondo-2);border:1px solid var(--linea);border-radius:var(--r-m);padding:12px}
+.cifra b{display:block;font-size:22px;font-weight:650;letter-spacing:-.02em;line-height:1.1}
+.cifra span{display:block;font-size:11.5px;color:var(--tinta-3);margin-top:3px}
 
-.tomas { margin-top: .8rem; display: grid; gap: .5rem; }
-.toma {
-  border: 1px solid var(--borde); border-radius: 9px; padding: .6rem;
-  font-size: .85rem; background: #12151a;
+/* ── Progreso ───────────────────────────────────────────────────────────── */
+.barra{height:6px;background:var(--fondo-2);border-radius:99px;overflow:hidden;margin-top:13px;border:1px solid var(--linea)}
+.barra > i{display:block;height:100%;background:linear-gradient(90deg,var(--violeta),var(--violeta-2));width:0;transition:width .3s}
+
+/* ── Tomas ──────────────────────────────────────────────────────────────── */
+.tomas{display:grid;gap:8px;margin-top:14px}
+.toma{border:1px solid var(--linea);border-radius:var(--r-m);padding:11px 12px;background:var(--fondo-2)}
+.toma .cab{display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+.toma .cab .n{font-size:11.5px;color:var(--tinta-3);font-weight:600;margin-right:3px}
+.toma p{margin:0;font-size:13px;color:var(--tinta-2);line-height:1.55;overflow-wrap:anywhere}
+
+/* ── Fichas ─────────────────────────────────────────────────────────────── */
+.ficha{border:1px solid var(--linea);border-radius:var(--r-m);padding:12px;background:var(--fondo-2);margin-bottom:8px}
+.ficha .cab{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:7px;font-size:11.5px;color:var(--tinta-3)}
+.ficha p{margin:0;font-size:13.5px;line-height:1.55}
+.ficha .cita{margin-top:7px;font-size:12.5px;color:var(--tinta-2);border-left:2px solid var(--linea-2);padding-left:10px;font-style:italic}
+
+/* ── Navegación inferior (móvil) ────────────────────────────────────────── */
+nav.abajo{
+  position:fixed;left:0;right:0;bottom:0;z-index:60;
+  background:rgba(14,15,22,.94);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border-top:1px solid var(--linea);
+  padding:7px 4px calc(7px + env(safe-area-inset-bottom));
+  display:flex;justify-content:space-around;
 }
-.toma .cab { display: flex; gap: .4rem; align-items: center; color: var(--tenue); font-size: .72rem; margin-bottom: .3rem; flex-wrap: wrap; }
-.toma p { margin: 0; overflow-wrap: anywhere; }
-
-.pastilla {
-  font-size: .68rem; padding: .1rem .4rem; border-radius: 99px;
-  border: 1px solid var(--borde); color: var(--tenue); white-space: nowrap;
+nav.abajo button{
+  appearance:none;background:none;border:none;cursor:pointer;flex:1;min-width:0;
+  display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 2px;
+  color:var(--tinta-3);font:inherit;font-size:9.5px;font-weight:700;
+  letter-spacing:.05em;text-transform:uppercase;position:relative;transition:var(--tr);
 }
-.pastilla.ok { color: var(--bueno); border-color: #1c4433; }
-.pastilla.falta { color: var(--malo); border-color: #4a2023; }
-.pastilla.tipo { color: var(--acento); border-color: #4a3a18; }
+nav.abajo button.on{color:var(--violeta-2)}
+nav.abajo button.on::after{content:'';position:absolute;top:-7px;width:30px;height:3px;border-radius:0 0 3px 3px;background:var(--violeta-2)}
+nav.abajo button svg{width:22px;height:22px}
 
-table { width: 100%; border-collapse: collapse; font-size: .82rem; display: block; overflow-x: auto; }
-td, th { text-align: left; padding: .35rem .5rem; border-bottom: 1px solid var(--borde); }
+/* ── Pantalla de acceso ─────────────────────────────────────────────────── */
+.acceso{max-width:400px;margin:8vh auto 0;padding:0 4px}
+.acceso .logo{text-align:center;margin-bottom:30px}
+.acceso .logo b{display:block;font-size:32px;font-weight:700;letter-spacing:-.03em}
+.acceso .logo span{display:block;color:var(--tinta-3);font-size:13.5px;margin-top:5px}
 
-.oculto { display: none !important; }
-nav.pasos { display: flex; gap: .35rem; overflow-x: auto; padding-bottom: .3rem; margin-bottom: .9rem; }
-nav.pasos button { width: auto; flex: 0 0 auto; font-size: .8rem; padding: .45rem .7rem; min-height: 38px; }
-nav.pasos button.activo { background: var(--acento); color: #1a1206; border-color: var(--acento); }
+/* ── Pantalla ancha ───────────────────────────────────────────────────────
+   TODO lo de escritorio va aquí, al final. Cuando estaba a media hoja, la regla
+   nav.abajo{display:flex} venía después con la misma especificidad y ganaba: la
+   barra inferior salía también en escritorio, encima del contenido.            */
+@media (min-width:900px){
+  aside{display:flex}
+  body{padding-bottom:0}
+  nav.abajo{display:none}
+  main{padding:34px 32px 60px}
+  .saludo h1{font-size:36px}
+  .movil-marca{display:none}
+  /* Los cinco casos en una fila, sin uno huérfano en la segunda. */
+  .casos{grid-template-columns:repeat(5,1fr)}
+}
+
+.oculto{display:none!important}
+.pie{color:var(--tinta-3);font-size:12px;text-align:center;margin:26px 0 10px;display:flex;align-items:center;justify-content:center;gap:7px}
 </style>
 </head>
 <body>
 
-<header>
-  <h1>Prisma&nbsp;Negro</h1>
-  <div class="sub" id="cabecera">sin proyecto</div>
-</header>
-
-<main>
-  <!-- ── Acceso ───────────────────────────────────────────────────────── -->
-  <section id="s-acceso">
-    <h2>Entrar</h2>
-    <p class="porque">
-      La herramienta gasta la cuota de tu nube. Sin contraseña, cualquiera que
-      encuentre la dirección la gasta por ti.
-    </p>
+<!-- ── Acceso ──────────────────────────────────────────────────────────── -->
+<div id="acceso" class="acceso">
+  <div class="logo">
+    <b>Prisma Negro</b>
+    <span>Generador de Documentales con IA</span>
+  </div>
+  <div class="panel">
     <label for="clave">Contraseña</label>
-    <input id="clave" type="password" autocomplete="current-password" inputmode="text">
-    <div class="fila">
-      <button class="principal" id="b-entrar">Entrar</button>
+    <input id="clave" type="password" autocomplete="current-password">
+    <div class="fila-btn" style="margin-top:14px">
+      <button class="btn primario grande" id="b-entrar">Entrar</button>
     </div>
     <div id="salud"></div>
-  </section>
-
-  <div id="app" class="oculto">
-    <nav class="pasos" id="pasos"></nav>
-
-    <!-- ── Proyecto ───────────────────────────────────────────────────── -->
-    <section id="p-proyecto" class="paso">
-      <h2>Proyecto</h2>
-      <p class="porque">Todo lo que generes vive en tu nube. Esto es solo una copia.</p>
-      <label for="titulo">Título</label>
-      <input id="titulo" placeholder="El incendio del puerto">
-      <label for="tema">Tema del documental</label>
-      <textarea id="tema" style="min-height:5rem" placeholder="Qué quieres contar, y desde qué ángulo."></textarea>
-      <div class="fila">
-        <button id="b-guardar">Guardar</button>
-        <button id="b-subir">Guardar en la nube</button>
-      </div>
-      <div class="fila">
-        <button id="b-abrir">Abrir de la nube</button>
-        <button id="b-nuevo" class="peligro">Nuevo</button>
-      </div>
-      <div id="aviso-proyecto"></div>
-    </section>
-
-    <!-- ── Investigación ──────────────────────────────────────────────── -->
-    <section id="p-investigacion" class="paso oculto">
-      <h2>Investigación</h2>
-      <p class="porque">
-        Hecho, fuente, fecha y cita textual. El guion se escribe después, y cada
-        afirmación apunta a una ficha. Sin esto no hay documental, hay opinión.
-      </p>
-      <div class="fila">
-        <button class="principal" id="b-investigar">Buscar fichas</button>
-        <button id="b-mas-fichas">Buscar más</button>
-      </div>
-      <div id="fichas"></div>
-    </section>
-
-    <!-- ── Guion ──────────────────────────────────────────────────────── -->
-    <section id="p-guion" class="paso oculto">
-      <h2>Guion</h2>
-      <p class="porque">
-        Es el insumo del que sale todo lo demás. Puedes editarlo a mano.
-        «## » abre una escena; una línea en blanco separa tomas.
-      </p>
-      <label for="minutos">Duración objetivo (minutos)</label>
-      <input id="minutos" type="number" min="3" max="40" value="10" inputmode="numeric">
-      <div class="fila">
-        <button class="principal" id="b-escribir">Escribir el guion</button>
-      </div>
-      <label for="guion">Guion</label>
-      <textarea id="guion" spellcheck="false"></textarea>
-      <div class="fila">
-        <button id="b-segmentar">Partir en tomas</button>
-      </div>
-      <div id="aviso-guion"></div>
-    </section>
-
-    <!-- ── Tomas ──────────────────────────────────────────────────────── -->
-    <section id="p-tomas" class="paso oculto">
-      <h2>Tomas</h2>
-      <p class="porque">La toma es la unidad de todo. Cada fase se genera por separado y solo cobra lo que genera.</p>
-      <div class="cifras" id="cifras-tomas"></div>
-      <div class="fila">
-        <button class="principal" id="b-dirigir">Dirección (1 llamada)</button>
-      </div>
-      <div id="aviso-tomas"></div>
-      <div class="tomas" id="lista-tomas"></div>
-    </section>
-
-    <!-- ── Generación ─────────────────────────────────────────────────── -->
-    <section id="p-generar" class="paso oculto">
-      <h2>Generar</h2>
-      <p class="porque">
-        Puedes detener a mitad y reanudar: cada unidad terminada se guarda antes de
-        pasar a la siguiente.
-      </p>
-      <div id="resumen-coste" class="cifras"></div>
-
-      <div class="fila"><button class="principal" id="b-narrar">Narración</button></div>
-      <div class="fila"><button class="principal" id="b-imagenes">Imágenes</button></div>
-      <div class="fila"><button class="principal" id="b-movimiento">Movimiento (caro)</button></div>
-      <div class="fila"><button class="principal" id="b-musica">Música</button></div>
-      <div class="fila"><button id="b-marca">Subir la marca del canal</button></div>
-
-      <div class="barra"><i id="barra"></i></div>
-      <div id="progreso" class="cifra" style="margin-top:.4rem"></div>
-      <div class="fila"><button class="peligro" id="b-detener" disabled>Detener</button></div>
-      <div id="aviso-generar"></div>
-    </section>
-
-    <!-- ── Montaje ────────────────────────────────────────────────────── -->
-    <section id="p-montaje" class="paso oculto">
-      <h2>Montaje</h2>
-      <p class="porque">
-        Se comprueba que está todo ANTES de arrancar. Si falta algo, se dice qué
-        falta por su nombre en vez de fallar con un número media hora después.
-      </p>
-      <div class="fila">
-        <button id="b-revisar">Revisar antes de montar</button>
-        <button class="principal" id="b-montar">Montar</button>
-      </div>
-      <div id="aviso-montaje"></div>
-      <div class="fila"><button id="b-bajar" disabled>Bajar el video</button></div>
-    </section>
-
-    <!-- ── Publicación ────────────────────────────────────────────────── -->
-    <section id="p-publicar" class="paso oculto">
-      <h2>Publicación</h2>
-      <p class="porque">
-        Las marcas de tiempo salen de las duraciones medidas, no de un modelo
-        estimando minutos.
-      </p>
-      <div class="fila">
-        <button class="principal" id="b-metadatos">Título, descripción y etiquetas</button>
-        <button id="b-miniatura">Miniatura</button>
-      </div>
-      <div id="salida-metadatos"></div>
-    </section>
-
-    <!-- ── Ajustes ────────────────────────────────────────────────────── -->
-    <section id="p-ajustes" class="paso oculto">
-      <h2>Ajustes</h2>
-      <p class="porque">La proporción de tomas con movimiento es la palanca principal del presupuesto.</p>
-
-      <label for="m-imagen">Modelo de imagen</label>
-      <select id="m-imagen"></select>
-
-      <label for="m-video">Modelo de movimiento</label>
-      <select id="m-video"></select>
-
-      <label for="voz">Voz del narrador</label>
-      <select id="voz"></select>
-      <p class="porque" style="margin:.4rem 0 0">
-        Para narración larga conviene una voz de entrega fija: las expresivas
-        cambian de tono en cada llamada, y eso son quince minutos con un narrador
-        distinto cada cuarenta y cinco segundos.
-      </p>
-
-      <label for="proporcion">Tomas con movimiento: <b id="v-proporcion">15%</b></label>
-      <input id="proporcion" type="range" min="0" max="60" value="15">
-
-      <label for="objetivo">Segundos por toma: <b id="v-objetivo">11</b></label>
-      <input id="objetivo" type="range" min="5" max="20" value="11">
-
-      <label for="marca-texto">Marca del canal (la dibuja el navegador, no el modelo)</label>
-      <input id="marca-texto" placeholder="PRISMA NEGRO">
-
-      <label for="vertical">Formato</label>
-      <select id="vertical">
-        <option value="0">Horizontal 16:9</option>
-        <option value="1">Vertical 9:16</option>
-      </select>
-
-      <div class="fila"><button id="b-ajustes">Guardar ajustes</button></div>
-    </section>
   </div>
-</main>
+  <p class="nota chica" style="text-align:center">
+    Todo lo que generes vive en tu propia nube.
+  </p>
+</div>
+
+<!-- ── Aplicación ──────────────────────────────────────────────────────── -->
+<div class="marco oculto" id="app">
+  <aside>
+    <div class="marca">
+      <b>Prisma Negro</b>
+      <span>Generador de Documentales con IA</span>
+    </div>
+    <div id="lateral"></div>
+    <div class="usuario">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:19px;height:19px"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>
+      <span id="nombre-proyecto">sin proyecto</span>
+    </div>
+  </aside>
+
+  <main>
+    <div class="contenido">
+      <div class="movil-marca">
+        <b>Prisma Negro</b>
+        <span id="cabecera-movil"></span>
+      </div>
+
+      <!-- INICIO: el flujo entero, paso a paso -->
+      <section id="v-inicio" class="vista">
+        <div class="saludo">
+          <h1>Crea un documental</h1>
+          <p>De un caso real a un video terminado, sin salir de aquí.</p>
+        </div>
+
+        <!-- 1 · Investigación -->
+        <div class="paso" id="paso1">
+          <div class="paso-cab">
+            <div class="paso-n">1</div>
+            <div class="paso-txt">
+              <h3>Investigación</h3>
+              <p>Busca en internet casos reales que den para documental. Elige uno.</p>
+            </div>
+            <div class="paso-acc">
+              <button class="btn primario" id="b-buscar-casos">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                Buscar casos
+              </button>
+            </div>
+          </div>
+          <div id="zona-casos"></div>
+        </div>
+
+        <!-- 2 · Guion -->
+        <div class="paso espera" id="paso2">
+          <div class="paso-cab">
+            <div class="paso-n">2</div>
+            <div class="paso-txt">
+              <h3>Guion</h3>
+              <p>Fichas documentales del caso y guion escrito a partir de ellas.</p>
+            </div>
+            <div class="paso-acc">
+              <button class="btn" id="b-generar-guion">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h11l5 5v11H4z"/><path d="M8 13h8M8 17h5"/></svg>
+                Generar guion
+              </button>
+            </div>
+          </div>
+          <div id="aviso-paso2"></div>
+        </div>
+
+        <!-- 3 · Generación -->
+        <div class="paso espera" id="paso3">
+          <div class="paso-cab">
+            <div class="paso-n">3</div>
+            <div class="paso-txt">
+              <h3>Generación de contenido</h3>
+              <p>Narración, imágenes, movimiento y música. Cada una por separado.</p>
+            </div>
+          </div>
+          <div class="fila-btn" style="margin-top:13px">
+            <button class="btn" id="b-narrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 013 3v7a3 3 0 01-6 0V5a3 3 0 013-3z"/><path d="M19 11a7 7 0 01-14 0M12 18v4"/></svg>Narración</button>
+            <button class="btn" id="b-imagenes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-6 6"/></svg>Imágenes</button>
+            <button class="btn" id="b-movimiento"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M10 9l5 3-5 3z"/></svg>Clips</button>
+            <button class="btn" id="b-musica"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>Música</button>
+          </div>
+          <div class="barra"><i id="barra"></i></div>
+          <p class="nota chica" id="progreso" style="margin-top:8px"></p>
+          <div class="fila-btn" style="margin-top:10px">
+            <button class="btn peligro chico" id="b-detener" disabled>Detener</button>
+          </div>
+          <div id="aviso-paso3"></div>
+        </div>
+
+        <!-- 4 · Montaje -->
+        <div class="paso espera" id="paso4">
+          <div class="paso-cab">
+            <div class="paso-n">4</div>
+            <div class="paso-txt">
+              <h3>Montaje</h3>
+              <p>Se comprueba que está todo antes de arrancar, y se monta en la nube.</p>
+            </div>
+            <div class="paso-acc">
+              <button class="btn fantasma" id="b-revisar">Revisar</button>
+              <button class="btn" id="b-montar">Montar</button>
+            </div>
+          </div>
+          <div id="aviso-paso4"></div>
+        </div>
+
+        <!-- 5 · Exportar -->
+        <div class="paso espera" id="paso5">
+          <div class="paso-cab">
+            <div class="paso-n">5</div>
+            <div class="paso-txt">
+              <h3>Exportar</h3>
+              <p>Video final, miniatura, título, descripción con tiempos reales y fuentes.</p>
+            </div>
+            <div class="paso-acc">
+              <button class="btn fantasma" id="b-metadatos">Metadatos</button>
+              <button class="btn" id="b-bajar" disabled>Bajar video</button>
+            </div>
+          </div>
+          <div id="aviso-paso5"></div>
+        </div>
+
+        <p class="pie">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" style="width:15px;height:15px"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 7 18.2l1.9-5.8L4 8.8h6.1z"/></svg>
+          Cada fase se genera por separado. Solo cobra lo que generas.
+        </p>
+      </section>
+
+      <!-- INVESTIGACIÓN -->
+      <section id="v-investigacion" class="vista oculto">
+        <div class="saludo"><h1>Investigación</h1><p>Hecho, fuente, fecha y cita. El guion sale de aquí.</p></div>
+        <div class="panel">
+          <h2>Caso elegido <span class="cuenta" id="cuenta-fichas"></span></h2>
+          <div id="caso-elegido"></div>
+          <div class="fila-btn" style="margin-top:14px">
+            <button class="btn primario" id="b-fichas">Buscar fichas</button>
+            <button class="btn fantasma" id="b-mas-fichas">Buscar más</button>
+          </div>
+          <div id="aviso-investigacion"></div>
+        </div>
+        <div class="panel"><h2>Fichas</h2><div id="fichas"></div></div>
+      </section>
+
+      <!-- GUION -->
+      <section id="v-guion" class="vista oculto">
+        <div class="saludo"><h1>Guion</h1><p>Es el insumo del que sale todo lo demás. Puedes editarlo.</p></div>
+        <div class="panel">
+          <h2>Escribir</h2>
+          <label for="minutos">Duración objetivo (minutos)</label>
+          <input id="minutos" type="number" min="3" max="40" value="10" inputmode="numeric">
+          <div class="fila-btn" style="margin-top:13px">
+            <button class="btn primario" id="b-escribir">Escribir el guion</button>
+            <button class="btn fantasma" id="b-segmentar">Partir en tomas</button>
+          </div>
+          <label for="guion">Texto</label>
+          <textarea id="guion" spellcheck="false" placeholder="«## » abre una escena. Una línea en blanco separa tomas."></textarea>
+          <div class="fila-btn" style="margin-top:12px">
+            <button class="btn fantasma chico" id="b-guardar">Guardar</button>
+            <button class="btn fantasma chico" id="b-subir">Guardar en la nube</button>
+          </div>
+          <div id="aviso-guion"></div>
+        </div>
+      </section>
+
+      <!-- TOMAS -->
+      <section id="v-tomas" class="vista oculto">
+        <div class="saludo"><h1>Tomas</h1><p>La toma es la unidad de todo.</p></div>
+        <div class="panel">
+          <h2>Resumen</h2>
+          <div class="cifras" id="cifras-tomas"></div>
+          <div class="fila-btn" style="margin-top:14px">
+            <button class="btn primario" id="b-dirigir">Dirección · 1 llamada</button>
+          </div>
+          <div id="aviso-tomas"></div>
+        </div>
+        <div class="panel"><h2>Lista <span class="cuenta" id="cuenta-tomas"></span></h2><div class="tomas" id="lista-tomas"></div></div>
+      </section>
+
+      <!-- AJUSTES -->
+      <section id="v-ajustes" class="vista oculto">
+        <div class="saludo"><h1>Ajustes</h1><p>La proporción de tomas con movimiento es la palanca del presupuesto.</p></div>
+        <div class="panel">
+          <h2>Narración</h2>
+          <label for="voz">Voz</label>
+          <select id="voz"></select>
+          <p class="nota chica" style="margin-top:7px">Para narración larga conviene una voz de entrega fija: las expresivas cambian de tono en cada llamada.</p>
+          <label for="velocidad">Velocidad · <b id="v-velocidad">0.96</b></label>
+          <input id="velocidad" type="range" min="70" max="130" value="96">
+        </div>
+        <div class="panel">
+          <h2>Imagen y movimiento</h2>
+          <label for="m-imagen">Modelo de imagen</label>
+          <select id="m-imagen"></select>
+          <label for="m-video">Modelo de movimiento</label>
+          <select id="m-video"></select>
+          <label for="proporcion">Tomas con movimiento · <b id="v-proporcion">15%</b></label>
+          <input id="proporcion" type="range" min="0" max="60" value="15">
+          <label for="objetivo">Segundos por toma · <b id="v-objetivo">11</b></label>
+          <input id="objetivo" type="range" min="5" max="20" value="11">
+        </div>
+        <div class="panel">
+          <h2>Formato y marca</h2>
+          <label for="vertical">Formato</label>
+          <select id="vertical"><option value="0">Horizontal 16:9</option><option value="1">Vertical 9:16</option></select>
+          <label for="marca-texto">Marca del canal</label>
+          <input id="marca-texto" placeholder="PRISMA NEGRO">
+          <p class="nota chica" style="margin-top:7px">La dibuja el navegador, no el modelo: así sale nítida y siempre igual.</p>
+          <div class="fila-btn" style="margin-top:14px">
+            <button class="btn primario" id="b-ajustes">Guardar ajustes</button>
+            <button class="btn fantasma" id="b-marca">Subir marca</button>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Proyecto</h2>
+          <label for="titulo">Título</label>
+          <input id="titulo">
+          <div class="fila-btn" style="margin-top:14px">
+            <button class="btn fantasma" id="b-abrir">Abrir de la nube</button>
+            <button class="btn peligro" id="b-nuevo">Nuevo proyecto</button>
+          </div>
+          <div id="aviso-proyecto"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <nav class="abajo" id="nav-movil"></nav>
+</div>
 
 <script type="module" src="/app/main.js"></script>
 </body>

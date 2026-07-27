@@ -102,6 +102,8 @@ async function despachar(modo, c) {
         esquema: c.esquema,
         temperatura: c.temperatura,
         maxTokens: c.maxTokens,
+        // Busca en internet de verdad y devuelve además las fuentes consultadas.
+        buscarEnInternet: !!c.buscarEnInternet,
       });
 
     case 'imagen': {

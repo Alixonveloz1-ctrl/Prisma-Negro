@@ -68,35 +68,91 @@ async function pedir(url, cuerpo) {
 // Cuando se pide `esquema`, el modelo devuelve JSON estructurado y aquí se entrega
 // ya parseado. Nadie aguas abajo tiene que adivinar si vino texto o JSON.
 
-export async function texto({ instruccion, sistema, esquema, temperatura = 0.7, maxTokens = 8192 }) {
+export async function texto({
+  instruccion,
+  sistema,
+  esquema,
+  temperatura = 0.7,
+  maxTokens = 8192,
+  buscarEnInternet = false,
+}) {
   const modelo = process.env.MODELO_TEXTO || 'gemini-2.5-pro';
+
+  // Con búsqueda en internet NO se pide salida estructurada: la herramienta de
+  // búsqueda y el esquema de respuesta no conviven en todas las versiones del
+  // modelo, y cuando chocan el error que devuelven no dice que sea eso. Se pide el
+  // JSON en el texto de la instrucción y se extrae con tolerancia, que funciona en
+  // los dos casos.
+  const conEsquema = esquema && !buscarEnInternet;
+
   const cuerpo = {
     contents: [{ role: 'user', parts: [{ text: instruccion }] }],
     generationConfig: {
       temperature: temperatura,
       maxOutputTokens: maxTokens,
-      ...(esquema
-        ? { responseMimeType: 'application/json', responseSchema: esquema }
-        : {}),
+      ...(conEsquema ? { responseMimeType: 'application/json', responseSchema: esquema } : {}),
     },
   };
   if (sistema) cuerpo.systemInstruction = { parts: [{ text: sistema }] };
+  if (buscarEnInternet) cuerpo.tools = [{ googleSearch: {} }];
 
   const datos = await pedir(`${base()}/${modelo}:generateContent`, cuerpo);
-  const partes = datos?.candidates?.[0]?.content?.parts || [];
+  const candidato = datos?.candidates?.[0];
+  const partes = candidato?.content?.parts || [];
   const salida = partes.map((p) => p.text || '').join('');
 
   if (!salida.trim()) {
-    const motivo = datos?.candidates?.[0]?.finishReason || 'sin motivo declarado';
+    const motivo = candidato?.finishReason || 'sin motivo declarado';
     throw new Error(`El modelo de texto no devolvió nada (${motivo}).`);
   }
 
-  if (!esquema) return { texto: salida };
-  try {
-    return { texto: salida, json: JSON.parse(salida) };
-  } catch {
-    throw new Error('El modelo debía devolver JSON estructurado y devolvió otra cosa.');
+  // Las fuentes que el modelo consultó de verdad. En un documental esto no es un
+  // extra: es lo que permite que una afirmación apunte a algo comprobable (§8.1).
+  const fuentes = (candidato?.groundingMetadata?.groundingChunks || [])
+    .map((c) => ({ titulo: c.web?.title || '', enlace: c.web?.uri || '' }))
+    .filter((f) => f.enlace);
+
+  if (!esquema) return { texto: salida, fuentes };
+  return { texto: salida, fuentes, json: extraerJson(salida) };
+}
+
+/**
+ * Saca el JSON de una respuesta que puede venir envuelta.
+ *
+ * Cuando se pide salida estructurada, el modelo devuelve JSON limpio. Cuando además
+ * busca en internet, devuelve texto que CONTIENE el JSON —con vallas de código
+ * delante, o una frase de cortesía—. Esto aguanta las dos formas en vez de fallar
+ * con «devolvió otra cosa», que no le dice nada a nadie.
+ */
+function extraerJson(texto) {
+  const limpio = texto
+    .replace(/^[\s\S]*?```(?:json)?\s*/i, (m) => (m.includes('```') ? '' : m))
+    .replace(/```[\s\S]*$/, '')
+    .trim();
+
+  for (const candidato of [limpio, texto]) {
+    try {
+      return JSON.parse(candidato);
+    } catch {
+      /* se prueba la siguiente forma */
+    }
+    // Último recurso: el primer objeto equilibrado que haya dentro.
+    const i = candidato.indexOf('{');
+    if (i >= 0) {
+      let n = 0;
+      for (let k = i; k < candidato.length; k++) {
+        if (candidato[k] === '{') n++;
+        else if (candidato[k] === '}' && --n === 0) {
+          try {
+            return JSON.parse(candidato.slice(i, k + 1));
+          } catch {
+            break;
+          }
+        }
+      }
+    }
   }
+  throw new Error('El modelo debía devolver JSON y no se pudo leer nada aprovechable.');
 }
 
 // ── Imagen ────────────────────────────────────────────────────────────────────

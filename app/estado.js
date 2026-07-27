@@ -76,6 +76,12 @@ export function sanear(bruto) {
   // La normalización de la configuración. Aquí y en ningún otro sitio.
   p.config = normalizar(p.config);
 
+  // El caso elegido en el paso 1. De él cuelga todo lo demás: el tema, las fichas,
+  // el guion. Se guarda entero —no solo el título— para poder enseñar de dónde
+  // salió el documental sin volver a buscarlo.
+  p.caso = p.caso && p.caso.titulo ? p.caso : null;
+  p.casosVistos = Array.isArray(p.casosVistos) ? p.casosVistos : [];
+
   p.fichas = Array.isArray(p.fichas) ? p.fichas.map(sanearFicha) : [];
   p.piezas = Array.isArray(p.piezas) && p.piezas.length
     ? p.piezas.map((z, n) => sanearPieza(z, n, p))

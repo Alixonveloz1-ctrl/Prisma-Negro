@@ -22,11 +22,13 @@ import { construirContexto } from './contexto.mjs';
 import { invariantes as arquitectura } from './invariantes/arquitectura.mjs';
 import { invariantes as montaje } from './invariantes/montaje.mjs';
 import { invariantes as datos } from './invariantes/datos.mjs';
+import { invariantes as pantalla } from './invariantes/pantalla.mjs';
 
 const TODAS = [
   ['arquitectura', arquitectura],
   ['montaje', montaje],
   ['datos', datos],
+  ['pantalla', pantalla],
 ];
 
 const VERDE = '\x1b[32m';

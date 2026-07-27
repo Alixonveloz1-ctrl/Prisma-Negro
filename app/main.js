@@ -6,6 +6,11 @@
 //
 // §1: el usuario no lee registros de la nube desde el teléfono. Cualquier fallo se
 // explica AQUÍ, en pantalla, con palabras.
+//
+// El flujo son cinco pasos y se ven los cinco a la vez, en orden, con su estado:
+//   1 investigar y ELEGIR UN CASO → 2 guion → 3 generar → 4 montar → 5 exportar
+// Los pasos que todavía no tocan salen apagados, para que no haya que adivinar cuál
+// es el siguiente.
 
 import { llamar, ponerClave } from './api.js';
 import * as estado from './estado.js';
@@ -24,31 +29,39 @@ import * as metadatos from './fases/metadatos.js';
 import * as montajeFase from './fases/montaje.js';
 
 const $ = (id) => document.getElementById(id);
-const PASOS = [
-  ['p-proyecto', 'Proyecto'],
-  ['p-investigacion', 'Investigación'],
-  ['p-guion', 'Guion'],
-  ['p-tomas', 'Tomas'],
-  ['p-generar', 'Generar'],
-  ['p-montaje', 'Montaje'],
-  ['p-publicar', 'Publicar'],
-  ['p-ajustes', 'Ajustes'],
+
+const escapar = (s) =>
+  String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+// Una sola definición de la navegación: la barra lateral y la de abajo salen de
+// aquí. Con dos listas, una acaba teniendo una pestaña que la otra no.
+const ICONO = {
+  inicio: '<path d="M3 10l9-7 9 7v10a1 1 0 01-1 1h-5v-7H9v7H4a1 1 0 01-1-1z"/>',
+  investigacion: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
+  guion: '<path d="M4 4h11l5 5v11H4z"/><path d="M8 13h8M8 17h5"/>',
+  tomas: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M10 9l5 3-5 3z"/>',
+  ajustes: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.2 2.2M16.9 16.9l2.2 2.2M19.1 4.9l-2.2 2.2M7.1 16.9l-2.2 2.2"/>',
+};
+const VISTAS = [
+  ['inicio', 'Inicio'],
+  ['investigacion', 'Investigación'],
+  ['guion', 'Guion'],
+  ['tomas', 'Tomas'],
+  ['ajustes', 'Ajustes'],
 ];
 
-let P = null; // el proyecto
-const cola = new Cola({ alProgresar: pintarProgreso, alAviso: (m) => avisar('generar', m) });
+let P = null;
+let casos = [];
+const cola = new Cola({ alProgresar: pintarProgreso, alAviso: (m) => avisar('paso3', m) });
 
-// ── Utilidades de pantalla ────────────────────────────────────────────────────
+// ── Pantalla ──────────────────────────────────────────────────────────────────
 
 function avisar(donde, mensaje, clase = '') {
-  const caja = $(`aviso-${donde}`) || $('aviso-generar');
+  const caja = $(`aviso-${donde}`);
   if (!caja) return;
-  caja.innerHTML = '';
-  if (!mensaje) return;
-  const d = document.createElement('div');
-  d.className = `aviso ${clase}`;
-  d.textContent = mensaje;
-  caja.appendChild(d);
+  caja.innerHTML = mensaje
+    ? `<div class="aviso ${clase}">${escapar(mensaje)}</div>`
+    : '';
 }
 
 function registro(donde, lineas) {
@@ -62,14 +75,12 @@ function registro(donde, lineas) {
 
 function pintarProgreso({ fase, hechas, total, estado: e, fallos }) {
   $('barra').style.width = total ? `${Math.round((hechas / total) * 100)}%` : '0';
-  const cola = e === 'detenida' ? ' · detenido' : e === 'termina' ? ' · listo' : '';
-  $('progreso').textContent =
-    `${fase}: ${hechas} de ${total}${fallos ? ` · ${fallos} con fallo` : ''}${cola}`;
+  const cierre = e === 'detenida' ? ' · detenido' : e === 'termina' ? ' · listo' : '';
+  $('progreso').textContent = `${fase}: ${hechas} de ${total}${fallos ? ` · ${fallos} con fallo` : ''}${cierre}`;
   $('b-detener').disabled = e === 'termina' || e === 'detenida';
 }
 
-/** Envuelve una acción: desactiva el botón, enseña el fallo con palabras. */
-function accion(boton, hacer, donde = 'generar') {
+function accion(boton, hacer, donde = 'paso3') {
   const b = $(boton);
   b?.addEventListener('click', async () => {
     b.disabled = true;
@@ -89,57 +100,56 @@ const pieza = () => P.piezas[0];
 
 // ── Acceso ────────────────────────────────────────────────────────────────────
 
-accion('b-entrar', async () => {
-  const c = $('clave').value.trim();
-  if (!c) throw new Error('Escribe la contraseña.');
-  ponerClave(c);
+accion(
+  'b-entrar',
+  async () => {
+    const c = $('clave').value.trim();
+    if (!c) throw new Error('Escribe la contraseña.');
+    ponerClave(c);
 
-  const salud = await llamar('salud');
-  const cfg = salud.configuracion;
-  if (!cfg.lista) {
-    $('salud').innerHTML =
-      '<div class="aviso malo">Falta configurar esto en el panel de la plataforma:<br>' +
-      cfg.faltan.map((f) => `<b>${f.variable}</b> — ${f.es}`).join('<br>') +
-      '</div>';
-    throw new Error('La herramienta no está configurada del todo todavía.');
-  }
+    const salud = await llamar('salud');
+    const cfg = salud.configuracion;
+    if (!cfg.lista) {
+      $('salud').innerHTML =
+        '<div class="aviso malo"><b>Falta configurar esto:</b>' +
+        cfg.faltan
+          .map((f) => `<span class="comoarreglar"><b>${escapar(f.variable)}</b> — ${escapar(f.es)}</span>`)
+          .join('') +
+        '</div>';
+      throw new Error('La herramienta no está configurada del todo todavía.');
+    }
 
-  // §1: el fallo se explica AQUÍ, con palabras. Eslabón por eslabón, y cada uno roto
-  // dice qué hacer — que es la diferencia entre arreglarlo en un minuto y pasar la
-  // tarde mirando una pantalla que solo dice «error».
-  const prueba = salud.prueba || [];
-  const rotos = prueba.filter((p) => !p.ok);
-  $('salud').innerHTML = prueba.length
-    ? prueba
-        .map(
-          (p) =>
-            `<div class="aviso ${p.ok ? 'bueno' : 'malo'}">` +
-            `${p.ok ? '✓' : '✗'} <b>${p.paso}</b> — ${escapar(p.dice)}` +
-            (p.arregla ? `<br><span style="opacity:.85">${escapar(p.arregla)}</span>` : '') +
-            `</div>`,
-        )
-        .join('')
-    : '';
+    // §1: eslabón por eslabón, y cada uno roto dice qué hacer.
+    const prueba = salud.prueba || [];
+    $('salud').innerHTML = prueba
+      .map(
+        (p) =>
+          `<div class="aviso ${p.ok ? 'bueno' : 'malo'}">${p.ok ? '✓' : '✗'} <b>${escapar(p.paso)}</b> — ` +
+          `${escapar(p.dice)}` +
+          (p.arregla ? `<span class="comoarreglar">${escapar(p.arregla)}</span>` : '') +
+          `</div>`,
+      )
+      .join('');
 
-  // El montador solo hace falta para montar: no impide entrar ni generar.
-  const graves = rotos.filter((p) => p.paso !== 'montador');
-  if (graves.length) throw new Error('Hay algo que todavía no funciona. Mira arriba: dice cuál y qué hacer.');
+    // El montador solo hace falta para montar: no impide entrar ni generar.
+    if (prueba.filter((p) => !p.ok && p.paso !== 'montador').length) {
+      throw new Error('Hay algo que todavía no funciona. Mira arriba: dice cuál y qué hacer.');
+    }
 
-  // Una llamada real: comprueba la contraseña de verdad, no solo la configuración.
-  await llamar('proyecto.listar');
-  sessionStorage.setItem('clave', c);
+    await llamar('proyecto.listar');
+    sessionStorage.setItem('clave', c);
+    $('acceso').classList.add('oculto');
+    $('app').classList.remove('oculto');
+    await arrancar();
+  },
+  'proyecto',
+);
 
-  $('s-acceso').classList.add('oculto');
-  $('app').classList.remove('oculto');
-  await arrancar();
-}, 'proyecto');
-
-// ── Arranque ──────────────────────────────────────────────────────────────────
+// ── Arranque y navegación ─────────────────────────────────────────────────────
 
 async function arrancar() {
-  pintarPasos();
+  pintarNavegacion();
   const locales = await estado.listarLocales();
-  // Camino de carga 2 (local) o 1 (nuevo). Los dos pasan por sanear → normalizar.
   P = locales.length
     ? await estado.cargarLocal(locales.sort((a, b) => b.modificado - a.modificado)[0].id)
     : estado.nuevoProyecto();
@@ -148,78 +158,153 @@ async function arrancar() {
   cargarVoces();
 }
 
-function pintarPasos() {
-  const nav = $('pasos');
-  nav.innerHTML = '';
-  PASOS.forEach(([id, nombre], n) => {
-    const b = document.createElement('button');
-    b.textContent = nombre;
-    b.onclick = () => {
-      document.querySelectorAll('.paso').forEach((s) => s.classList.add('oculto'));
-      $(id).classList.remove('oculto');
-      nav.querySelectorAll('button').forEach((x) => x.classList.remove('activo'));
-      b.classList.add('activo');
-    };
-    if (n === 0) b.classList.add('activo');
-    nav.appendChild(b);
-  });
+function pintarNavegacion() {
+  const lat = $('lateral');
+  const mov = $('nav-movil');
+  lat.innerHTML = '';
+  mov.innerHTML = '';
+
+  for (const [id, nombre] of VISTAS) {
+    const svg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONO[id]}</svg>`;
+    for (const [caja, contenido] of [
+      [lat, `${svg}<span>${nombre}</span>`],
+      [mov, `${svg}${nombre}`],
+    ]) {
+      const b = document.createElement('button');
+      b.innerHTML = contenido;
+      b.dataset.vista = id;
+      b.onclick = () => ir(id);
+      caja.appendChild(b);
+    }
+  }
+  ir('inicio');
+}
+
+function ir(id) {
+  document.querySelectorAll('.vista').forEach((v) => v.classList.add('oculto'));
+  $(`v-${id}`)?.classList.remove('oculto');
+  document.querySelectorAll('[data-vista]').forEach((b) => b.classList.toggle('on', b.dataset.vista === id));
+  window.scrollTo(0, 0);
 }
 
 function pintarTodo() {
   $('titulo').value = P.titulo;
-  $('tema').value = P.tema;
   $('guion').value = pieza().guion;
-  $('cabecera').textContent = `${P.id} · ${pieza().tomas.length} tomas`;
+  $('nombre-proyecto').textContent = P.caso?.titulo || P.titulo;
+  $('cabecera-movil').textContent = `${pieza().tomas.length} tomas`;
+  pintarCasoElegido();
   pintarFichas();
   pintarTomas();
   pintarAjustes();
+  pintarPasos();
 }
 
-// ── Proyecto ──────────────────────────────────────────────────────────────────
+/**
+ * El estado de los cinco pasos.
+ *
+ * Un paso apagado no es decoración: es la respuesta a «¿y ahora qué?». Sin esto hay
+ * que acordarse de en qué orden va todo, y el orden es justamente lo que la
+ * herramienta debería saber por ti.
+ */
+function pintarPasos() {
+  const t = pieza().tomas;
+  const hay = {
+    caso: !!P.caso,
+    guion: !!pieza().guion.trim() && t.length > 0,
+    generado: t.length > 0 && t.every((x) => x.audio === 'ok') && t.every((x) => x.reusa !== null || x.imagen === 'ok'),
+    montado: !!pieza().montaje,
+  };
 
-accion('b-guardar', async () => {
-  P.titulo = $('titulo').value.trim() || P.titulo;
-  P.tema = $('tema').value.trim();
-  pieza().guion = $('guion').value;
-  await guardar();
-  avisar('proyecto', 'Guardado en este teléfono.', 'bueno');
-}, 'proyecto');
+  const marcar = (n, hecho, listo) => {
+    const el = $(`paso${n}`);
+    el.classList.toggle('hecho', hecho);
+    el.classList.toggle('espera', !listo && !hecho);
+  };
+  marcar(1, hay.caso, true);
+  marcar(2, hay.guion, hay.caso);
+  marcar(3, hay.generado, hay.guion);
+  marcar(4, hay.montado, hay.generado);
+  marcar(5, false, hay.montado);
 
-accion('b-subir', async () => {
-  P.titulo = $('titulo').value.trim() || P.titulo;
-  P.tema = $('tema').value.trim();
-  pieza().guion = $('guion').value;
-  await estado.guardar(P, { remoto: true });
-  avisar('proyecto', 'Guardado en tu nube. Esta es la copia buena.', 'bueno');
-}, 'proyecto');
+  $('b-generar-guion').disabled = !hay.caso;
+  for (const b of ['b-narrar', 'b-imagenes', 'b-movimiento', 'b-musica']) $(b).disabled = !hay.guion;
+  $('b-montar').disabled = !hay.generado;
+  $('b-revisar').disabled = !hay.guion;
+}
 
-accion('b-abrir', async () => {
-  const ids = await estado.listarRemotos();
-  if (!ids.length) throw new Error('No hay ningún proyecto guardado en tu nube.');
-  const id = ids.length === 1 ? ids[0] : prompt(`¿Cuál?\n${ids.join('\n')}`, ids[0]);
-  if (!id) return;
-  // Camino de carga 3 (remoto). Pasa por sanear → normalizar, igual que los otros
-  // dos: es el que se olvidaba y por eso las reparaciones no llegaban (§7.2).
-  P = await estado.cargarRemoto(id);
-  await guardar();
-  pintarTodo();
-  avisar('proyecto', `Abierto ${id}.`, 'bueno');
-}, 'proyecto');
+// ── Paso 1: buscar casos y elegir uno ─────────────────────────────────────────
 
-accion('b-nuevo', async () => {
-  if (!confirm('¿Empezar un proyecto nuevo? Lo de ahora sigue guardado.')) return;
-  P = estado.nuevoProyecto({ titulo: 'Documental sin título' });
-  P.id = 'p' + String(Date.now()).slice(-4);
-  P.piezas[0].id = P.id;
-  await guardar();
-  pintarTodo();
-}, 'proyecto');
+accion(
+  'b-buscar-casos',
+  async () => {
+    $('zona-casos').innerHTML = '<p class="nota" style="margin-top:14px">Buscando en internet…</p>';
+    casos = await investigacion.buscarCasos({
+      tema: '',
+      // No repetir lo ya descartado: buscar dos veces y que salgan los mismos cinco
+      // es la forma más rápida de que la herramienta parezca rota.
+      evitar: P.casosVistos,
+    });
+    P.casosVistos = [...new Set([...P.casosVistos, ...casos.map((c) => c.titulo)])].slice(-40);
+    await guardar();
+    pintarCasos();
+  },
+  'paso2',
+);
 
-// ── Investigación ─────────────────────────────────────────────────────────────
+function pintarCasos() {
+  if (!casos.length) return;
+  $('zona-casos').innerHTML =
+    `<p class="nota chica" style="margin-top:15px;display:flex;align-items:center;gap:8px">` +
+    `<b style="color:var(--violeta-2)">${casos.length} casos encontrados</b>` +
+    `<span style="margin-left:auto">Elige uno para continuar</span></p>` +
+    `<div class="casos">` +
+    casos
+      .map(
+        (c, i) =>
+          `<button class="caso${P.caso?.titulo === c.titulo ? ' elegido' : ''}" data-caso="${i}">` +
+          `<div class="cq"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="width:13px;height:13px"><path d="M20 6L9 17l-5-5"/></svg></div>` +
+          `<div class="lam">${escapar(c.imagenSugerida.slice(0, 110))}</div>` +
+          `<div class="cb"><b>${escapar(c.titulo)}</b><p>${escapar(c.gancho)}</p>` +
+          `<div class="meta">${c.cuando ? `<span>${escapar(c.cuando)}</span>` : ''}` +
+          `${c.donde ? `<span>· ${escapar(c.donde)}</span>` : ''}` +
+          `${c.documentado ? '' : '<span class="pastilla p-aviso">poco documentado</span>'}</div></div></button>`,
+      )
+      .join('') +
+    `</div>`;
+
+  document.querySelectorAll('[data-caso]').forEach((b) => {
+    b.onclick = async () => {
+      const c = casos[Number(b.dataset.caso)];
+      P.caso = c;
+      P.tema = `${c.titulo}. ${c.sinopsis}`;
+      P.titulo = c.titulo;
+      pieza().titulo = c.titulo;
+      await guardar();
+      pintarCasos();
+      pintarTodo();
+      avisar('paso2', `Caso elegido: ${c.titulo}. Ya puedes generar el guion.`, 'bueno');
+    };
+  });
+}
+
+function pintarCasoElegido() {
+  const c = P.caso;
+  $('caso-elegido').innerHTML = c
+    ? `<div class="ficha"><div class="cab">${escapar(c.cuando)} · ${escapar(c.donde)}` +
+      `${c.documentado ? '<span class="pastilla p-ok">documentado</span>' : '<span class="pastilla p-aviso">poco documentado</span>'}</div>` +
+      `<p><b>${escapar(c.titulo)}</b></p><p style="margin-top:6px;color:var(--tinta-2)">${escapar(c.sinopsis)}</p>` +
+      (c.fuentes?.length
+        ? `<div class="cita">Fuentes consultadas: ${c.fuentes.slice(0, 4).map((f) => escapar(f.titulo || f.enlace)).join(' · ')}</div>`
+        : '') +
+      `</div>`
+    : '<p class="nota">Todavía no has elegido un caso. Ve a Inicio y busca casos.</p>';
+  $('cuenta-fichas').textContent = P.fichas.length ? `${P.fichas.length} fichas` : '';
+}
+
+// ── Paso 2: fichas y guion ────────────────────────────────────────────────────
 
 async function buscarFichas(mas) {
-  P.tema = $('tema').value.trim();
-  if (!P.tema) throw new Error('Escribe el tema en la pestaña Proyecto.');
+  if (!P.caso) throw new Error('Elige un caso primero, en Inicio.');
   const nuevas = await investigacion.investigar({
     tema: P.tema,
     cuantas: 12,
@@ -228,83 +313,134 @@ async function buscarFichas(mas) {
   P.fichas = mas ? [...P.fichas, ...nuevas] : nuevas;
   await guardar();
   pintarFichas();
+  pintarCasoElegido();
 }
 
-accion('b-investigar', () => buscarFichas(false), 'proyecto');
-accion('b-mas-fichas', () => buscarFichas(true), 'proyecto');
+accion('b-fichas', () => buscarFichas(false), 'investigacion');
+accion('b-mas-fichas', () => buscarFichas(true), 'investigacion');
 
 function pintarFichas() {
-  const caja = $('fichas');
-  if (!P.fichas.length) {
-    caja.innerHTML = '<p class="porque">Todavía no hay fichas.</p>';
-    return;
-  }
-  caja.innerHTML =
-    `<div class="cifras"><div class="cifra"><b>${P.fichas.length}</b>fichas</div></div>` +
-    P.fichas
-      .map(
-        (f) =>
-          `<div class="toma"><div class="cab">` +
-          `<span class="pastilla ${f.incierto ? 'falta' : 'ok'}">${f.incierto ? 'disputado' : f.fiabilidad}</span>` +
-          `<span>${escapar(f.fuente)}${f.fecha ? ' · ' + escapar(f.fecha) : ''}</span></div>` +
-          `<p>${escapar(f.afirmacion)}</p>` +
-          (f.cita ? `<p style="color:var(--tenue);margin-top:.3rem">«${escapar(f.cita)}»</p>` : '') +
-          `</div>`,
-      )
-      .join('');
+  $('fichas').innerHTML = P.fichas.length
+    ? P.fichas
+        .map(
+          (f) =>
+            `<div class="ficha"><div class="cab">` +
+            `<span class="pastilla ${f.incierto ? 'p-aviso' : 'p-ok'}">${f.incierto ? 'disputado' : escapar(f.fiabilidad)}</span>` +
+            `<span>${escapar(f.fuente)}${f.fecha ? ' · ' + escapar(f.fecha) : ''}</span></div>` +
+            `<p>${escapar(f.afirmacion)}</p>` +
+            (f.cita ? `<div class="cita">«${escapar(f.cita)}»</div>` : '') +
+            `</div>`,
+        )
+        .join('')
+    : '<p class="nota">Todavía no hay fichas. Sin ellas el guion sería opinión, no documental.</p>';
 }
 
-const escapar = (s) =>
-  String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+/** El paso 2 del flujo: fichas y guion de una vez, que es como se usa. */
+accion(
+  'b-generar-guion',
+  async () => {
+    if (!P.caso) throw new Error('Elige un caso primero.');
+    if (!P.fichas.length) {
+      avisar('paso2', 'Buscando fichas del caso…');
+      await buscarFichas(false);
+    }
+    avisar('paso2', `${P.fichas.length} fichas. Escribiendo el guion…`);
+    const texto = await guionFase.escribirGuion({
+      tema: P.tema,
+      fichas: P.fichas,
+      minutos: Number($('minutos').value) || 10,
+    });
+    pieza().guion = texto;
+    $('guion').value = texto;
 
-// ── Guion y segmentación ──────────────────────────────────────────────────────
+    const r = segmentarVerificado(texto, P.config.segmentacion);
+    pieza().tomas = r.tomas;
+    pieza().escenas = r.escenas;
+    await guardar();
+    pintarTodo();
+    avisar(
+      'paso2',
+      `Guion escrito y partido en ${r.tomas.length} tomas, ${r.escenas.length} escenas. ` +
+        `Léelo en Guion antes de generar: es el insumo del que sale todo.`,
+      'bueno',
+    );
+  },
+  'paso2',
+);
 
-accion('b-escribir', async () => {
-  P.tema = $('tema').value.trim();
-  const texto = await guionFase.escribirGuion({
-    tema: P.tema,
-    fichas: P.fichas,
-    minutos: Number($('minutos').value) || 10,
-  });
-  pieza().guion = texto;
-  $('guion').value = texto;
-  await guardar();
-  avisar('guion', 'Guion escrito. Léelo y edítalo antes de seguir.', 'bueno');
-}, 'guion');
+accion(
+  'b-escribir',
+  async () => {
+    const texto = await guionFase.escribirGuion({
+      tema: P.tema,
+      fichas: P.fichas,
+      minutos: Number($('minutos').value) || 10,
+    });
+    pieza().guion = texto;
+    $('guion').value = texto;
+    await guardar();
+    avisar('guion', 'Guion escrito. Léelo y edítalo antes de seguir.', 'bueno');
+  },
+  'guion',
+);
 
-accion('b-segmentar', async () => {
-  pieza().guion = $('guion').value;
-  if (!pieza().guion.trim()) throw new Error('No hay guion que partir.');
+accion(
+  'b-segmentar',
+  async () => {
+    pieza().guion = $('guion').value;
+    if (!pieza().guion.trim()) throw new Error('No hay guion que partir.');
 
-  // §4.3: segmentar SIN comprobar la cobertura es como no haber comprobado nunca.
-  // Esta puerta hace las dos cosas y lanza si el guion no queda cubierto.
-  const r = segmentarVerificado(pieza().guion, P.config.segmentacion);
+    // §4.3: segmentar SIN comprobar la cobertura es como no haber comprobado nunca.
+    const r = segmentarVerificado(pieza().guion, P.config.segmentacion);
 
-  // Se conserva lo ya generado de las tomas que no cambiaron de texto: repartir el
-  // guion otra vez no debería obligar a pagar la narración otra vez.
-  const antes = new Map(pieza().tomas.map((t) => [t.texto, t]));
-  pieza().tomas = r.tomas.map((t) => {
-    const viejo = antes.get(t.texto);
-    return viejo ? { ...t, ...viejo, i: t.i, escena: t.escena } : t;
-  });
-  pieza().escenas = r.escenas;
+    // Se conserva lo ya generado de las tomas cuyo texto no cambió: repartir otra
+    // vez el guion no debería obligar a pagar la narración otra vez.
+    const antes = new Map(pieza().tomas.map((t) => [t.texto, t]));
+    pieza().tomas = r.tomas.map((t) => {
+      const viejo = antes.get(t.texto);
+      return viejo ? { ...t, ...viejo, i: t.i, escena: t.escena } : t;
+    });
+    pieza().escenas = r.escenas;
+    await guardar();
+    pintarTodo();
+    avisar(
+      'guion',
+      `${r.tomas.length} tomas en ${r.escenas.length} escenas. Cobertura exacta: ` +
+        `${r.cobertura.caracteres} caracteres, sin perder ni duplicar nada.`,
+      'bueno',
+    );
+  },
+  'guion',
+);
 
-  await guardar();
-  pintarTomas();
-  avisar(
-    'guion',
-    `${r.tomas.length} tomas en ${r.escenas.length} escenas. ` +
-      `La cobertura es exacta: ${r.cobertura.caracteres} caracteres, sin perder ni duplicar nada.`,
-    'bueno',
-  );
-}, 'guion');
+accion(
+  'b-guardar',
+  async () => {
+    pieza().guion = $('guion').value;
+    P.titulo = $('titulo').value.trim() || P.titulo;
+    await guardar();
+    avisar('guion', 'Guardado en este teléfono.', 'bueno');
+  },
+  'guion',
+);
+
+accion(
+  'b-subir',
+  async () => {
+    pieza().guion = $('guion').value;
+    await estado.guardar(P, { remoto: true });
+    avisar('guion', 'Guardado en tu nube. Esta es la copia buena.', 'bueno');
+  },
+  'guion',
+);
 
 // ── Tomas y dirección ─────────────────────────────────────────────────────────
 
 function pintarTomas() {
   const t = pieza().tomas;
   const falta = estado.loQueFalta(pieza());
-  $('cabecera').textContent = `${P.id} · ${t.length} tomas`;
+  $('cuenta-tomas').textContent = t.length ? `${t.length}` : '';
+  $('cabecera-movil').textContent = `${t.length} tomas`;
 
   $('cifras-tomas').innerHTML = [
     ['tomas', t.length],
@@ -312,67 +448,84 @@ function pintarTomas() {
     ['minutos', (estado.duracionDe(pieza()) / 60).toFixed(1)],
     ['con movimiento', t.filter((x) => x.movimiento).length],
     ['reutilizan', t.filter((x) => x.reusa !== null).length],
-  ]
-    .map(([k, v]) => `<div class="cifra"><b>${v}</b>${k}</div>`)
-    .join('');
-
-  $('resumen-coste').innerHTML = [
-    ['llamadas de voz', narracion.resumen(t, P.config).llamadas],
-    ['imágenes', imagenFase.planificar(t, { soloLasQueFaltan: false }).length],
-    ['clips', movimiento.resumen(t).clips],
-    ['pistas de música', pieza().escenas.length],
     ['falta narrar', falta.narracion],
     ['faltan imágenes', falta.imagen],
+    ['llamadas de voz', narracion.resumen(t, P.config).llamadas],
   ]
-    .map(([k, v]) => `<div class="cifra"><b>${v}</b>${k}</div>`)
+    .map(([k, v]) => `<div class="cifra"><b>${v}</b><span>${k}</span></div>`)
     .join('');
 
-  $('lista-tomas').innerHTML = t
-    .slice(0, 60)
-    .map(
-      (x) =>
-        `<div class="toma"><div class="cab">` +
-        `<span>#${x.i} · esc ${x.escena} · ${(x.segundos || 0).toFixed(1)}s${x.medida ? '' : ' (est.)'}</span>` +
-        `<span class="pastilla ${x.audio === 'ok' ? 'ok' : 'falta'}">voz</span>` +
-        `<span class="pastilla ${x.reusa !== null ? 'ok' : x.imagen === 'ok' ? 'ok' : 'falta'}">` +
-        `${x.reusa !== null ? `reusa #${x.reusa}` : 'imagen'}</span>` +
-        (x.movimiento ? `<span class="pastilla ${x.video === 'ok' ? 'ok' : 'falta'}">movimiento</span>` : '') +
-        `<span class="pastilla tipo">${x.tipoImagen}</span>` +
-        (x.corteForzado ? `<span class="pastilla falta">corte forzado</span>` : '') +
-        `</div><p>${escapar(x.texto)}</p></div>`,
-    )
-    .join('');
+  $('lista-tomas').innerHTML = t.length
+    ? t
+        .slice(0, 80)
+        .map(
+          (x) =>
+            `<div class="toma"><div class="cab"><span class="n">#${x.i} · esc ${x.escena} · ${(x.segundos || 0).toFixed(1)}s${x.medida ? '' : ' est.'}</span>` +
+            `<span class="pastilla ${x.audio === 'ok' ? 'p-ok' : 'p-falta'}">voz</span>` +
+            `<span class="pastilla ${x.reusa !== null || x.imagen === 'ok' ? 'p-ok' : 'p-falta'}">${x.reusa !== null ? `reusa #${x.reusa}` : 'imagen'}</span>` +
+            (x.movimiento ? `<span class="pastilla ${x.video === 'ok' ? 'p-ok' : 'p-falta'}">clip</span>` : '') +
+            `<span class="pastilla p-tipo">${escapar(x.tipoImagen)}</span>` +
+            (x.corteForzado ? '<span class="pastilla p-aviso">corte forzado</span>' : '') +
+            `</div><p>${escapar(x.texto)}</p></div>`,
+        )
+        .join('')
+    : '<p class="nota">Todavía no hay tomas. Genera el guion primero.</p>';
 }
 
-accion('b-dirigir', async () => {
-  if (!pieza().tomas.length) throw new Error('Parte el guion en tomas primero.');
-  const tomas = await direccion.dirigir({
+accion(
+  'b-dirigir',
+  async () => {
+    if (!pieza().tomas.length) throw new Error('Parte el guion en tomas primero.');
+    const tomas = await direccion.dirigir({
+      tomas: pieza().tomas,
+      escenas: pieza().escenas,
+      tema: P.tema,
+      config: P.config,
+    });
+    pieza().tomas = tomas;
+    await guardar();
+    pintarTomas();
+    const sin = direccion.sinDirigir(tomas);
+    avisar(
+      'tomas',
+      sin.length
+        ? `${sin.length} tomas se quedaron sin plano (${sin.slice(0, 8).join(', ')}). Vuelve a dirigir: es una sola llamada.`
+        : `Dirigidas ${tomas.length} tomas. ${tomas.filter((x) => x.movimiento).length} llevan movimiento.`,
+      sin.length ? 'malo' : 'bueno',
+    );
+  },
+  'tomas',
+);
+
+// ── Paso 3: las fases que gastan ──────────────────────────────────────────────
+
+$('b-detener').addEventListener('click', () => cola.detener());
+
+/** Dirige si hace falta: sin ficha de plano no hay ni imagen ni clip. */
+async function asegurarDireccion() {
+  if (pieza().tomas.every((t) => t.plano)) return;
+  avisar('paso3', 'Falta la dirección de arte. Se hace sola, en una llamada…');
+  pieza().tomas = await direccion.dirigir({
     tomas: pieza().tomas,
     escenas: pieza().escenas,
     tema: P.tema,
     config: P.config,
   });
-  pieza().tomas = tomas;
   await guardar();
   pintarTomas();
+}
 
-  const sin = direccion.sinDirigir(tomas);
-  avisar(
-    'tomas',
-    sin.length
-      ? `${sin.length} tomas se quedaron sin plano (${sin.slice(0, 8).join(', ')}). Vuelve a dirigir: solo cuesta una llamada.`
-      : `Dirigidas ${tomas.length} tomas. ${tomas.filter((t) => t.movimiento).length} llevan movimiento.`,
-    sin.length ? 'malo' : 'bueno',
-  );
-}, 'tomas');
-
-// ── Las fases que gastan ──────────────────────────────────────────────────────
-
-$('b-detener').addEventListener('click', () => cola.detener());
+const guardaToma = async (nueva) => {
+  const k = pieza().tomas.findIndex((x) => x.i === nueva.i);
+  if (k >= 0) pieza().tomas[k] = nueva;
+  await guardar();
+  pintarTomas();
+  pintarPasos();
+};
 
 accion('b-narrar', async () => {
   const bloques = narracion.planificar(pieza().tomas, P.config);
-  if (!bloques.length) return avisar('generar', 'Ya está toda la narración.', 'bueno');
+  if (!bloques.length) return avisar('paso3', 'Ya está toda la narración.', 'bueno');
 
   // §4.5: el progreso se cuenta en LLAMADAS, no en tomas.
   const r = await cola.ejecutar(
@@ -380,14 +533,8 @@ accion('b-narrar', async () => {
     bloques,
     (bloque, _i, senal) => narracion.narrarBloque({ bloque, pieza: P.id, config: P.config, senal }),
     {
-      // Cada unidad terminada se escribe ANTES de pasar a la siguiente (§4).
       alTerminarUno: async (tomasNuevas) => {
-        for (const t of tomasNuevas) {
-          const k = pieza().tomas.findIndex((x) => x.i === t.i);
-          if (k >= 0) pieza().tomas[k] = t;
-        }
-        await guardar();
-        pintarTomas();
+        for (const t of tomasNuevas) await guardaToma(t);
       },
     },
   );
@@ -395,29 +542,24 @@ accion('b-narrar', async () => {
 });
 
 accion('b-imagenes', async () => {
+  await asegurarDireccion();
   const pendientes = imagenFase.planificar(pieza().tomas);
-  if (!pendientes.length) return avisar('generar', 'Ya están todas las imágenes.', 'bueno');
+  if (!pendientes.length) return avisar('paso3', 'Ya están todas las imágenes.', 'bueno');
 
   const r = await cola.ejecutar(
     'imágenes',
     pendientes,
     (toma, _i, senal) =>
       imagenFase.generarImagen({ toma, tomas: pieza().tomas, pieza: P.id, config: P.config, senal }),
-    {
-      alTerminarUno: async (nueva) => {
-        const k = pieza().tomas.findIndex((x) => x.i === nueva.i);
-        if (k >= 0) pieza().tomas[k] = nueva;
-        await guardar();
-        pintarTomas();
-      },
-    },
+    { alTerminarUno: guardaToma },
   );
   informar(r, 'imágenes');
 });
 
 accion('b-movimiento', async () => {
+  await asegurarDireccion();
   const pendientes = movimiento.planificar(pieza().tomas);
-  if (!pendientes.length) return avisar('generar', 'No falta ningún clip.', 'bueno');
+  if (!pendientes.length) return avisar('paso3', 'No falta ningún clip.', 'bueno');
   if (!confirm(`Son ${pendientes.length} clips y es la fase más cara con diferencia. ¿Sigo?`)) return;
 
   const r = await cola.ejecutar(
@@ -432,27 +574,19 @@ accion('b-movimiento', async () => {
         senal,
         aviso: (m) => ($('progreso').textContent = m),
       }),
-    {
-      alTerminarUno: async (nueva) => {
-        const k = pieza().tomas.findIndex((x) => x.i === nueva.i);
-        if (k >= 0) pieza().tomas[k] = nueva;
-        await guardar();
-        pintarTomas();
-      },
-    },
+    { alTerminarUno: guardaToma },
   );
   informar(r, 'movimiento');
 });
 
 accion('b-musica', async () => {
   const pendientes = musica.planificar(pieza().escenas, pieza().tomas, P.config);
-  if (!pendientes.length) return avisar('generar', 'La música ya está, o está apagada.', 'bueno');
+  if (!pendientes.length) return avisar('paso3', 'La música ya está, o está apagada.', 'bueno');
 
   const r = await cola.ejecutar(
     'música',
     pendientes,
-    (escena, _i, senal) =>
-      musica.generarMusicaDeEscena({ escena, tomas: pieza().tomas, pieza: P.id, senal }),
+    (escena, _i, senal) => musica.generarMusicaDeEscena({ escena, tomas: pieza().tomas, pieza: P.id, senal }),
     {
       alTerminarUno: async (res) => {
         const e = pieza().escenas.find((x) => x.n === res.n);
@@ -464,160 +598,206 @@ accion('b-musica', async () => {
   informar(r, 'música');
 });
 
-accion('b-marca', async () => {
-  if (!P.config.marca.texto) throw new Error('Pon el texto de la marca en Ajustes.');
-  await miniatura.subirMarca({ pieza: P.id, config: P.config });
-  avisar('generar', 'Marca subida. Se incrusta dentro de cada toma al montar.', 'bueno');
-});
-
 function informar(r, que) {
+  pintarPasos();
   if (r.detenida) {
-    return avisar('generar', `${que}: detenido en ${r.hechas} de ${r.total}. Lo hecho está guardado.`);
+    return avisar('paso3', `${que}: detenido en ${r.hechas} de ${r.total}. Lo hecho está guardado.`);
   }
   if (r.fallos.length) {
-    avisar('generar', `${que}: ${r.fallos.length} de ${r.total} fallaron. Vuelve a darle: solo repite lo que falta.`, 'malo');
-    registro('generar', r.fallos.map((f) => `· ${f.error}`));
-    return;
+    avisar('paso3', `${que}: ${r.fallos.length} de ${r.total} fallaron. Vuelve a darle: solo repite lo que falta.`, 'malo');
+    return registro('paso3', r.fallos.map((f) => `· ${f.error}`));
   }
-  avisar('generar', `${que}: ${r.hechas} de ${r.total}, sin fallos.`, 'bueno');
+  avisar('paso3', `${que}: ${r.hechas} de ${r.total}, sin fallos.`, 'bueno');
 }
 
-// ── Montaje ───────────────────────────────────────────────────────────────────
+// ── Paso 4: montaje ───────────────────────────────────────────────────────────
 
-accion('b-revisar', async () => {
-  const r = await montajeFase.revisar({ pieza: pieza(), config: P.config });
-  avisar(
-    'montaje',
-    r.completo
-      ? `Todo listo: ${r.total} materiales, ${(r.duracion / 60).toFixed(1)} minutos.`
-      : `Faltan ${r.faltan.length} de ${r.total} materiales.`,
-    r.completo ? 'bueno' : 'malo',
-  );
-  if (!r.completo) registro('montaje', r.faltan);
-  for (const a of r.avisos) registro('montaje', [a]);
-}, 'montaje');
+accion(
+  'b-revisar',
+  async () => {
+    const r = await montajeFase.revisar({ pieza: pieza(), config: P.config });
+    avisar(
+      'paso4',
+      r.completo
+        ? `Todo listo: ${r.total} materiales, ${(r.duracion / 60).toFixed(1)} minutos.`
+        : `Faltan ${r.faltan.length} de ${r.total} materiales.`,
+      r.completo ? 'bueno' : 'malo',
+    );
+    if (!r.completo) registro('paso4', r.faltan);
+    if (r.avisos.length) registro('paso4', r.avisos);
+  },
+  'paso4',
+);
 
-accion('b-montar', async () => {
-  avisar('montaje', 'Comprobando el material…');
-  const ejecucion = await montajeFase.montar({
-    pieza: pieza(),
-    config: P.config,
-    aviso: (m) => avisar('montaje', m),
-  });
-  pieza().montaje = ejecucion;
-  await guardar();
+accion(
+  'b-montar',
+  async () => {
+    avisar('paso4', 'Comprobando el material…');
+    const ejecucion = await montajeFase.montar({
+      pieza: pieza(),
+      config: P.config,
+      aviso: (m) => avisar('paso4', m),
+    });
+    pieza().montaje = ejecucion;
+    await guardar();
+    pintarPasos();
 
-  const r = await montajeFase.esperarMontaje({
-    ejecucion,
-    aviso: (m) => avisar('montaje', m),
-  });
+    const r = await montajeFase.esperarMontaje({ ejecucion, aviso: (m) => avisar('paso4', m) });
+    if (r.ok) {
+      avisar('paso4', `Montado en ${r.minutos} minutos. Ya puedes bajarlo en el paso 5.`, 'bueno');
+      $('b-bajar').disabled = false;
+      $('paso5').classList.remove('espera');
+    } else {
+      // §7.6: la aplicación lee el registro de la nube por su cuenta.
+      avisar('paso4', r.error, 'malo');
+      registro('paso4', r.registro);
+    }
+  },
+  'paso4',
+);
 
-  if (r.ok) {
-    avisar('montaje', `Montado en ${r.minutos} minutos. Ya puedes bajarlo.`, 'bueno');
-    $('b-bajar').disabled = false;
-  } else {
-    // §7.6: la aplicación lee el registro de la nube por su cuenta, porque el
-    // usuario no puede.
-    avisar('montaje', r.error, 'malo');
-    registro('montaje', r.registro);
-  }
-}, 'montaje');
+// ── Paso 5: exportar ──────────────────────────────────────────────────────────
 
-accion('b-bajar', async () => {
-  avisar('montaje', 'Bajando por trozos…');
-  const blob = await montajeFase.bajarFinal({
-    pieza: pieza(),
-    alAvanzar: (hecho, total) =>
-      avisar('montaje', `Bajando… ${(hecho / 1048576).toFixed(0)} de ${(total / 1048576).toFixed(0)} MB`),
-  });
-  if (!blob) throw new Error('El video montado no está en el almacén todavía.');
+accion(
+  'b-metadatos',
+  async () => {
+    const m = await metadatos.generarMetadatos({
+      tema: P.tema,
+      guion: pieza().guion,
+      tomas: pieza().tomas,
+      escenas: pieza().escenas,
+      fichas: P.fichas,
+    });
+    pieza().metadatos = m;
+    await guardar();
 
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${P.titulo.replace(/[^\w\sáéíóúñ-]/gi, '')}.mp4`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
-  avisar('montaje', 'Descargado.', 'bueno');
-}, 'montaje');
+    $('aviso-paso5').innerHTML =
+      (m.aviso ? `<div class="aviso malo">${escapar(m.aviso)}</div>` : '') +
+      `<label>Títulos</label>` +
+      m.titulos.map((t) => `<div class="ficha"><p>${escapar(t)}</p></div>`).join('') +
+      `<label>Descripción · ${escapar(m.duracion)}</label>` +
+      `<textarea readonly style="min-height:200px">${escapar(m.descripcion)}</textarea>` +
+      `<label>Etiquetas</label>` +
+      `<textarea readonly style="min-height:70px">${escapar(m.etiquetas.join(', '))}</textarea>`;
+  },
+  'paso5',
+);
 
-// ── Publicación ───────────────────────────────────────────────────────────────
+accion(
+  'b-bajar',
+  async () => {
+    avisar('paso5', 'Bajando por trozos…');
+    const blob = await montajeFase.bajarFinal({
+      pieza: pieza(),
+      alAvanzar: (hecho, total) =>
+        avisar('paso5', `Bajando… ${(hecho / 1048576).toFixed(0)} de ${(total / 1048576).toFixed(0)} MB`),
+    });
+    if (!blob) throw new Error('El video montado no está en el almacén todavía.');
 
-accion('b-metadatos', async () => {
-  const m = await metadatos.generarMetadatos({
-    tema: P.tema,
-    guion: pieza().guion,
-    tomas: pieza().tomas,
-    escenas: pieza().escenas,
-    fichas: P.fichas,
-  });
-  pieza().metadatos = m;
-  await guardar();
-
-  $('salida-metadatos').innerHTML =
-    (m.aviso ? `<div class="aviso malo">${escapar(m.aviso)}</div>` : '') +
-    `<label>Títulos</label>` +
-    m.titulos.map((t) => `<div class="toma"><p>${escapar(t)}</p></div>`).join('') +
-    `<label>Descripción (${m.duracion})</label>` +
-    `<textarea readonly style="min-height:14rem">${escapar(m.descripcion)}</textarea>` +
-    `<label>Etiquetas</label>` +
-    `<textarea readonly style="min-height:4rem">${escapar(m.etiquetas.join(', '))}</textarea>`;
-}, 'proyecto');
-
-accion('b-miniatura', async () => {
-  const t = pieza().metadatos?.titulos?.[0] || P.titulo;
-  const lineas = t.length > 24 ? [t.slice(0, t.lastIndexOf(' ', 24)), t.slice(t.lastIndexOf(' ', 24) + 1)] : [t];
-  const r = await miniatura.generarMiniatura({
-    pieza: P.id,
-    lineas,
-    atmosfera: pieza().tomas[0]?.plano?.descripcion || P.tema,
-    config: P.config,
-  });
-  const img = document.createElement('img');
-  img.src = URL.createObjectURL(r.blob);
-  img.style.cssText = 'width:100%;border-radius:9px;margin-top:.7rem';
-  $('salida-metadatos').prepend(img);
-}, 'proyecto');
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${P.titulo.replace(/[^\w\sáéíóúñÁÉÍÓÚÑ-]/gi, '').trim() || 'documental'}.mp4`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    avisar('paso5', 'Descargado.', 'bueno');
+  },
+  'paso5',
+);
 
 // ── Ajustes ───────────────────────────────────────────────────────────────────
 
 function pintarAjustes() {
   // §7.3: la función que repinta un control DEVUELVE el valor con el que se quedó, y
-  // quien la llama lo ESCRIBE. Si no se escribiera, la pantalla diría una cosa y el
-  // objeto de configuración conservaría el valor viejo.
+  // quien la llama lo ESCRIBE. Si no, la pantalla dice una cosa y el estado otra.
   P.config.imagen.modelo = pintarSelectorModelo($('m-imagen'), 'imagen', P.config.imagen.modelo);
   P.config.movimiento.modelo = pintarSelectorModelo($('m-video'), 'video', P.config.movimiento.modelo);
 
-  $('proporcion').value = Math.round(P.config.movimiento.proporcion * 100);
+  const pon = (id, v, txt) => {
+    $(id).value = v;
+    if (txt) $(txt).textContent = v;
+  };
+  pon('proporcion', Math.round(P.config.movimiento.proporcion * 100));
   $('v-proporcion').textContent = `${Math.round(P.config.movimiento.proporcion * 100)}%`;
-  $('objetivo').value = P.config.segmentacion.segundosObjetivo;
-  $('v-objetivo').textContent = P.config.segmentacion.segundosObjetivo;
+  pon('objetivo', P.config.segmentacion.segundosObjetivo, 'v-objetivo');
+  pon('velocidad', Math.round(P.config.narracion.velocidad * 100));
+  $('v-velocidad').textContent = P.config.narracion.velocidad.toFixed(2);
   $('marca-texto').value = P.config.marca.texto;
   $('vertical').value = P.config.formato.vertical ? '1' : '0';
 }
 
 $('proporcion').addEventListener('input', (e) => ($('v-proporcion').textContent = `${e.target.value}%`));
 $('objetivo').addEventListener('input', (e) => ($('v-objetivo').textContent = e.target.value));
+$('velocidad').addEventListener('input', (e) => ($('v-velocidad').textContent = (e.target.value / 100).toFixed(2)));
 
-accion('b-ajustes', async () => {
-  P.config.imagen.modelo = $('m-imagen').value;
-  P.config.movimiento.modelo = $('m-video').value;
-  P.config.movimiento.proporcion = Number($('proporcion').value) / 100;
-  P.config.segmentacion.segundosObjetivo = Number($('objetivo').value);
-  P.config.marca.texto = $('marca-texto').value.trim();
-  P.config.formato.vertical = $('vertical').value === '1';
-  if ($('voz').value) P.config.narracion.nombreVoz = $('voz').value;
+accion(
+  'b-ajustes',
+  async () => {
+    P.config.imagen.modelo = $('m-imagen').value;
+    P.config.movimiento.modelo = $('m-video').value;
+    P.config.movimiento.proporcion = Number($('proporcion').value) / 100;
+    P.config.segmentacion.segundosObjetivo = Number($('objetivo').value);
+    P.config.narracion.velocidad = Number($('velocidad').value) / 100;
+    P.config.marca.texto = $('marca-texto').value.trim();
+    P.config.formato.vertical = $('vertical').value === '1';
+    if ($('voz').value) P.config.narracion.nombreVoz = $('voz').value;
+    P.titulo = $('titulo').value.trim() || P.titulo;
 
-  // Se vuelve a sanear para que los valores nuevos pasen por el normalizador: es el
-  // mismo camino que usan las tres cargas, y así un valor fuera de rango se corrige
-  // aquí y no dentro de una fase a medio generar.
-  P = estado.sanear(P);
-  await guardar();
-  pintarAjustes();
-  avisar('proyecto', 'Ajustes guardados.', 'bueno');
-}, 'proyecto');
+    // Se vuelve a sanear para que los valores nuevos pasen por el normalizador: el
+    // mismo camino que usan las tres cargas, así un valor fuera de rango se corrige
+    // aquí y no dentro de una fase a medio generar.
+    P = estado.sanear(P);
+    await guardar();
+    pintarAjustes();
+    avisar('proyecto', 'Ajustes guardados.', 'bueno');
+  },
+  'proyecto',
+);
 
-/** §7.10: el catálogo de voces llega ya filtrado y con la región en la etiqueta. */
+accion(
+  'b-marca',
+  async () => {
+    if (!P.config.marca.texto) throw new Error('Escribe el texto de la marca primero.');
+    await miniatura.subirMarca({ pieza: P.id, config: P.config });
+    avisar('proyecto', 'Marca subida. Se incrusta dentro de cada toma al montar.', 'bueno');
+  },
+  'proyecto',
+);
+
+accion(
+  'b-abrir',
+  async () => {
+    const ids = await estado.listarRemotos();
+    if (!ids.length) throw new Error('No hay ningún proyecto guardado en tu nube.');
+    const id = ids.length === 1 ? ids[0] : prompt(`¿Cuál?\n${ids.join('\n')}`, ids[0]);
+    if (!id) return;
+    // Camino de carga 3 (remoto). Pasa por sanear → normalizar igual que los otros
+    // dos: es el que se olvidaba y por eso las reparaciones no llegaban (§7.2).
+    P = await estado.cargarRemoto(id);
+    await guardar();
+    pintarTodo();
+    avisar('proyecto', `Abierto ${id}.`, 'bueno');
+  },
+  'proyecto',
+);
+
+accion(
+  'b-nuevo',
+  async () => {
+    if (!confirm('¿Empezar un proyecto nuevo? Lo de ahora sigue guardado.')) return;
+    P = estado.nuevoProyecto({ titulo: 'Documental sin título' });
+    P.id = 'p' + String(Date.now()).slice(-4);
+    P.piezas[0].id = P.id;
+    casos = [];
+    $('zona-casos').innerHTML = '';
+    await guardar();
+    pintarTodo();
+    ir('inicio');
+  },
+  'proyecto',
+);
+
+/** §7.10: el catálogo de voces llega filtrado y con la región en la etiqueta. */
 async function cargarVoces() {
   try {
     const r = await llamar('voz.catalogo', { idioma: 'es' });
