@@ -46,7 +46,20 @@ function valoresSecretos() {
 const PATRONES = [
   /\bprojects\/[0-9]+\b/g,
   /\bprojects\/[a-z][-a-z0-9]{4,28}[a-z0-9]\b/g,
-  /[\w.+-]+@[\w-]+\.iam\.gserviceaccount\.com/g,
+  // ACOTADO Y ANCLADO A PROPÓSITO. Con `[\w.+-]+@` a secas, este patrón era
+  // CUADRÁTICO: ante una tirada larga de caracteres de palabra —que es lo que es
+  // un base64— se tragaba toda la tirada, no encontraba la arroba, retrocedía un
+  // carácter y volvía a empezar, desde cada una de las posiciones.
+  //
+  // Medido: 8 KB → 64 ms; 16 KB → 253 ms; 32 KB → 1 s; 128 KB → 16 s. Cada vez
+  // que se dobla el tamaño, cuatro veces más lento. Un trozo de descarga de 3 MB
+  // habría tardado HORAS, así que ninguna imagen ni ningún video se podía bajar:
+  // la función se agotaba a los 60 segundos y el fallo parecía de red.
+  //
+  // El `\b` impide empezar en mitad de una tirada, y las cotas limitan lo que se
+  // puede retroceder desde cada posición. Un correo de cuenta de servicio no pasa
+  // de esos tamaños ni de lejos.
+  /\b[\w.+-]{1,128}@[\w-]{1,64}\.iam\.gserviceaccount\.com/g,
   /gs:\/\/[^\s"'\\]+/g,
   /https:\/\/storage\.googleapis\.com\/[^\s"'\\]+/g,
   /https:\/\/[a-z0-9-]+-[0-9]{12}\.[a-z0-9-]+\.run\.app[^\s"'\\]*/g,

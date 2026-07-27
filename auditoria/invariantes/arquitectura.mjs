@@ -361,6 +361,83 @@ export const invariantes = [
   },
 
   {
+    nombre: 'el-censor-no-se-atraganta-con-un-trozo-grande',
+    dice: 'El censor era CUADRÁTICO: 8 KB en 64 ms, 128 KB en 16 s, y cada doblada cuatro veces más lento. Un trozo de descarga de 3 MB habría tardado horas, así que ninguna imagen ni ningún video se podían bajar —la función se agotaba a los 60 s y parecía un fallo de red—.',
+    async comprobar(ctx) {
+      const { censurarTexto } = await import('../../api/_lib/censor.js?t=' + Date.now());
+      const fallos = [];
+
+      // Un trozo del tamaño real de descarga, del tipo que provocaba el atasco:
+      // una tirada larga de caracteres de palabra, como es un base64.
+      const trozo = JSON.stringify({ ok: true, datos: 'A'.repeat(3 * 1024 * 1024) });
+      const t0 = Date.now();
+      censurarTexto(trozo);
+      const ms = Date.now() - t0;
+      if (ms > 1000) {
+        fallos.push(`Censurar 3 MB tarda ${ms} ms. A ese ritmo una descarga se agota antes de llegar.`);
+      }
+
+      // Y sigue censurando, que es para lo que está.
+      const limpio = censurarTexto('cuenta a.b+c@mi-proy.iam.gserviceaccount.com y gs://cubo/x.png');
+      if (/gserviceaccount|gs:\/\//.test(limpio)) fallos.push('Ha dejado de censurar lo que tenía que ocultar.');
+
+      // Ningún patrón puede llevar un cuantificador sin cota sobre caracteres de
+      // palabra: es exactamente la forma que se atragantaba.
+      const src = fuente(ctx, 'api/_lib/censor.js');
+      // Sin los comentarios: el que explica este mismo fallo LLEVA DENTRO el patrón
+      // malo como ejemplo, así que buscarlo a pelo se encontraba a sí mismo.
+      const zona = src
+        .slice(src.indexOf('const PATRONES'), src.indexOf('function escapar'))
+        .split('\n')
+        .filter((l) => !l.trim().startsWith('//'))
+        .join('\n');
+      if (/\[\\w[^\]]*\]\+@/.test(zona)) {
+        fallos.push('Vuelve a haber un cuantificador sin cota antes de una arroba.');
+      }
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'api/_lib/censor.js', (t) =>
+        t.replace(
+          '/\\b[\\w.+-]{1,128}@[\\w-]{1,64}\\.iam\\.gserviceaccount\\.com/g,',
+          '/[\\w.+-]+@[\\w-]+\\.iam\\.gserviceaccount\\.com/g,',
+        ),
+      ),
+  },
+
+  {
+    nombre: 'ninguna-respuesta-pasa-del-tope-con-material-de-verdad',
+    dice: 'Se mide, no se razona. Cada modo pasa por la puerta con material del tamaño que tiene el de verdad —imagen de 2K, clip de 8 s, bloque de voz de 45 s— y se pesa lo que sale. Así se ve el «la respuesta ocupa 9.14 MB» ANTES de pagarlo.',
+    async comprobar(ctx) {
+      const { medirRespuestas, TOPE } = await import('../tamanos.mjs');
+      // Si la auditoría trae la puerta saboteada, se mide ESA.
+      const enContexto = ctx.fuentes.get('api/ia.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'api/ia.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+
+      const fallos = [];
+      for (const f of await medirRespuestas(null, { parche })) {
+        if (f.estado !== 200) {
+          fallos.push(`«${f.modo}» contestó ${f.estado}: ${f.error}`);
+        } else if (!f.cabe) {
+          fallos.push(
+            `«${f.modo}» devuelve ${(f.bytes / 1048576).toFixed(2)} MB y el tope es ` +
+              `${(TOPE / 1048576).toFixed(1)} MB. Tiene que bajarse por trozos.`,
+          );
+        }
+      }
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'api/ia.js', (t) =>
+        t.replace(
+          'return { guardado: r, referencia: almacen.referenciaDe(c.guardarEn) };',
+          'return { guardado: r, referencia: almacen.referenciaDe(c.guardarEn), ...img };',
+        ),
+      ),
+  },
+
+  {
     nombre: 'todas-las-puertas-del-proveedor-se-pueden-llamar',
     dice: 'La generación de imágenes nunca funcionó: la variable se llamaba «partes» y la petición decía «parts». Setenta y seis invariantes no lo cazaron porque todas MIRAN el código, y un identificador mal escrito se ve igual de bien que uno correcto. Lo único que lo caza es llamar a la función.',
     async comprobar(ctx) {

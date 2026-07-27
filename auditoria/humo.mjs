@@ -94,6 +94,15 @@ export async function humoDelProveedor({ parche = null } = {}) {
     });
   };
 
+  // La cuenta y el token se guardan en memoria entre llamadas —para eso están—.
+  // Con dos pruebas en el mismo proceso, la segunda heredaba la cuenta de la
+  // primera y el error salía como «no sé en qué proyecto trabajar», que no tenía
+  // nada que ver con lo que se estaba probando.
+  const { olvidarCuenta } = await import('../api/_lib/cuenta.js');
+  const { olvidarToken } = await import('../api/_lib/token.js');
+  olvidarCuenta();
+  olvidarToken();
+
   // Con `parche` se prueba una versión AVERIADA del proveedor, que es como se
   // demuestra que esta prueba sirve para algo. La copia va al lado del original
   // para que sus importaciones relativas —el token, la cuenta— sigan resolviendo.
@@ -143,6 +152,8 @@ export async function humoDelProveedor({ parche = null } = {}) {
     fallos.push(`no se pudo ni cargar el proveedor: ${e.message}`);
   } finally {
     if (copia) rmSync(copia, { force: true });
+    olvidarCuenta();
+    olvidarToken();
     globalThis.fetch = antesFetch;
     for (const k of Object.keys(process.env)) if (!(k in antesEnv)) delete process.env[k];
     Object.assign(process.env, antesEnv);
