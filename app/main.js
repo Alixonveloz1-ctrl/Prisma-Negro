@@ -832,9 +832,21 @@ const guardaToma = async (nueva) => {
   pintarPasos();
 };
 
+/**
+ * El interruptor «rehacer lo que ya está hecho».
+ *
+ * Las cuatro fases saben desde siempre distinguir «lo que falta» de «todo»; lo
+ * que faltaba era la forma de pedírselo. Sin esto, cambiar de voz o de estilo no
+ * servía de nada: se pulsaba generar y contestaba «ya está toda la narración»,
+ * con la voz vieja dentro y sin manera de rehacerla.
+ */
+const rehacerTodo = () => !!$('rehacer-todo')?.checked;
+
 accion('b-narrar', async () => {
-  const bloques = narracion.planificar(pieza().tomas, P.config);
+  const soloLasQueFaltan = !rehacerTodo();
+  const bloques = narracion.planificar(pieza().tomas, P.config, { soloLasQueFaltan });
   if (!bloques.length) return avisar('paso4', 'Ya está toda la narración.', 'bueno');
+  if (!soloLasQueFaltan && !confirm(`Se rehacen las ${bloques.length} llamadas de voz, incluidas las que ya estaban. ¿Sigo?`)) return;
 
   // §4.5: el progreso se cuenta en LLAMADAS, no en tomas.
   const r = await cola.ejecutar(
@@ -852,8 +864,10 @@ accion('b-narrar', async () => {
 
 accion('b-imagenes', async () => {
   await asegurarDireccion();
-  const pendientes = imagenFase.planificar(pieza().tomas);
+  const soloLasQueFaltan = !rehacerTodo();
+  const pendientes = imagenFase.planificar(pieza().tomas, { soloLasQueFaltan });
   if (!pendientes.length) return avisar('paso4', 'Ya están todas las imágenes.', 'bueno');
+  if (!soloLasQueFaltan && !confirm(`Se rehacen las ${pendientes.length} imágenes, incluidas las que ya estaban. ¿Sigo?`)) return;
 
   const r = await cola.ejecutar(
     'imágenes',
@@ -874,7 +888,7 @@ accion('b-imagenes', async () => {
 
 accion('b-movimiento', async () => {
   await asegurarDireccion();
-  const pendientes = movimiento.planificar(pieza().tomas);
+  const pendientes = movimiento.planificar(pieza().tomas, { soloLasQueFaltan: !rehacerTodo() });
   if (!pendientes.length) return avisar('paso4', 'No falta ningún clip.', 'bueno');
   if (!confirm(`Son ${pendientes.length} clips y es la fase más cara con diferencia. ¿Sigo?`)) return;
 
@@ -896,8 +910,10 @@ accion('b-movimiento', async () => {
 });
 
 accion('b-musica', async () => {
-  const pendientes = musica.planificar(pieza().escenas, pieza().tomas, P.config);
+  const soloLasQueFaltan = !rehacerTodo();
+  const pendientes = musica.planificar(pieza().escenas, pieza().tomas, P.config, { soloLasQueFaltan });
   if (!pendientes.length) return avisar('paso4', 'La música ya está, o está apagada.', 'bueno');
+  if (!soloLasQueFaltan && !confirm(`Se rehacen las ${pendientes.length} piezas de música. ¿Sigo?`)) return;
 
   const r = await cola.ejecutar(
     'música',

@@ -8,6 +8,8 @@
 
 import { editando } from '../contexto.mjs';
 
+const fuente = (ctx, ruta) => ctx.fuentes.get(ruta) || '';
+
 const hoja = (ctx) => {
   const html = ctx.fuentes.get('index.html') || '';
   // Fuera los comentarios ANTES de nada. La primera versión de esto los dejaba, y
@@ -196,6 +198,86 @@ export const invariantes = [
     romper: (ctx) =>
       editando(ctx, 'index.html', (t) =>
         t.replace('<div id="lateral">', '<div id="lateral"><button>Extra</button>'),
+      ),
+  },
+
+  {
+    nombre: 'toda-id-que-la-pantalla-escribe-existe-en-el-html',
+    dice: 'Si el código escribe en un elemento que no está en el HTML, revienta a mitad de la operación y lo que iba después no se hace. «cuenta-previa» no existía y tumbaba la Previa entera después de haber bajado todo el material.',
+    comprobar(ctx) {
+      const html = fuente(ctx, 'index.html');
+      const ids = new Set([...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]));
+      const fallos = [];
+      for (const [ruta, texto] of ctx.fuentes) {
+        if (!ruta.startsWith('app/') || !ruta.endsWith('.js')) continue;
+        for (const m of texto.matchAll(/\$\('([a-z][a-z0-9-]*)'\)/gi)) {
+          if (!ids.has(m[1])) fallos.push(`${ruta} escribe en «${m[1]}», que no existe en el HTML.`);
+        }
+      }
+      return fallos;
+    },
+    romper: (ctx) => editando(ctx, 'index.html', (t) => t.replace(' id="cuenta-previa"', '')),
+  },
+
+  {
+    nombre: 'se-puede-rehacer-lo-que-ya-esta-hecho',
+    dice: 'Cambiar de voz o de estilo no sirve de nada si no hay forma de rehacer lo generado. Las cuatro fases saben distinguir «lo que falta» de «todo»; la pantalla tiene que poder pedírselo.',
+    comprobar(ctx) {
+      const main = fuente(ctx, 'app/main.js');
+      const html = fuente(ctx, 'index.html');
+      const fallos = [];
+      if (!/id="rehacer-todo"/.test(html)) fallos.push('No hay forma de pedir que se rehaga lo ya hecho.');
+      for (const [boton, corte] of [
+        ['b-narrar', 'narracion.planificar'],
+        ['b-imagenes', 'imagenFase.planificar'],
+        ['b-movimiento', 'movimiento.planificar'],
+        ['b-musica', 'musica.planificar'],
+      ]) {
+        const i = main.indexOf(`accion('${boton}'`);
+        if (i < 0) { fallos.push(`No existe ${boton}.`); continue; }
+        const cuerpo = main.slice(i, i + 900);
+        const j = cuerpo.indexOf(corte);
+        if (j < 0) { fallos.push(`${boton} no planifica con ${corte}.`); continue; }
+        // Se mira LA LLAMADA, no el bloque entero: alrededor hay una variable y un
+        // aviso que también nombran `soloLasQueFaltan`, y con eso la comprobación
+        // pasaba aunque la llamada hubiera dejado de recibirlo.
+        const llamada = cuerpo.slice(j, cuerpo.indexOf(';', j));
+        if (!/soloLasQueFaltan/.test(llamada)) {
+          fallos.push(`${boton} planifica sin decir si rehace: siempre saltará lo ya hecho.`);
+        }
+      }
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace(
+          'const bloques = narracion.planificar(pieza().tomas, P.config, { soloLasQueFaltan });',
+          'const bloques = narracion.planificar(pieza().tomas, P.config);',
+        ),
+      ),
+  },
+
+  {
+    nombre: 'escribir-un-material-tira-su-copia-local',
+    dice: 'La copia local de una clave que se acaba de reescribir ya no vale. Estaba solo en los «rehacer» de uno en uno: rehacer una fase entera actualizaba la nube y la Previa seguía tocando la voz vieja.',
+    comprobar(ctx) {
+      const api = fuente(ctx, 'app/api.js');
+      const i = api.indexOf('if (r.ok && cuerpo.ok)');
+      // El corte va hasta el FINAL del bloque, no hasta un número de caracteres.
+      // Con un tope fijo, añadir un comentario empujaba la línea que se busca fuera
+      // de la ventana y la invariante fallaba sin que nada estuviera roto.
+      const fin = api.indexOf('return cuerpo;', i);
+      const cuerpo = i < 0 || fin < 0 ? '' : api.slice(i, fin);
+      const fallos = [];
+      if (!/borrarMaterial/.test(cuerpo)) {
+        fallos.push('Una llamada que escribe material no tira la copia local: la Previa enseñaría lo viejo.');
+      }
+      if (!/guardarEn/.test(cuerpo)) fallos.push('No se mira si la llamada escribió un material.');
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'app/api.js', (t) =>
+        t.replace('if (escrita) await local.borrarMaterial(escrita).catch(() => {});', ''),
       ),
   },
 ];

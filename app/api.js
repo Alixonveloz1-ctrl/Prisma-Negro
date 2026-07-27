@@ -8,6 +8,9 @@
 // tiene que explicarse en pantalla, con palabras. Por eso aquí no se deja escapar
 // nunca un error mudo: si algo falla, sale de esta función con una frase.
 
+// La copia local, para poder invalidarla cuando una llamada escribe un material.
+import * as local from './local.js';
+
 const PUERTA = '/api/ia';
 
 let claveAcceso = '';
@@ -104,7 +107,19 @@ export async function llamar(modo, datos = {}, { reintentos = 2, senal } = {}) {
       continue;
     }
 
-    if (r.ok && cuerpo.ok) return cuerpo;
+    if (r.ok && cuerpo.ok) {
+      // Si esta llamada ESCRIBIÓ un material, la copia local de esa clave ya no
+      // vale. Se tira aquí, en la única puerta por la que pasan todas.
+      //
+      // Estaba puesto solo en los «rehacer» de uno en uno, así que rehacer una
+      // fase entera dejaba la copia vieja en el navegador: cambiabas de voz, la
+      // nube se actualizaba, y la Previa te seguía tocando la voz anterior. Un
+      // fallo que no parece un fallo —parece que el cambio de voz no funciona—.
+      // Puesto aquí, una fase nueva no puede olvidarse de hacerlo.
+      const escrita = datos.guardarEn || (modo === 'subir' ? datos.clave : '');
+      if (escrita) await local.borrarMaterial(escrita).catch(() => {});
+      return cuerpo;
+    }
 
     const err = new ErrorPuerta(cuerpo.error || `El servidor respondió ${r.status}.`, {
       estado: r.status,

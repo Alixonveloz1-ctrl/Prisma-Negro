@@ -48,7 +48,19 @@ function transaccion(almacen, modo, hacer) {
           rej(e);
           return;
         }
-        tx.oncomplete = () => res(salida?.result !== undefined ? salida.result : salida);
+        // Se mira SI ES una petición, no si su resultado vale algo.
+        //
+        // Aquí estaba el fallo, y era de los caros: con `salida?.result !== undefined`,
+        // buscar algo que NO ESTÁ devolvía la propia petición —un objeto, o sea
+        // verdadero— en vez de `undefined`. Así que la copia local decía «sí, lo
+        // tengo» de todo lo que no tenía, y aguas abajo alguien acababa pasándole
+        // ese objeto a `URL.createObjectURL`, que reventaba con «Overload
+        // resolution failed». El error salía en la Previa, a diez archivos de
+        // distancia de la línea que lo causaba, y no mencionaba la base local.
+        //
+        // `IDBRequest` siempre tiene `result`, aunque valga `undefined`: eso es lo
+        // que distingue «no lo encontré» de «esto no era una petición».
+        tx.oncomplete = () => res(salida && typeof salida === 'object' && 'result' in salida ? salida.result : salida);
         tx.onerror = () => rej(tx.error || new Error('Falló la base local.'));
       }),
   );

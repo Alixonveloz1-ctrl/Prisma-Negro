@@ -510,6 +510,10 @@ nav.abajo button svg{width:22px;height:22px}
             <button class="btn" id="b-movimiento"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M10 9l5 3-5 3z"/></svg>Clips</button>
             <button class="btn" id="b-musica"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>Música</button>
           </div>
+          <label class="interruptor" for="rehacer-todo" style="margin-top:11px">
+            <input type="checkbox" id="rehacer-todo">
+            <span>Rehacer lo que ya está hecho</span>
+          </label>
           <div class="barra"><i id="barra"></i></div>
           <p class="nota chica" id="progreso" style="margin-top:8px"></p>
           <div id="aviso-paso4"></div>
@@ -611,6 +615,7 @@ nav.abajo button svg{width:22px;height:22px}
 
         <!-- Montado -->
         <div class="panel hoja-previa" data-hoja="montado">
+          <h2>Montado <span class="cuenta" id="cuenta-previa"></span></h2>
           <div class="visor">
             <img id="previa-imagen" alt="">
             <img id="previa-marca" class="marca-visor" alt="">
