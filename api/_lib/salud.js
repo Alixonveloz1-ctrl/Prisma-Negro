@@ -14,6 +14,7 @@
 
 import { tokenDeAcceso, olvidarToken } from './token.js';
 import { clavePrivada, proyecto, olvidarCuenta } from './cuenta.js';
+import { valor as valorEntorno, nombrePrincipal } from './entorno.js';
 
 const RAIZ_ALMACEN = 'https://storage.googleapis.com/storage/v1';
 
@@ -59,7 +60,7 @@ export async function probarCadena() {
   // Pregunta por el bucket: comprueba de una vez que existe Y que esta cuenta
   // tiene permiso sobre él.
   try {
-    const b = process.env.ALMACEN_NOMBRE;
+    const b = valorEntorno('bucket');
     const r = await fetch(`${RAIZ_ALMACEN}/b/${encodeURIComponent(b)}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -70,7 +71,7 @@ export async function probarCadena() {
       );
     } else if (r.status === 404) {
       pasos.push(
-        paso('almacen', false, 'El almacén no existe con ese nombre.', 'Revisa ALMACEN_NOMBRE letra por letra.'),
+        paso('almacen', false, 'El almacén no existe con ese nombre.', `Revisa ${nombrePrincipal('bucket')} letra por letra.`),
       );
     } else if (r.status === 403) {
       pasos.push(
@@ -93,7 +94,7 @@ export async function probarCadena() {
   // Una llamada mínima de verdad. Preguntar por el catálogo no prueba que el
   // modelo configurado exista ni que esta cuenta pueda usarlo.
   try {
-    const region = process.env.GCP_REGION_IA || 'us-central1';
+    const region = valorEntorno('regionIA', 'us-central1');
     const modelo = process.env.MODELO_TEXTO || 'gemini-2.5-pro';
     const url =
       `https://${region}-aiplatform.googleapis.com/v1/projects/${proyecto()}` +
@@ -121,7 +122,7 @@ export async function probarCadena() {
           r.status === 403
             ? 'Falta el rol de usuario de Vertex AI en la cuenta de servicio, o la API no está activada.'
             : r.status === 404
-              ? `El modelo «${modelo}» no existe en la región ${region}. Cambia MODELO_TEXTO o GCP_REGION_IA.`
+              ? `El modelo «${modelo}» no existe en la región ${region}. Cambia MODELO_TEXTO o la región.`
               : undefined,
         ),
       );
@@ -131,23 +132,21 @@ export async function probarCadena() {
   }
 
   // ── 5. El montador ─────────────────────────────────────────────────────────
-  // No hace falta para generar; sí para montar. Se informa sin dramatizar.
-  if (!process.env.MONTADOR_JOB) {
-    pasos.push(
-      paso('montador', false, 'El contenedor de montaje no está configurado.', 'Se puede generar todo igual; solo hace falta para montar el video final.'),
-    );
-  } else {
+  // Ya no hace falta configurarlo: tiene nombre por defecto. Se comprueba si está
+  // desplegado con ese nombre. No hace falta para generar, solo para montar, así
+  // que se informa sin dramatizar.
+  {
     try {
-      const region = process.env.GCP_REGION_JOB || 'us-central1';
+      const region = valorEntorno('regionJob', 'us-central1');
       const url =
         `https://run.googleapis.com/v2/projects/${proyecto()}` +
-        `/locations/${region}/jobs/${process.env.MONTADOR_JOB}`;
+        `/locations/${region}/jobs/${valorEntorno('job', 'prisma-negro-montador')}`;
       const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (r.ok) {
         pasos.push(paso('montador', true, 'El contenedor de montaje está desplegado y visible.'));
       } else if (r.status === 404) {
         pasos.push(
-          paso('montador', false, 'El contenedor de montaje no está desplegado con ese nombre.', `Revisa MONTADOR_JOB y que el job esté en la región ${region}.`),
+          paso('montador', false, 'El contenedor de montaje no está desplegado con ese nombre.', `Revisa ${nombrePrincipal('job')} y que el job esté en la región ${region}.`),
         );
       } else {
         const d = await r.json().catch(() => ({}));

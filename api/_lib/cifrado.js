@@ -14,6 +14,7 @@
 
 import { createCipheriv, createDecipheriv, randomBytes, createHash } from 'node:crypto';
 import { clavePrivada } from './cuenta.js';
+import { valor as valorEntorno } from './entorno.js';
 
 const PREFIJO = 'ref_';
 
@@ -33,8 +34,8 @@ let cacheClave = null;
 function clave() {
   if (cacheClave) return cacheClave;
 
-  const hex = process.env.CLAVE_REFERENCIAS;
-  if (hex && hex.trim()) {
+  const hex = valorEntorno('referencias');
+  if (hex) {
     const buf = Buffer.from(hex.trim(), 'hex');
     if (buf.length !== 32) {
       throw new Error('CLAVE_REFERENCIAS debe ser de 32 bytes en hexadecimal (64 caracteres).');

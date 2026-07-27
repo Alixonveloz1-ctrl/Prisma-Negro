@@ -14,43 +14,45 @@
 // Este módulo es el ÚNICO que decide de dónde salen esos tres valores. Si mañana hay
 // una tercera forma, se añade aquí y en ningún otro sitio.
 
+import { leer as leerEntorno } from './entorno.js';
+
 let cache = null;
 
 function leer() {
   if (cache) return cache;
 
-  const bruto = process.env.GCP_CUENTA_JSON;
-  if (bruto && bruto.trim()) {
+  const { valor: bruto, nombre } = leerEntorno('cuenta');
+  if (bruto) {
     let j;
     try {
       j = JSON.parse(bruto);
     } catch {
       throw new Error(
-        'GCP_CUENTA_JSON no es JSON válido. Pega el contenido completo del archivo ' +
-          'de la cuenta de servicio, desde la primera llave hasta la última.',
+        `${nombre} no es JSON válido. Pega el contenido completo del archivo de la ` +
+          'cuenta de servicio, desde la primera llave hasta la última.',
       );
     }
     if (!j.private_key || !j.client_email) {
       throw new Error(
-        'GCP_CUENTA_JSON no parece el archivo de una cuenta de servicio: le faltan ' +
+        `${nombre} no parece el archivo de una cuenta de servicio: le faltan ` +
           '«private_key» o «client_email».',
       );
     }
     cache = {
-      proyecto: j.project_id || process.env.GCP_PROYECTO || '',
+      proyecto: j.project_id || leerEntorno('proyecto').valor,
       correo: j.client_email,
       clave: j.private_key,
-      origen: 'json',
+      origen: nombre,
     };
     return cache;
   }
 
-  // Variables sueltas: el camino antiguo. Sigue funcionando.
+  // Las tres piezas por separado. Sigue funcionando.
   cache = {
-    proyecto: process.env.GCP_PROYECTO || '',
-    correo: process.env.GCP_CUENTA_SERVICIO || '',
-    clave: process.env.GCP_CLAVE_PRIVADA || '',
-    origen: 'sueltas',
+    proyecto: leerEntorno('proyecto').valor,
+    correo: leerEntorno('correo').valor,
+    clave: leerEntorno('clave').valor,
+    origen: 'variables sueltas',
   };
   return cache;
 }

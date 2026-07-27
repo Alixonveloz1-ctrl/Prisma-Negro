@@ -15,6 +15,7 @@
 
 import { instalarCensor } from './_lib/censor.js';
 import { probarCadena } from './_lib/salud.js';
+import * as entorno from './_lib/entorno.js';
 import * as almacen from './_lib/almacen.js';
 import * as proveedor from './_lib/proveedor.js';
 import * as montador from './_lib/montador.js';
@@ -275,34 +276,45 @@ function revisarConfiguracion() {
   // en un archivo. Y todo lo que tiene un valor por defecto sensato —regiones,
   // prefijo, nombre del contenedor— no es configuración, es una opción.
   const faltan = [];
+  const usando = {};
 
-  const hayCuenta =
-    (process.env.GCP_CUENTA_JSON && process.env.GCP_CUENTA_JSON.trim()) ||
-    (process.env.GCP_CLAVE_PRIVADA && process.env.GCP_CUENTA_SERVICIO);
-  if (!hayCuenta) {
-    faltan.push({
-      variable: 'GCP_CUENTA_JSON',
-      es: 'el archivo JSON de la cuenta de servicio, entero. Trae dentro el proyecto, el correo y la clave',
-    });
+  // Cada una acepta varios nombres (§ api/_lib/entorno.js). Se dice CUÁL se
+  // encontró: con dos puestas, saber cuál está leyendo evita media hora de dudas.
+  const exigir = (cual, es) => {
+    const { valor, nombre } = entorno.leer(cual);
+    if (valor) {
+      usando[cual] = nombre;
+      return true;
+    }
+    faltan.push({ variable: entorno.nombrePrincipal(cual), es, tambien: entorno.NOMBRES[cual].slice(1) });
+    return false;
+  };
+
+  const hayJson = exigir(
+    'cuenta',
+    'el archivo JSON de la cuenta de servicio, entero. Trae dentro el proyecto, el correo y la clave',
+  );
+  // Las tres piezas por separado también valen: si están, la cuenta no falta.
+  if (!hayJson && entorno.leer('clave').valor && entorno.leer('correo').valor) {
+    faltan.pop();
+    usando.cuenta = 'variables sueltas';
   }
-  if (!process.env.ALMACEN_NOMBRE) {
-    faltan.push({ variable: 'ALMACEN_NOMBRE', es: 'el nombre del bucket donde vive todo lo generado' });
-  }
-  if (!process.env.CLAVE_ACCESO) {
-    faltan.push({ variable: 'CLAVE_ACCESO', es: 'la contraseña para entrar a la herramienta' });
-  }
+
+  exigir('bucket', 'el nombre del bucket donde vive todo lo generado');
+  exigir('acceso', 'la contraseña para entrar a la herramienta');
 
   return {
     lista: faltan.length === 0,
     faltan,
+    usando,
     // Lo demás tiene valor por defecto. Se enseña para que se sepa qué se está
     // usando, no como algo pendiente de hacer.
     porDefecto: {
-      ALMACEN_PREFIJO: almacen.prefijoActual(),
-      GCP_REGION_IA: process.env.GCP_REGION_IA || 'us-central1',
-      GCP_REGION_JOB: process.env.GCP_REGION_JOB || 'us-central1',
-      MONTADOR_JOB: process.env.MONTADOR_JOB || 'prisma-negro-montador',
-      CLAVE_REFERENCIAS: process.env.CLAVE_REFERENCIAS ? 'fijada a mano' : 'derivada de la cuenta',
+      prefijo: almacen.prefijoActual(),
+      regionIA: entorno.valor('regionIA', 'us-central1'),
+      regionJob: entorno.valor('regionJob', 'us-central1'),
+      montador: entorno.valor('job', 'prisma-negro-montador'),
+      referencias: entorno.valor('referencias') ? 'fijada a mano' : 'derivada de la cuenta',
     },
     modelos: {
       texto: process.env.MODELO_TEXTO || 'gemini-2.5-pro',

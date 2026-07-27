@@ -55,22 +55,31 @@ export const invariantes = [
 
   {
     nombre: 'toda-configuracion-por-entorno',
-    dice: 'Todo lo que identifica la cuenta se lee de variables de entorno, y .env.example las documenta todas.',
+    dice: 'Toda variable que la función lee está documentada en .env.example — tanto las leídas por su nombre literal como todos los alias de la tabla de entorno.',
     comprobar(ctx) {
       const ejemplo = fuente(ctx, '.env.example');
       const usadas = new Set();
+
+      // Las leídas con `process.env.X` a pelo.
       for (const [ruta, texto] of ctx.fuentes) {
         if (!ruta.startsWith('api/')) continue;
         for (const m of texto.matchAll(/process\.env\.([A-Z][A-Z0-9_]+)/g)) usadas.add(m[1]);
       }
+      // Y TODAS las de la tabla de alias. Un alias que la función acepta pero que no
+      // está documentado es una variable que nadie sabe que puede poner —o peor, que
+      // alguien pone creyendo que hace algo y no la lee nadie.
+      for (const lista of Object.values(ctx.nombresEntorno || {})) {
+        for (const n of lista) usadas.add(n);
+      }
+
       return [...usadas]
         .filter((v) => !ejemplo.includes(v))
-        .map((v) => `${v} se usa en la función pero no está en .env.example`);
+        .map((v) => `${v} se lee en la función pero no está en .env.example`);
     },
-    romper: (ctx) =>
-      editando(ctx, 'api/_lib/almacen.js', (t) =>
-        t.replace('process.env.ALMACEN_NOMBRE', 'process.env.ALMACEN_SECRETO_NUEVO'),
-      ),
+    romper: (ctx) => ({
+      ...ctx,
+      nombresEntorno: { ...ctx.nombresEntorno, bucket: [...ctx.nombresEntorno.bucket, 'BUCKET_SIN_DOCUMENTAR'] },
+    }),
   },
 
   // ── §2: la única puerta y el censor ───────────────────────────────────────

@@ -8,6 +8,7 @@
 // `res.json(...)` más abajo está censurado quiera o no.
 
 import { cuenta } from './cuenta.js';
+import { valor as valorEntorno } from './entorno.js';
 
 const OCULTO = '[oculto]';
 
@@ -33,11 +34,11 @@ function valoresSecretos() {
   return [
     deLaCuenta.proyecto,
     deLaCuenta.correo,
-    process.env.GCP_PROYECTO,
-    process.env.GCP_NUMERO_PROYECTO,
-    process.env.GCP_CUENTA_SERVICIO,
-    process.env.ALMACEN_NOMBRE,
-    process.env.MONTADOR_JOB,
+    valorEntorno('proyecto'),
+    valorEntorno('numeroProyecto'),
+    valorEntorno('correo'),
+    valorEntorno('bucket'),
+    valorEntorno('job'),
   ].filter((v) => typeof v === 'string' && v.length >= 4);
 }
 

@@ -13,17 +13,18 @@
 import { tokenDeAcceso, olvidarToken } from './token.js';
 import { cifrar, descifrar, esReferencia } from './cifrado.js';
 import { extensionDe } from '../../comun/claves.mjs';
+import { leer as leerEntorno, nombrePrincipal } from './entorno.js';
 
 const RAIZ = 'https://storage.googleapis.com';
 
 function bucket() {
-  const b = process.env.ALMACEN_NOMBRE;
-  if (!b) throw new Error('Falta ALMACEN_NOMBRE en el entorno.');
+  const b = leerEntorno('bucket').valor;
+  if (!b) throw new Error(`Falta ${nombrePrincipal('bucket')} en el entorno: el nombre del bucket.`);
   return b;
 }
 
 function prefijo() {
-  const p = (process.env.ALMACEN_PREFIJO || 'prisma-negro').replace(/^\/+|\/+$/g, '');
+  const p = (leerEntorno('prefijo').valor || 'prisma-negro').replace(/^\/+|\/+$/g, '');
   return p ? p + '/' : '';
 }
 

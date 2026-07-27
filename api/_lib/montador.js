@@ -14,6 +14,7 @@ import { tokenDeAcceso, olvidarToken } from './token.js';
 import { cifrar, descifrar } from './cifrado.js';
 import { subir, fichas, rutaGs, rutaGsCarpeta } from './almacen.js';
 import { proyecto } from './cuenta.js';
+import { valor as valorEntorno } from './entorno.js';
 // La lista de descargas y el guion de ffmpeg salen de la MISMA hoja y del MISMO
 // módulo (§3). Que este archivo importe en vez de reimplementar es justamente lo
 // que impide que discrepen.
@@ -25,13 +26,13 @@ const RUN = 'https://run.googleapis.com/v2';
 const LOGGING = 'https://logging.googleapis.com/v2';
 
 function regionJob() {
-  return process.env.GCP_REGION_JOB || 'us-central1';
+  return valorEntorno('regionJob', 'us-central1');
 }
 
 // Con valor por defecto: es el nombre que sale en las instrucciones de despliegue,
 // así que pedirlo como variable era pedir que copiaran algo que ya les dimos hecho.
 function nombreJob() {
-  return process.env.MONTADOR_JOB || 'prisma-negro-montador';
+  return valorEntorno('job', 'prisma-negro-montador');
 }
 
 async function pedirRun(url, opciones = {}) {

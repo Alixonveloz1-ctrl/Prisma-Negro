@@ -88,9 +88,13 @@ Despliega el repositorio en Vercel y pon **tres variables**:
 
 | Variable | Qué es |
 |---|---|
-| `GCP_CUENTA_JSON` | El archivo JSON de la cuenta de servicio, entero |
-| `ALMACEN_NOMBRE` | El nombre del bucket |
+| `GOOGLE_APPLICATION_CREDENTIALS_JSON` | El archivo JSON de la cuenta de servicio, entero |
+| `GCS_BUCKET` | El nombre del bucket |
 | `CLAVE_ACCESO` | La contraseña para entrar. Te la inventas tú |
+
+Son los nombres convencionales de Google Cloud, para que sirva la costumbre de otros
+proyectos. Cada uno acepta además varios alias —`GCS_BUCKET_NAME`, `BUCKET_NAME`,
+`GCP_SERVICE_ACCOUNT_KEY`…— y el diagnóstico dice cuál encontró.
 
 Nada más. El JSON ya trae dentro el proyecto, el correo y la clave privada, así que
 no hay que copiar esos tres por separado. Las regiones, el prefijo del almacén, el

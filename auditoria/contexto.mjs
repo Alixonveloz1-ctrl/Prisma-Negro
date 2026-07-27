@@ -98,6 +98,7 @@ export async function construirContexto() {
     '../comun/hoja.mjs'
   );
   const { PREDETERMINADA, MODELOS } = await import('../app/config.js');
+  const { NOMBRES } = await import('../api/_lib/entorno.js');
   const p = proyectoDePrueba();
   const hoja = construirHoja({ pieza: p.id, tomas: p.tomas, escenas: p.escenas });
 
@@ -115,6 +116,10 @@ export async function construirContexto() {
     // ha fallado no está comprobando nada.
     config: structuredClone(PREDETERMINADA),
     modelos: structuredClone(MODELOS),
+    // La tabla de alias de variables de entorno. Entra por el contexto para que se
+    // pueda sabotear: desde que la configuración se lee por tabla en vez de con
+    // `process.env.X` literales, comprobar solo los literales no comprobaba nada.
+    nombresEntorno: structuredClone(NOMBRES),
     // Las funciones puras entran por el contexto en vez de importarse dentro de cada
     // invariante. Así una invariante que comprueba un COMPORTAMIENTO también se
     // puede romper a propósito: se le cambia la función por una averiada y tiene que
