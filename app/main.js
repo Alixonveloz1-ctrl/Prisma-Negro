@@ -15,7 +15,7 @@
 import { llamar, ponerClave, ponerModeloTexto } from './api.js';
 import * as estado from './estado.js';
 import { Cola } from './cola.js';
-import { pintarSelectorModelo } from './config.js';
+import { pintarSelectorModelo, mejorModeloTexto, etiquetaModelo } from './config.js';
 import { segmentarVerificado } from '../comun/segmentar.mjs';
 import { TEMAS, EPOCAS, EPOCA_POR_DEFECTO, temaPorId, epocaPorId } from '../comun/temas.mjs';
 import * as investigacion from './fases/investigacion.js';
@@ -180,17 +180,30 @@ async function arrancar() {
 async function cargarModelos() {
   try {
     const r = await llamar('modelos.catalogo');
+    const ids = (r.disponibles?.texto || []).map((m) => m.id);
+    const mejor = mejorModeloTexto(ids);
+
+    // Sin elección explícita se coge EL MEJOR, no el que hubiera escrito en el
+    // servidor. El identificador fijo se quedó dos generaciones atrás sin que nadie
+    // lo notara, y el director es justo donde no hay que ahorrar.
+    if (!P.config.texto.modelo && mejor) {
+      P.config.texto.modelo = mejor;
+      ponerModeloTexto(mejor);
+      await guardar();
+    }
+
     const sel = $('m-texto');
-    sel.innerHTML = '<option value="">El del servidor</option>';
-    for (const m of r.disponibles?.texto || []) {
+    sel.innerHTML = '';
+    for (const id of ids) {
       const o = document.createElement('option');
-      o.value = m.id;
-      o.textContent = m.id;
-      if (m.id === P.config.texto.modelo) o.selected = true;
+      o.value = id;
+      o.textContent = etiquetaModelo(id, mejor);
+      if (id === P.config.texto.modelo) o.selected = true;
       sel.appendChild(o);
     }
     $('modelo-en-uso').textContent =
-      `Ahora mismo escribe con: ${P.config.texto.modelo || r.enUso?.texto || 'el del servidor'}`;
+      (r.deReserva ? 'Lista de reserva: el catálogo de tu nube no respondió. ' : '') +
+      `Escribe con: ${P.config.texto.modelo || r.enUso?.texto || '—'}`;
   } catch (e) {
     $('modelo-en-uso').textContent = `No se pudo leer el catálogo: ${e.message}`;
   }

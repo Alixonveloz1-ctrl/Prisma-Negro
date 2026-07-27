@@ -530,6 +530,74 @@ export const invariantes = [
   },
 
   {
+    nombre: 'el-director-usa-el-mejor-modelo-disponible',
+    dice: 'El modelo de texto —«el director»— se elige automáticamente como el mejor que el proyecto tenga. Un identificador fijo envejece: el que había se quedó dos generaciones atrás sin que nadie lo notara.',
+    async comprobar(ctx) {
+      const { mejorModeloTexto, puntuarModelo } = await import('../../app/config.js');
+      const fallos = [];
+
+      // Un Pro nuevo gana a un Pro viejo; un Pro gana a un Flash de su generación;
+      // y una versión de dos cifras no se lee como menor que una de una.
+      const casos = [
+        [['gemini-2.5-pro', 'gemini-3.1-pro'], 'gemini-3.1-pro'],
+        [['gemini-3.1-flash', 'gemini-3.1-pro'], 'gemini-3.1-pro'],
+        [['gemini-3.1-pro', 'gemini-3.10-pro'], 'gemini-3.10-pro'],
+        [['gemini-4.0-flash', 'gemini-3.1-pro'], 'gemini-4.0-flash'],
+        [['gemini-3.1-pro-preview', 'gemini-3.1-pro'], 'gemini-3.1-pro'],
+      ];
+      for (const [lista, esperado] of casos) {
+        const sale = mejorModeloTexto(lista);
+        if (sale !== esperado) {
+          fallos.push(`De [${lista.join(', ')}] elige ${sale} y debería elegir ${esperado}.`);
+        }
+      }
+      if (puntuarModelo('') !== 0) fallos.push('Un identificador vacío no puntúa cero.');
+
+      // Y la pantalla tiene que ESCRIBIR esa elección, no solo enseñarla (§7.3).
+      const main = fuente(ctx, 'app/main.js');
+      if (!/P\.config\.texto\.modelo = mejor/.test(main)) {
+        fallos.push('La elección automática no se guarda en la configuración.');
+      }
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) => t.replace('P.config.texto.modelo = mejor;', '')),
+  },
+
+  {
+    nombre: 'la-instruccion-del-director-es-del-genero',
+    dice: 'El director trae una instrucción escrita para ESTE canal —misterio, crimen real, polémicas— y con la línea ética dentro. Una instrucción genérica devuelve documentales genéricos.',
+    comprobar(ctx) {
+      const d = fuente(ctx, 'app/fases/director.js');
+      const fallos = [];
+      const debeCubrir = [
+        [/crimen real|polémicas/i, 'el género del canal'],
+        // \s+ y no un espacio: el texto va justificado a 80 columnas y cualquier
+        // frase puede quedar partida por un salto. La primera versión de esto
+        // buscaba «DETALLE CONCRETO» literal y falló por eso.
+        [/DETALLE\s+CONCRETO|apertura\s*en\s*frío|aperturaEnFrio/i, 'cómo abre'],
+        [/TODAVÍA\s+NO|retiene/i, 'el motor: lo que se retiene'],
+        [/GIRO/i, 'el giro'],
+        [/sentencia|absolutoria|probado/i, 'la línea de lo probado'],
+        [/moraleja/i, 'cómo cierra'],
+        [/DEBAJO de una voz|lecho/i, 'la música por debajo'],
+      ];
+      for (const [re, que] of debeCubrir) {
+        if (!re.test(d)) fallos.push(`La instrucción del director no dice nada sobre ${que}.`);
+      }
+      // Una instrucción corta es una instrucción genérica.
+      const i = d.indexOf('const SISTEMA');
+      const largo = d.slice(i, d.indexOf('`;', i)).length;
+      if (largo < 1500) fallos.push(`La instrucción del director son ${largo} caracteres: demasiado corta para dirigir.`);
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'app/fases/director.js', (t) =>
+        t.replace(/const SISTEMA = `[\s\S]*?`;/, 'const SISTEMA = `Eres director. Haz un documental.`;'),
+      ),
+  },
+
+  {
     nombre: 'los-fallos-se-explican-con-palabras',
     dice: 'El usuario no lee registros de la nube desde el teléfono: cualquier fallo se explica en pantalla, con palabras (§1).',
     comprobar(ctx) {

@@ -257,3 +257,45 @@ export function pintarSelectorModelo(select, familia, idActual) {
   // §7.3 exactamente igual que la primera vez.
   return elegido;
 }
+
+// ── Elegir el mejor modelo de texto ───────────────────────────────────────────
+//
+// «El director» es el modelo que lee el guion y decide: es donde más se nota la
+// calidad y donde menos hay que ahorrar. Fijar un identificador a mano envejece —el
+// que estaba puesto se quedó dos generaciones atrás sin que nadie lo notara—, así
+// que el mejor se elige AUTOMÁTICAMENTE de lo que el proyecto tiene de verdad.
+//
+// Se ordena por versión primero y por gama después: un Pro de la generación anterior
+// pierde contra un Pro de la nueva, y un Flash pierde contra un Pro de su misma
+// generación.
+
+export function puntuarModelo(id) {
+  const m = /gemini-(\d+)(?:[.-](\d+))?/i.exec(id || '');
+  if (!m) return 0;
+  const version = Number(m[1]) * 100 + Number(m[2] || 0);
+  const gama = /flash-?lite/i.test(id) ? 1 : /flash/i.test(id) ? 2 : /pro/i.test(id) ? 3 : 0;
+  // Lo experimental empata con su versión pero pierde el desempate: si hay una
+  // estable de la misma generación, se prefiere la estable.
+  const estable = /preview|exp/i.test(id) ? 0 : 1;
+  return version * 100 + gama * 10 + estable;
+}
+
+/** El mejor de una lista de identificadores. */
+export function mejorModeloTexto(ids) {
+  return [...(ids || [])].sort((a, b) => puntuarModelo(b) - puntuarModelo(a))[0] || '';
+}
+
+/**
+ * La etiqueta que sale en el desplegable.
+ * El mejor se marca, y el barato también: son las dos decisiones que se toman ahí.
+ */
+export function etiquetaModelo(id, mejor) {
+  const bonito = String(id)
+    .replace(/^gemini-/, 'Gemini ')
+    .replace(/-(pro|flash-lite|flash)/i, (_, g) => ' ' + g.replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase()))
+    .replace(/-(preview|exp).*/i, ' (previo)');
+  if (id === mejor) return `${bonito} — el mejor director`;
+  if (/flash-?lite/i.test(id)) return `${bonito} — el más barato`;
+  if (/flash/i.test(id)) return `${bonito} — rápido y barato`;
+  return bonito;
+}
