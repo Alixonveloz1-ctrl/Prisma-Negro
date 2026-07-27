@@ -9,6 +9,9 @@
 
 import { tokenDeAcceso, olvidarToken } from './token.js';
 import { cifrar, descifrar } from './cifrado.js';
+// El identificador del proyecto sale del JSON de la cuenta de servicio, que ya lo
+// trae dentro. Un sitio solo lo resuelve.
+import { proyecto } from './cuenta.js';
 
 // §6: los generadores de video tienen listas CERRADAS de duración. Se pide la más
 // cercana a lo que dura la locución y se congela el último fotograma para el resto.
@@ -17,12 +20,6 @@ export const DURACIONES_VIDEO = [4, 6, 8];
 // §6: la voz limita el texto por llamada. Presupuesto en bytes, no en caracteres:
 // una tilde ocupa dos.
 export const TOPE_BYTES_VOZ = 4000;
-
-function proyecto() {
-  const p = process.env.GCP_PROYECTO;
-  if (!p) throw new Error('Falta GCP_PROYECTO en el entorno.');
-  return p;
-}
 
 function region() {
   return process.env.GCP_REGION_IA || 'us-central1';

@@ -27,6 +27,14 @@ function prefijo() {
   return p ? p + '/' : '';
 }
 
+/**
+ * El prefijo que se está usando, para enseñarlo en el diagnóstico.
+ *
+ * Existe para que nadie más tenga que leer ALMACEN_PREFIJO: el almacén es el único
+ * que sabe cómo se compone una ruta, y eso incluye saber dónde empieza.
+ */
+export const prefijoActual = () => prefijo().replace(/\/$/, '');
+
 // ── El traductor ──────────────────────────────────────────────────────────────
 // ÚNICA función que convierte una clave de material en una ruta del almacén (§3).
 // Si algún día cambia el esquema de rutas, cambia aquí y en ningún otro sitio.

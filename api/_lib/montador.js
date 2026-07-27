@@ -13,6 +13,7 @@
 import { tokenDeAcceso, olvidarToken } from './token.js';
 import { cifrar, descifrar } from './cifrado.js';
 import { subir, fichas, rutaGs, rutaGsCarpeta } from './almacen.js';
+import { proyecto } from './cuenta.js';
 // La lista de descargas y el guion de ffmpeg salen de la MISMA hoja y del MISMO
 // módulo (§3). Que este archivo importe en vez de reimplementar es justamente lo
 // que impide que discrepen.
@@ -23,20 +24,14 @@ export { clavesDeLaHoja };
 const RUN = 'https://run.googleapis.com/v2';
 const LOGGING = 'https://logging.googleapis.com/v2';
 
-function proyecto() {
-  const p = process.env.GCP_PROYECTO;
-  if (!p) throw new Error('Falta GCP_PROYECTO en el entorno.');
-  return p;
-}
-
 function regionJob() {
   return process.env.GCP_REGION_JOB || 'us-central1';
 }
 
+// Con valor por defecto: es el nombre que sale en las instrucciones de despliegue,
+// así que pedirlo como variable era pedir que copiaran algo que ya les dimos hecho.
 function nombreJob() {
-  const j = process.env.MONTADOR_JOB;
-  if (!j) throw new Error('Falta MONTADOR_JOB en el entorno.');
-  return j;
+  return process.env.MONTADOR_JOB || 'prisma-negro-montador';
 }
 
 async function pedirRun(url, opciones = {}) {

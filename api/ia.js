@@ -268,30 +268,42 @@ function exigir(c, campo) {
  * funciona: se lo decimos aquí.
  */
 function revisarConfiguracion() {
-  const necesarias = {
-    GCP_CUENTA_SERVICIO: 'el correo de la cuenta de servicio',
-    GCP_CLAVE_PRIVADA: 'la clave privada de la cuenta de servicio',
-    GCP_PROYECTO: 'el identificador del proyecto en la nube',
-    ALMACEN_NOMBRE: 'el nombre del almacén donde vive todo lo generado',
-    CLAVE_REFERENCIAS: 'la clave para cifrar las referencias opacas',
-    CLAVE_ACCESO: 'la contraseña para entrar a la herramienta',
-  };
-  const opcionales = {
-    MONTADOR_JOB: 'el nombre del contenedor de montaje (solo hace falta para montar)',
-    GCP_NUMERO_PROYECTO: 'el número de proyecto (mejora el censurado de los identificadores)',
-  };
+  // TRES variables. Ni una más.
+  //
+  // El JSON de la cuenta de servicio ya trae dentro el proyecto, el correo y la
+  // clave: pedir esos tres por separado era hacer copiar tres veces lo que ya está
+  // en un archivo. Y todo lo que tiene un valor por defecto sensato —regiones,
+  // prefijo, nombre del contenedor— no es configuración, es una opción.
+  const faltan = [];
 
-  const faltan = Object.entries(necesarias)
-    .filter(([k]) => !process.env[k])
-    .map(([k, q]) => ({ variable: k, es: q }));
-  const flojas = Object.entries(opcionales)
-    .filter(([k]) => !process.env[k])
-    .map(([k, q]) => ({ variable: k, es: q }));
+  const hayCuenta =
+    (process.env.GCP_CUENTA_JSON && process.env.GCP_CUENTA_JSON.trim()) ||
+    (process.env.GCP_CLAVE_PRIVADA && process.env.GCP_CUENTA_SERVICIO);
+  if (!hayCuenta) {
+    faltan.push({
+      variable: 'GCP_CUENTA_JSON',
+      es: 'el archivo JSON de la cuenta de servicio, entero. Trae dentro el proyecto, el correo y la clave',
+    });
+  }
+  if (!process.env.ALMACEN_NOMBRE) {
+    faltan.push({ variable: 'ALMACEN_NOMBRE', es: 'el nombre del bucket donde vive todo lo generado' });
+  }
+  if (!process.env.CLAVE_ACCESO) {
+    faltan.push({ variable: 'CLAVE_ACCESO', es: 'la contraseña para entrar a la herramienta' });
+  }
 
   return {
     lista: faltan.length === 0,
     faltan,
-    incompletas: flojas,
+    // Lo demás tiene valor por defecto. Se enseña para que se sepa qué se está
+    // usando, no como algo pendiente de hacer.
+    porDefecto: {
+      ALMACEN_PREFIJO: almacen.prefijoActual(),
+      GCP_REGION_IA: process.env.GCP_REGION_IA || 'us-central1',
+      GCP_REGION_JOB: process.env.GCP_REGION_JOB || 'us-central1',
+      MONTADOR_JOB: process.env.MONTADOR_JOB || 'prisma-negro-montador',
+      CLAVE_REFERENCIAS: process.env.CLAVE_REFERENCIAS ? 'fijada a mano' : 'derivada de la cuenta',
+    },
     modelos: {
       texto: process.env.MODELO_TEXTO || 'gemini-2.5-pro',
       imagen: process.env.MODELO_IMAGEN || 'gemini-2.5-flash-image',

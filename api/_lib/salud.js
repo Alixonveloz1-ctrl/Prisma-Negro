@@ -13,6 +13,7 @@
 // fallarían todos y darían cuatro mensajes para un solo problema.
 
 import { tokenDeAcceso, olvidarToken } from './token.js';
+import { clavePrivada, proyecto, olvidarCuenta } from './cuenta.js';
 
 const RAIZ_ALMACEN = 'https://storage.googleapis.com/storage/v1';
 
@@ -20,6 +21,13 @@ const paso = (nombre, ok, dice, arregla) => ({ paso: nombre, ok, dice, ...(arreg
 
 export async function probarCadena() {
   const pasos = [];
+
+  // Lo primero de todo: olvidar lo leído antes. Una instancia serverless caliente
+  // guarda la cuenta y el token de la petición anterior, y justo después de cambiar
+  // una variable eso haría que el diagnóstico dijera que todo va bien sobre la
+  // configuración VIEJA — que es la peor forma posible de fallar.
+  olvidarCuenta();
+  olvidarToken();
 
   // ── 1. La forma de la clave ────────────────────────────────────────────────
   // Antes de gastar una llamada: la mayoría de los fallos de aquí son un pegado
@@ -29,7 +37,6 @@ export async function probarCadena() {
   if (!forma.ok) return pasos;
 
   // ── 2. La credencial ───────────────────────────────────────────────────────
-  olvidarToken(); // que no conteste un token viejo de otra clave
   let token;
   try {
     token = await tokenDeAcceso();
@@ -89,7 +96,7 @@ export async function probarCadena() {
     const region = process.env.GCP_REGION_IA || 'us-central1';
     const modelo = process.env.MODELO_TEXTO || 'gemini-2.5-pro';
     const url =
-      `https://${region}-aiplatform.googleapis.com/v1/projects/${process.env.GCP_PROYECTO}` +
+      `https://${region}-aiplatform.googleapis.com/v1/projects/${proyecto()}` +
       `/locations/${region}/publishers/google/models/${modelo}:generateContent`;
 
     const r = await fetch(url, {
@@ -133,7 +140,7 @@ export async function probarCadena() {
     try {
       const region = process.env.GCP_REGION_JOB || 'us-central1';
       const url =
-        `https://run.googleapis.com/v2/projects/${process.env.GCP_PROYECTO}` +
+        `https://run.googleapis.com/v2/projects/${proyecto()}` +
         `/locations/${region}/jobs/${process.env.MONTADOR_JOB}`;
       const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (r.ok) {
@@ -162,12 +169,16 @@ export async function probarCadena() {
  * error de firma críptico más adelante; aquí se dicen por su nombre.
  */
 function revisarFormaDeLaClave() {
-  const bruta = process.env.GCP_CLAVE_PRIVADA;
-  if (!bruta) {
-    return paso('clave', false, 'No hay clave privada configurada.', 'Pega el campo private_key del JSON de la cuenta de servicio.');
+  let pem;
+  try {
+    // Sale del JSON entero si se subió así, o de la variable suelta si no.
+    pem = clavePrivada();
+  } catch (e) {
+    return paso('clave', false, e.message, 'Sube el archivo JSON de la cuenta de servicio en GCP_CUENTA_JSON.');
   }
-
-  const pem = bruta.includes('\\n') ? bruta.replace(/\\n/g, '\n') : bruta;
+  if (!pem) {
+    return paso('clave', false, 'No hay clave privada configurada.', 'Sube el JSON de la cuenta de servicio en GCP_CUENTA_JSON.');
+  }
 
   if (!pem.includes('-----BEGIN')) {
     return paso(

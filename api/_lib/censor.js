@@ -7,6 +7,8 @@
 // manejador, para que no haya forma de saltárselo por olvido: quien escriba
 // `res.json(...)` más abajo está censurado quiera o no.
 
+import { cuenta } from './cuenta.js';
+
 const OCULTO = '[oculto]';
 
 // Tope de la plataforma serverless para el cuerpo de la RESPUESTA (§1, §6).
@@ -18,7 +20,19 @@ export const TOPE_RESPUESTA = 4.5 * 1024 * 1024;
 const MARGEN = 64 * 1024;
 
 function valoresSecretos() {
+  // El proyecto y el correo salen del JSON de la cuenta de servicio cuando se sube
+  // así. Si el censor solo mirara las variables sueltas, dejaría pasar justo los
+  // valores del camino recomendado.
+  let deLaCuenta = {};
+  try {
+    deLaCuenta = cuenta();
+  } catch {
+    // Sin configurar todavía: no hay nada que censurar de ahí.
+  }
+
   return [
+    deLaCuenta.proyecto,
+    deLaCuenta.correo,
     process.env.GCP_PROYECTO,
     process.env.GCP_NUMERO_PROYECTO,
     process.env.GCP_CUENTA_SERVICIO,
@@ -35,6 +49,10 @@ const PATRONES = [
   /gs:\/\/[^\s"'\\]+/g,
   /https:\/\/storage\.googleapis\.com\/[^\s"'\\]+/g,
   /https:\/\/[a-z0-9-]+-[0-9]{12}\.[a-z0-9-]+\.run\.app[^\s"'\\]*/g,
+  // Por si alguna vez un error del proveedor devolviera de vuelta lo que se le
+  // mandó. La clave privada no debería llegar nunca aquí; que no llegue nunca es
+  // exactamente el motivo de tener una red debajo.
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
 ];
 
 function escapar(s) {

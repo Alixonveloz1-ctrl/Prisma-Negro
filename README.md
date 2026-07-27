@@ -84,15 +84,23 @@ pueda usar un material nuevo, el diseño está mal.
 
 ### 3. La aplicación
 
-Despliega el repositorio en Vercel y rellena las variables de `.env.example` en el
-panel. La clave de referencias se genera una vez:
+Despliega el repositorio en Vercel y pon **tres variables**:
 
-```sh
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
+| Variable | Qué es |
+|---|---|
+| `GCP_CUENTA_JSON` | El archivo JSON de la cuenta de servicio, entero |
+| `ALMACEN_NOMBRE` | El nombre del bucket |
+| `CLAVE_ACCESO` | La contraseña para entrar. Te la inventas tú |
 
-Al entrar, la pantalla dice **qué falta por configurar** y con qué palabras: no hace
-falta abrir ninguna consola para averiguarlo.
+Nada más. El JSON ya trae dentro el proyecto, el correo y la clave privada, así que
+no hay que copiar esos tres por separado. Las regiones, el prefijo del almacén, el
+nombre del contenedor y los modelos tienen valor por defecto, y la clave de cifrado
+de referencias se deriva de la cuenta. Todo eso está en `.env.example` por si
+quieres cambiarlo, comentado.
+
+Al entrar, la pantalla **prueba la cadena de verdad** —que la clave tenga forma de
+clave, que la cuenta firme, que el almacén responda, que el modelo conteste— y si
+algo falla dice cuál es y qué hacer. No hace falta abrir ninguna consola.
 
 ---
 

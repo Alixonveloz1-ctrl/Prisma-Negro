@@ -85,8 +85,11 @@ export const invariantes = [
         // Ninguno de los cuatro compone rutas.
         if (ruta === 'api/_lib/almacen.js' || ruta === 'comun/claves.mjs') continue;
         if (ruta === '.env.example' || ruta.startsWith('auditoria/')) continue;
-        if (/ALMACEN_PREFIJO|storage\.googleapis\.com\/upload/.test(texto)) {
-          fallos.push(`${ruta} compone rutas del almacén por su cuenta.`);
+        // Se caza LEER la variable, no nombrarla. El diagnóstico enseña el prefijo
+        // que está en uso y para eso se lo pide al almacén; que la etiqueta se
+        // llame igual que la variable no es componer una ruta.
+        if (/process\.env\.ALMACEN_PREFIJO|storage\.googleapis\.com\/upload/.test(texto)) {
+          fallos.push(`${ruta} lee la configuración del almacén por su cuenta.`);
         }
       }
       const alm = fuente(ctx, 'api/_lib/almacen.js');

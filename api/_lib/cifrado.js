@@ -12,23 +12,42 @@
 // AES-256-GCM: además de ocultar, autentica. Una referencia manipulada no descifra,
 // no se convierte en otra ruta.
 
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, randomBytes, createHash } from 'node:crypto';
+import { clavePrivada } from './cuenta.js';
 
 const PREFIJO = 'ref_';
 
+let cacheClave = null;
+
+/**
+ * La clave de cifrado.
+ *
+ * Si no se configura, se DERIVA de la clave privada de la cuenta de servicio. Es
+ * secreta (nadie de fuera la tiene), es estable (la misma cuenta da siempre la
+ * misma), y ahorra una variable más que copiar a mano en un teléfono.
+ *
+ * Se puede fijar `CLAVE_REFERENCIAS` a mano y entonces manda esa. Tiene sentido
+ * hacerlo si algún día rotas la clave de la cuenta y quieres que las referencias
+ * emitidas antes sigan descifrando.
+ */
 function clave() {
+  if (cacheClave) return cacheClave;
+
   const hex = process.env.CLAVE_REFERENCIAS;
-  if (!hex) {
-    throw new Error(
-      'Falta CLAVE_REFERENCIAS en el entorno. Genérala con: ' +
-        'node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"',
-    );
+  if (hex && hex.trim()) {
+    const buf = Buffer.from(hex.trim(), 'hex');
+    if (buf.length !== 32) {
+      throw new Error('CLAVE_REFERENCIAS debe ser de 32 bytes en hexadecimal (64 caracteres).');
+    }
+    cacheClave = buf;
+    return cacheClave;
   }
-  const buf = Buffer.from(hex.trim(), 'hex');
-  if (buf.length !== 32) {
-    throw new Error('CLAVE_REFERENCIAS debe ser de 32 bytes en hexadecimal (64 caracteres).');
-  }
-  return buf;
+
+  cacheClave = createHash('sha256')
+    .update('prisma-negro/referencias/v1')
+    .update(clavePrivada())
+    .digest();
+  return cacheClave;
 }
 
 export function cifrar(texto) {

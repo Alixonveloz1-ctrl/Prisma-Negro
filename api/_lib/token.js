@@ -8,6 +8,7 @@
 // compartida, y no hace falta que lo sea.
 
 import { createSign } from 'node:crypto';
+import { correo as correoCuenta, clavePrivada } from './cuenta.js';
 
 const OAUTH = 'https://oauth2.googleapis.com/token';
 const AMBITO = 'https://www.googleapis.com/auth/cloud-platform';
@@ -19,24 +20,13 @@ function base64url(obj) {
   return Buffer.from(JSON.stringify(obj)).toString('base64url');
 }
 
-function clavePrivada() {
-  const pem = process.env.GCP_CLAVE_PRIVADA;
-  if (!pem) throw new Error('Falta GCP_CLAVE_PRIVADA en el entorno.');
-  // En el panel de la plataforma la clave se pega en una sola línea con \n
-  // escapados. Aquí se deshace ese escape.
-  return pem.includes('\\n') ? pem.replace(/\\n/g, '\n') : pem;
-}
-
 export async function tokenDeAcceso() {
   const ahora = Math.floor(Date.now() / 1000);
   if (cacheToken && ahora < cacheVence - 60) return cacheToken;
 
-  const correo = process.env.GCP_CUENTA_SERVICIO;
-  if (!correo) throw new Error('Falta GCP_CUENTA_SERVICIO en el entorno.');
-
   const cabecera = base64url({ alg: 'RS256', typ: 'JWT' });
   const cuerpo = base64url({
-    iss: correo,
+    iss: correoCuenta(),
     scope: AMBITO,
     aud: OAUTH,
     iat: ahora,
@@ -60,8 +50,8 @@ export async function tokenDeAcceso() {
   const datos = await r.json().catch(() => ({}));
   if (!r.ok || !datos.access_token) {
     throw new Error(
-      'La cuenta de servicio no pudo obtener un token. ' +
-        'Revisa GCP_CUENTA_SERVICIO y GCP_CLAVE_PRIVADA. ' +
+      'La cuenta de servicio no pudo obtener un token. Si acabas de crear la clave, ' +
+        'espera un minuto: tarda en propagarse. ' +
         (datos.error_description || datos.error || `HTTP ${r.status}`),
     );
   }
