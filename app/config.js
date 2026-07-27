@@ -30,14 +30,24 @@ export const MODELOS = {
     { id: 'gemini-1.5-pro', etiqueta: 'Texto — anterior', retirado: 'gemini-2.5-pro' },
   ],
   imagen: [
-    // §4.6: tiene que aceptar imágenes de referencia. No todos lo hacen, y por eso
-    // el catálogo lo dice en la etiqueta.
-    { id: 'gemini-2.5-flash-image', etiqueta: 'Imagen — acepta referencias', referencias: true },
-    { id: 'imagen-4.0-generate-001', etiqueta: 'Imagen — sin referencias', referencias: false },
+    // §4.6: el modelo tiene que aceptar imágenes de referencia para que los sujetos
+    // y los lugares se parezcan entre tomas. No todos lo hacen, y la etiqueta lo
+    // dice en castellano llano: «acepta referencias» no significa nada para quien no
+    // haya leído el plano.
+    {
+      id: 'gemini-2.5-flash-image',
+      etiqueta: 'Mantiene el parecido entre tomas (recomendado)',
+      referencias: true,
+    },
+    {
+      id: 'imagen-4.0-generate-001',
+      etiqueta: 'Más detalle, pero cada toma sale distinta',
+      referencias: false,
+    },
   ],
   video: [
-    { id: 'veo-3.1-generate-preview', etiqueta: 'Movimiento — actual' },
-    { id: 'veo-3.0-generate-001', etiqueta: 'Movimiento — anterior', retirado: 'veo-3.1-generate-preview' },
+    { id: 'veo-3.1-generate-preview', etiqueta: 'Clips de video — actual' },
+    { id: 'veo-3.0-generate-001', etiqueta: 'Clips de video — anterior', retirado: 'veo-3.1-generate-preview' },
   ],
 };
 

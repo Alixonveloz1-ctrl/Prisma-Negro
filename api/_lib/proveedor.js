@@ -321,6 +321,10 @@ export async function voz({ texto: t, nombreVoz, velocidad = 1.0, tono = 0 }) {
  * equivocado y con nombres idénticos a las buenas. Aquí se filtra por región y se
  * MUESTRA la región en la etiqueta.
  */
+// Las regiones que valen. España NO: este canal narra en español latino, y una voz
+// de España en medio de una narración latina se oye como otro narrador.
+const REGIONES_LATINAS = { 'es-US': 'Latino', 'es-MX': 'México', 'es-419': 'Latino' };
+
 export async function vocesDisponibles(idioma = 'es') {
   const token = await tokenDeAcceso();
   const r = await fetch(`${VOZ_API}/voices?languageCode=${encodeURIComponent(idioma)}`, {
@@ -329,12 +333,16 @@ export async function vocesDisponibles(idioma = 'es') {
   const datos = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(`No se pudo leer el catálogo de voces: ${datos?.error?.message || r.status}`);
 
-  const REGIONES = { 'es-US': 'Latino (EE. UU.)', 'es-ES': 'España', 'es-MX': 'México' };
   const GENEROS = { MALE: 'masculina', FEMALE: 'femenina', NEUTRAL: 'neutra' };
 
   return (datos.voices || [])
-    // Fuera las expresivas de entrega variable: en narración larga cambian de tono
-    // entre llamadas (§7.9).
+    // §7.10: se listaron todas y salieron cien, la mayoría del idioma equivocado y
+    // con nombres idénticos a las buenas. Aquí se filtra por región Y por variante.
+    //
+    // Fuera España: el canal narra en latino y una voz peninsular en medio suena a
+    // otro narrador. Y fuera las expresivas de entrega variable, que en narración
+    // larga cambian de tono entre llamadas (§7.9).
+    .filter((v) => REGIONES_LATINAS[v.languageCodes?.[0]])
     .filter((v) => !/chirp|studio|journey/i.test(v.name))
     .map((v) => {
       const reg = v.languageCodes?.[0] || '';
@@ -342,12 +350,12 @@ export async function vocesDisponibles(idioma = 'es') {
         nombre: v.name,
         region: reg,
         genero: GENEROS[v.ssmlGender] || '',
-        // La etiqueta lleva la región dentro: sin eso, dos voces distintas se ven
-        // idénticas en el desplegable.
-        etiqueta: `${v.name.split('-').slice(2).join('-')} · ${REGIONES[reg] || reg} · ${GENEROS[v.ssmlGender] || ''}`,
+        // La etiqueta lleva la región y el género dentro: sin eso, dos voces
+        // distintas se ven idénticas en el desplegable.
+        etiqueta: `${v.name.split('-').slice(2).join('-')} · ${REGIONES_LATINAS[reg]} · ${GENEROS[v.ssmlGender] || ''}`,
       };
     })
-    .sort((a, b) => a.region.localeCompare(b.region) || a.nombre.localeCompare(b.nombre));
+    .sort((a, b) => a.genero.localeCompare(b.genero) || a.nombre.localeCompare(b.nombre));
 }
 
 // ── Música ────────────────────────────────────────────────────────────────────
@@ -370,36 +378,91 @@ export async function musica({ instruccion, segundos = 30 }) {
 // ── Catálogo de modelos ───────────────────────────────────────────────────────
 //
 // Qué modelos tiene DE VERDAD este proyecto, preguntándoselo al proveedor en vez de
-// llevar una lista escrita a mano que envejece sola. Una lista escrita a mano acaba
-// ofreciendo modelos retirados y escondiendo los nuevos, y el usuario no tiene forma
-// de saber cuál de las dos cosas le está pasando.
+// llevar una lista escrita a mano que envejece sola.
+//
+// El listado de modelos de publicador ha cambiado de forma varias veces y no todas
+// las regiones responden a la misma. La primera versión de esto usaba una sola URL
+// y daba 404, y el usuario se quedaba con el selector vacío sin saber por qué. Se
+// prueban las formas conocidas por orden y se usa la primera que conteste; si
+// ninguna lo hace, se devuelve una lista de reserva Y se dice que es de reserva, en
+// vez de dejar el desplegable en blanco.
+
+function urlsDelCatalogo() {
+  const R = region();
+  const P = proyecto();
+  return [
+    `https://${R}-aiplatform.googleapis.com/v1beta1/projects/${P}/locations/${R}/publishers/google/models`,
+    `https://${R}-aiplatform.googleapis.com/v1/projects/${P}/locations/${R}/publishers/google/models`,
+    `https://${R}-aiplatform.googleapis.com/v1beta1/publishers/google/models`,
+    `https://${R}-aiplatform.googleapis.com/v1/publishers/google/models`,
+  ];
+}
+
+// La lista de reserva. Solo se usa si el proveedor no contesta a ninguna forma del
+// listado, y la pantalla avisa de que es de reserva para que nadie crea que ese es
+// el catálogo real de su cuenta.
+const RESERVA = {
+  texto: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'],
+  imagen: ['gemini-2.5-flash-image', 'imagen-4.0-generate-001', 'imagen-3.0-generate-002'],
+  video: ['veo-3.1-generate-preview', 'veo-3.0-generate-001', 'veo-2.0-generate-001'],
+  musica: ['lyria-002'],
+};
 
 export async function modelosDisponibles() {
   const token = await tokenDeAcceso();
-  const r = await fetch(
-    `https://${region()}-aiplatform.googleapis.com/v1/publishers/google/models?pageSize=200`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
-  const datos = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(`No se pudo leer el catálogo de modelos: ${datos?.error?.message || r.status}`);
+  const intentos = [];
 
+  for (const url of urlsDelCatalogo()) {
+    let r;
+    try {
+      r = await fetch(`${url}?pageSize=400`, { headers: { Authorization: `Bearer ${token}` } });
+    } catch (e) {
+      intentos.push(`${url.split('/v1')[1]}: ${e.message}`);
+      continue;
+    }
+    if (!r.ok) {
+      intentos.push(`…${url.slice(url.indexOf('/v1'))}: HTTP ${r.status}`);
+      continue;
+    }
+    const datos = await r.json().catch(() => ({}));
+    const lista = datos.publisherModels || datos.models || [];
+    const salida = clasificar(lista.map((m) => String(m.name || m.versionId || '').split('/').pop()));
+    if (salida.texto?.length) return { ...salida, deReserva: false };
+    intentos.push(`…${url.slice(url.indexOf('/v1'))}: contestó sin modelos de texto`);
+  }
+
+  return {
+    ...clasificar(Object.values(RESERVA).flat()),
+    deReserva: true,
+    // Qué se intentó, para que el fallo se pueda arreglar en vez de solo verse.
+    intentos,
+  };
+}
+
+function clasificar(ids) {
   const familia = (n) =>
-    /veo/i.test(n) ? 'video' : /image|imagen/i.test(n) ? 'imagen' : /lyria|music/i.test(n) ? 'musica' : /gemini/i.test(n) ? 'texto' : null;
+    /veo/i.test(n) ? 'video'
+      : /image|imagen/i.test(n) ? 'imagen'
+      : /lyria|music/i.test(n) ? 'musica'
+      : /gemini/i.test(n) ? 'texto'
+      : null;
 
   const salida = {};
-  for (const m of datos.publisherModels || []) {
-    const id = String(m.name || '').split('/').pop();
+  for (const id of ids) {
     if (!id) continue;
+    // Fuera lo que no admite peticiones normales: ofrecer un modelo que va a fallar
+    // es peor que no ofrecerlo.
+    if (/-tuning|embedding|@\d|-it$|vision$/i.test(id)) continue;
     const f = familia(id);
     if (!f) continue;
-    // Fuera lo experimental y lo que ya no admite peticiones: ofrecer un modelo que
-    // va a fallar es peor que no ofrecerlo.
-    if (/-tuning|embedding|@00/i.test(id)) continue;
-    (salida[f] ||= []).push({ id, etiqueta: id, version: m.versionId || '' });
+    (salida[f] ||= []).push({ id, etiqueta: id });
   }
-  // Los más nuevos primero: es lo que casi siempre se quiere.
   for (const f of Object.keys(salida)) {
-    salida[f].sort((a, b) => b.id.localeCompare(a.id, 'en', { numeric: true }));
+    const vistos = new Set();
+    salida[f] = salida[f]
+      .filter((m) => !vistos.has(m.id) && vistos.add(m.id))
+      // Los más nuevos primero: es lo que casi siempre se quiere.
+      .sort((a, b) => b.id.localeCompare(a.id, 'en', { numeric: true }));
   }
   return salida;
 }

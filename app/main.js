@@ -307,13 +307,24 @@ function pintarPasos() {
   marcar(5, hay.montado, hay.generado);
   marcar(6, false, hay.montado);
 
-  $('b-investigar-fondo').disabled = !hay.caso;
-  $('b-dirigir-pieza').disabled = !hay.fichas;
-  $('b-generar-guion').disabled = !hay.tratamiento;
-  for (const b of ['b-narrar', 'b-imagenes', 'b-movimiento', 'b-musica']) $(b).disabled = !hay.guion;
-  $('b-montar').disabled = !hay.generado;
-  $('b-revisar').disabled = !hay.guion;
-  $('b-producir').disabled = !hay.caso;
+  // Un botón apagado sin explicación es una pared. Cada uno dice QUÉ FALTA para
+  // poder pulsarlo, en el propio paso, con palabras (§1).
+  const bloquear = (boton, falta) => {
+    const b = $(boton);
+    if (!b) return;
+    b.disabled = !!falta;
+    b.title = falta || '';
+  };
+
+  bloquear('b-investigar-fondo', hay.caso ? '' : 'Elige un caso en el paso 1.');
+  bloquear('b-dirigir-pieza', hay.fichas ? '' : 'Falta investigar el caso (paso 2).');
+  bloquear('b-generar-guion', hay.tratamiento ? '' : 'Falta dirigir la pieza: el guion sale del tratamiento.');
+  for (const b of ['b-narrar', 'b-imagenes', 'b-movimiento', 'b-musica']) {
+    bloquear(b, hay.guion ? '' : 'Falta el guion partido en tomas (paso 3).');
+  }
+  bloquear('b-montar', hay.generado ? '' : 'Faltan narración o imágenes por generar.');
+  bloquear('b-revisar', hay.guion ? '' : 'Falta el guion.');
+  bloquear('b-producir', hay.caso ? '' : 'Elige un caso primero.');
 }
 
 // ── Paso 1: buscar casos y elegir uno ─────────────────────────────────────────
@@ -1118,6 +1129,27 @@ accion(
     await guardar();
     pintarTodo();
     ir('inicio');
+  },
+  'proyecto',
+);
+
+/** Una muestra corta con la voz elegida, para poder oírla antes de pagar quince minutos. */
+accion(
+  'b-probar-voz',
+  async () => {
+    const voz = $('voz').value || P.config.narracion.nombreVoz;
+    const r = await llamar('voz', {
+      texto:
+        'La noche del catorce de marzo, el expediente registra una llamada a las once y cuarenta. ' +
+        'Nadie la atendió.',
+      nombreVoz: voz,
+      velocidad: Number($('velocidad').value) / 100,
+      tono: P.config.narracion.tono,
+    });
+    const a = $('muestra-voz');
+    a.src = `data:audio/wav;base64,${r.datos}`;
+    a.style.display = 'block';
+    a.play().catch(() => {});
   },
   'proyecto',
 );

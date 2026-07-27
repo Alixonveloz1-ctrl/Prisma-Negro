@@ -358,8 +358,17 @@ export const invariantes = [
       // sitio del archivo: dos voces distintas se ven idénticas en el desplegable si
       // la etiqueta es solo el nombre (§7.10).
       const etiqueta = cuerpo.match(/etiqueta:\s*([^\n]+)/)?.[1] || '';
-      if (!/REGIONES\[/.test(etiqueta)) {
+      if (!/REGIONES\w*\[/.test(etiqueta)) {
         fallos.push(`La etiqueta de la voz no lleva la región dentro: ${etiqueta.slice(0, 60)}`);
+      }
+      // El canal narra en español LATINO. Una voz peninsular en medio de una
+      // narración latina se oye como otro narrador, igual que el §7.9 con los
+      // modelos expresivos.
+      if (/'es-ES'/.test(cuerpo)) {
+        fallos.push('El catálogo de voces deja pasar España: el canal narra en latino.');
+      }
+      if (!/REGIONES_LATINAS/.test(t)) {
+        fallos.push('No hay una lista explícita de las regiones que valen.');
       }
       return fallos;
     },

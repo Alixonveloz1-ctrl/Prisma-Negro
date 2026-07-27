@@ -553,7 +553,14 @@ nav.abajo button svg{width:22px;height:22px}
           <h2>Narración</h2>
           <label for="voz">Voz</label>
           <select id="voz"></select>
-          <p class="nota chica" style="margin-top:7px">Para narración larga conviene una voz de entrega fija: las expresivas cambian de tono en cada llamada.</p>
+          <div class="fila-btn" style="margin-top:9px">
+            <button class="btn chico" id="b-probar-voz">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9z"/></svg>
+              Escuchar esta voz
+            </button>
+          </div>
+          <audio id="muestra-voz" style="width:100%;margin-top:10px;display:none" controls></audio>
+
           <label for="velocidad">Velocidad · <b id="v-velocidad">0.96</b></label>
           <input id="velocidad" type="range" min="70" max="130" value="96">
         </div>
@@ -565,13 +572,17 @@ nav.abajo button svg{width:22px;height:22px}
           <p class="nota chica" id="modelo-en-uso" style="margin-top:7px"></p>
         </div>
         <div class="panel">
-          <h2>Imagen y movimiento</h2>
+          <h2>Imagen</h2>
           <label for="m-imagen">Modelo de imagen</label>
           <select id="m-imagen"></select>
-          <label for="m-video">Modelo de movimiento</label>
-          <select id="m-video"></select>
-          <label for="proporcion">Tomas con movimiento · <b id="v-proporcion">15%</b></label>
+        </div>
+
+        <div class="panel">
+          <h2>Movimiento</h2>
+          <label for="proporcion">Tomas con clip de video · <b id="v-proporcion">15%</b></label>
           <input id="proporcion" type="range" min="0" max="60" value="15">
+          <label for="m-video">Modelo para los clips</label>
+          <select id="m-video"></select>
           <label for="objetivo">Segundos por toma · <b id="v-objetivo">11</b></label>
           <input id="objetivo" type="range" min="5" max="20" value="11">
         </div>
