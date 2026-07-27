@@ -15,7 +15,8 @@
 import { tokenDeAcceso, olvidarToken } from './token.js';
 import { clavePrivada, proyecto, olvidarCuenta } from './cuenta.js';
 import { valor as valorEntorno, nombrePrincipal } from './entorno.js';
-import { PREDETERMINADO, grafiasDe, etiquetaDe } from '../../comun/modelos.mjs';
+import { PREDETERMINADO, grafiasDe, etiquetaDe, regionDe } from '../../comun/modelos.mjs';
+import { rutaDeModelo } from './proveedor.js';
 
 const RAIZ_ALMACEN = 'https://storage.googleapis.com/storage/v1';
 
@@ -95,10 +96,15 @@ export async function probarCadena() {
   // Una llamada mínima de verdad. Preguntar por el catálogo no prueba que el
   // modelo configurado exista ni que esta cuenta pueda usarlo.
   try {
-    const region = valorEntorno('regionIA', 'us-central1');
-    // Se prueba EL MISMO director que va a escribir, con las mismas grafías y en el
-    // mismo orden. Probar un modelo fijo distinto del que se usa es un diagnóstico
-    // que sale verde mientras la herramienta falla.
+    // Se prueba EL MISMO director que va a escribir, con las mismas grafías, en el
+    // mismo orden Y POR LA MISMA FUNCIÓN QUE COMPONE LA DIRECCIÓN.
+    //
+    // Esto último es la lección: el arreglo de la región se aplicó en el proveedor
+    // y aquí quedó una dirección compuesta a mano con la región fija. El
+    // diagnóstico salió en rojo diciendo que gemini-3.1-pro no existe en
+    // us-central1 —cierto— cuando el proveedor ya lo pedía bien en global. Dos
+    // sitios componiendo la misma dirección son dos sitios que hay que arreglar, y
+    // solo se arregla el que uno recuerda.
     const eleccion = process.env.MODELO_TEXTO || PREDETERMINADO.texto;
     const grafias = grafiasDe('texto', eleccion);
 
@@ -106,18 +112,18 @@ export async function probarCadena() {
     let modelo = grafias[0];
     for (const id of grafias) {
       modelo = id;
-      r = await fetch(
-        `https://${region}-aiplatform.googleapis.com/v1/projects/${proyecto()}` +
-          `/locations/${region}/publishers/google/models/${id}:generateContent`,
-        {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: 'ok' }] }],
-            generationConfig: { maxOutputTokens: 1, temperature: 0 },
-          }),
+      r = await fetch(`${rutaDeModelo(id)}:generateContent`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'X-Goog-User-Project': proyecto(),
         },
-      );
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: 'ok' }] }],
+          generationConfig: { maxOutputTokens: 1, temperature: 0 },
+        }),
+      });
       if (r.ok || (r.status !== 404 && r.status !== 403)) break;
     }
 
@@ -134,7 +140,8 @@ export async function probarCadena() {
           r.status === 403
             ? 'Falta el rol de usuario de Vertex AI en la cuenta de servicio, o la API no está activada.'
             : r.status === 404
-              ? `El modelo «${modelo}» no existe en la región ${region}. Cambia MODELO_TEXTO o la región.`
+              ? `Ninguna grafía de «${etiquetaDe('texto', eleccion)}» contesta en ${regionDe(modelo, valorEntorno('regionIA', 'us-central1'))}. ` +
+                'Se probaron: ' + grafias.join(', ') + '. Elige otro director en Ajustes.'
               : undefined,
         ),
       );

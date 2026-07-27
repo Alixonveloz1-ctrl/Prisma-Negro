@@ -43,10 +43,11 @@ function region() {
  * catálogo contesta 404 —y un 404 se lee como «no tienes ese modelo», que es
  * exactamente la conclusión equivocada a la que llegó la herramienta—.
  */
-function rutaDe(id) {
+export function rutaDeModelo(id) {
   const r = regionDe(id, region());
   return `https://${hostDe(r)}/v1/projects/${proyecto()}/locations/${r}/publishers/google/models/${id}`;
 }
+const rutaDe = rutaDeModelo;
 
 /**
  * Una llamada al modelo que el usuario eligió, probando sus grafías conocidas.

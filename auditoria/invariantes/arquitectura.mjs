@@ -327,6 +327,33 @@ export const invariantes = [
   },
 
   {
+    nombre: 'una-sola-funcion-compone-la-direccion-de-un-modelo',
+    dice: 'Solo un sitio compone la URL de un modelo. Había dos —el proveedor y el diagnóstico—, se arregló la región en uno, y el diagnóstico salió en rojo diciendo que el modelo no existía mientras el proveedor ya lo pedía bien.',
+    comprobar(ctx) {
+      const fallos = [];
+      for (const [ruta, texto] of ctx.fuentes) {
+        // El único que puede nombrar el host es quien decide la región. Y el único
+        // que puede montar la ruta `/publishers/google/models/` es el proveedor.
+        if (ruta.startsWith('auditoria/')) continue;
+        if (/aiplatform\.googleapis\.com/.test(texto) && ruta !== 'comun/modelos.mjs') {
+          fallos.push(`${ruta} nombra el host de Vertex: la región tiene que salir de un solo sitio.`);
+        }
+        if (/publishers\/google\/models/.test(texto) && ruta !== 'api/_lib/proveedor.js') {
+          fallos.push(`${ruta} compone la ruta de un modelo por su cuenta.`);
+        }
+      }
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'api/_lib/salud.js', (t) =>
+        t.replace(
+          '`${rutaDeModelo(id)}:generateContent`',
+          '`https://us-central1-aiplatform.googleapis.com/v1/publishers/google/models/${id}:generateContent`',
+        ),
+      ),
+  },
+
+  {
     nombre: 'el-clip-no-vuelve-dentro-de-la-respuesta',
     dice: 'Veo tiene que escribir el clip en el almacén, no devolverlo en base64: un clip de ocho segundos a 1080p no cabe en los 4,5 MB de la función (§7.1). Sin storageUri, la fase de clips no funciona.',
     comprobar(ctx) {
