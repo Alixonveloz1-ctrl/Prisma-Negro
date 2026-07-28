@@ -1327,7 +1327,31 @@ export const invariantes = [
 
       const i = main.indexOf('async function convertirEnClip');
       if (i < 0) return ['No hay forma de convertir una imagen en clip.'];
-      const cuerpo = main.slice(i, i + 1800);
+      const cuerpo = main.slice(i, main.indexOf('\nasync function bombearFilaDeClips', i));
+      const bomba = main.slice(main.indexOf('async function bombearFilaDeClips'), main.indexOf('async function bombearFilaDeClips') + 2600);
+
+      // LA FILA. Cada botón disparaba su llamada al instante, en paralelo, directo
+      // contra el rate limit: había que esperar pegado al teléfono a que terminara
+      // un clip para poder pedir el siguiente. Tocar el botón ENCOLA, y una sola
+      // bomba los genera de uno en uno.
+      if (!/filaClips\.some\(\(x\) => x\.i === i\)/.test(cuerpo)) {
+        fallos.push('Tocar dos veces el mismo botón encolaría el clip dos veces: se pagaría doble.');
+      }
+      if (!/filaClips\.push\(/.test(cuerpo)) {
+        fallos.push('El botón no encola: dispara la llamada al instante y en paralelo, contra el rate limit.');
+      }
+      if (!/if \(bombeandoClips\) return;/.test(bomba)) {
+        fallos.push('Puede arrancar más de una bomba a la vez: la fila deja de ser de uno en uno.');
+      }
+      if (!/while \(filaClips\.length\)/.test(bomba)) {
+        fallos.push('La bomba no vacía la fila: genera uno y se para.');
+      }
+      if (!/catch \(e\)/.test(bomba)) {
+        fallos.push('Un clip que falle tumba la fila entera: los demás encolados se pierden.');
+      }
+      if (!/estadoEnFila\(x\.i\)/.test(main)) {
+        fallos.push('El repintado pierde el estado de la fila: un clip en cola volvería a ofrecerse.');
+      }
 
       // La galería dice el estado del clip en cada tarjeta —con 83 imágenes no se
       // puede cruzar de pestaña llevando la cuenta— y con el clip pagado no se
@@ -1343,17 +1367,17 @@ export const invariantes = [
       if (!/\bconvertirEnClip\([tx]\.i/.test(main)) {
         fallos.push('El botón no dice de qué toma es: convertiría otra.');
       }
-      if (!/movimiento\.generarClip\(/.test(cuerpo)) fallos.push('No se genera el clip.');
+      if (!/movimiento\.generarClip\(/.test(bomba)) fallos.push('No se genera el clip.');
       if (!/movimiento = true/.test(cuerpo)) {
         fallos.push('La toma no queda marcada con movimiento: el montaje seguiría poniendo la imagen fija.');
       }
       // Marcarla DESPUÉS de generar pierde la decisión si se cierra la pestaña a
       // mitad: un clip tarda minutos y al volver la toma no sabría que lo lleva.
       const marca = cuerpo.indexOf('movimiento = true');
-      const genera = cuerpo.indexOf('movimiento.generarClip(');
       const guardaAntes = cuerpo.indexOf('await guardar()');
-      if (!(marca < guardaAntes && guardaAntes < genera)) {
-        fallos.push('La decisión no se guarda antes de generar: si se cierra a mitad, se pierde.');
+      const encola = cuerpo.indexOf('filaClips.push(');
+      if (!(marca >= 0 && marca < guardaAntes && guardaAntes < encola)) {
+        fallos.push('La decisión no se guarda antes de encolar: si se cierra a mitad, se pierde.');
       }
       // Cuesta dinero, y es la fase más cara: no puede irse en un toque sin avisar.
       if (!/confirm\(/.test(cuerpo)) fallos.push('Se gasta en un clip sin preguntar.');

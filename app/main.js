@@ -1813,8 +1813,10 @@ function pintarPorTipo() {
     if (hay && !clipListo) {
       const c = document.createElement('button');
       c.className = 'btn chico fantasma';
-      const rotulo = x.movimiento ? 'Generar su clip' : 'Convertir en clip';
+      const enFila = estadoEnFila(x.i);
+      const rotulo = enFila || (x.movimiento ? 'Generar su clip' : 'Convertir en clip');
       c.textContent = rotulo;
+      if (enFila) c.disabled = true;
       c.onclick = async () => {
         c.disabled = true;
         c.textContent = '…';
@@ -1950,15 +1952,38 @@ async function rehacerImagen(i) {
  * las dos quedan disponibles para las demás producciones.
  * ─────────────────────────────────────────────────────────────────────────────
  */
+// ── La fila de clips a mano ───────────────────────────────────────────────────
+//
+// «Solo logro generar un clip y tengo que esperar pegado al teléfono a que
+// termine para mandar el otro, porque si no se salta el rate limit.»
+//
+// Cada botón disparaba su llamada AL INSTANTE, en paralelo. Ahora tocar el botón
+// ENCOLA: se marcan todos los que se quieran, y una sola bomba los genera de uno
+// en uno — el mismo ritmo en fila que ya usan las fases por lotes. El teléfono se
+// puede soltar; cada clip terminado se guarda, se empareja con sus gemelas y
+// repinta antes de empezar el siguiente.
+
+const filaClips = [];
+let bombeandoClips = false;
+
+/** En qué está una toma dentro de la fila: 'generando', 'en cola (n.º)' o nada. */
+function estadoEnFila(i) {
+  const k = filaClips.findIndex((x) => x.i === i);
+  if (k < 0) return null;
+  return k === 0 && bombeandoClips ? 'Generando…' : `En cola (${k + 1}º)`;
+}
+
 async function convertirEnClip(i, decir = () => {}) {
   const k = pieza().tomas.findIndex((t) => t.i === i);
   if (k < 0) throw new Error('No encuentro esa toma.');
+  if (filaClips.some((x) => x.i === i)) return;
 
   const segundos = movimiento.duracionMasCercana(
     pieza().tomas[k].segundos || 6,
     P.config.videoModelo?.modelo,
   );
-  if (!confirm(`Se va a generar un clip de ${segundos} s a partir de esta imagen.\n\nEs la fase más cara. ¿Sigo?`)) {
+  // La pregunta va AQUÍ, al encolar: en medio de la fila no hay nadie mirando.
+  if (!confirm(`Se va a generar un clip de ${segundos} s a partir de esta imagen.\n\nEs la fase más cara. Se pone en la fila y se genera solo. ¿Sigo?`)) {
     return;
   }
 
@@ -1968,21 +1993,46 @@ async function convertirEnClip(i, decir = () => {}) {
   pieza().tomas[k].movimiento = true;
   await guardar();
 
-  avisar('previa', `Generando el clip de la toma ${i + 1}…`);
-  const nueva = await movimiento.generarClip({
-    toma: pieza().tomas[k],
-    tomas: pieza().tomas,
-    pieza: P.id,
-    config: P.config,
-    tratamiento: pieza().tratamiento,
-    aviso: (m) => decir(m.length > 24 ? `${m.slice(0, 22)}…` : m),
-  });
-  pieza().tomas[k] = nueva;
-  await refrescar(claveToma(P.id, i, 'vid'));
-  await guardar();
-  await emparejarGemelos();
-  pintarPorTipo();
-  avisar('previa', `Clip listo. Vuelve a preparar para verlo montado.`, 'bueno');
+  filaClips.push({ i, decir });
+  decir(estadoEnFila(i) || 'En cola');
+  bombearFilaDeClips();
+}
+
+/** La bomba: una sola, de uno en uno, hasta vaciar la fila. */
+async function bombearFilaDeClips() {
+  if (bombeandoClips) return;
+  bombeandoClips = true;
+  try {
+    while (filaClips.length) {
+      const { i, decir } = filaClips[0];
+      filaClips.slice(1).forEach((x, n) => x.decir?.(`En cola (${n + 2}º)`));
+      decir?.('Generando…');
+      avisar('previa', `Generando el clip de la toma ${i + 1}… (${filaClips.length - 1} en cola)`);
+      try {
+        const k = pieza().tomas.findIndex((t) => t.i === i);
+        const nueva = await movimiento.generarClip({
+          toma: pieza().tomas[k],
+          tomas: pieza().tomas,
+          pieza: P.id,
+          config: P.config,
+          tratamiento: pieza().tratamiento,
+          aviso: (m) => decir?.(m.length > 24 ? `${m.slice(0, 22)}…` : m),
+        });
+        pieza().tomas[k] = nueva;
+        await refrescar(claveToma(P.id, i, 'vid'));
+        await guardar();
+        await emparejarGemelos();
+        avisar('previa', `Clip de la toma ${i + 1} listo${filaClips.length > 1 ? `; sigue la fila (${filaClips.length - 1})` : ''}.`, 'bueno');
+      } catch (e) {
+        // Un clip que falla no tumba la fila: se anota y sigue el siguiente (§4).
+        avisar('previa', `Toma ${i + 1}: ${e.message}`, 'malo');
+      }
+      filaClips.shift();
+      pintarPorTipo();
+    }
+  } finally {
+    bombeandoClips = false;
+  }
 }
 
 async function rehacerMusica(n) {
