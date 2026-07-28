@@ -1028,6 +1028,10 @@ function pintarTomas() {
             (x.movimiento ? `<span class="pastilla ${x.video === 'ok' ? 'p-ok' : 'p-falta'}">clip</span>` : '') +
             `<span class="pastilla p-tipo">${escapar(x.tipoImagen)}</span>` +
             (x.corteForzado ? '<span class="pastilla p-aviso">corte forzado</span>' : '') +
+            // Dónde decidió el director que la pieza respira, A LA VISTA: son
+            // pocas y graduadas, y verlas aquí es lo que permite juzgar el ritmo
+            // antes de gastar en nada.
+            (x.respiro > 0 ? `<span class="pastilla">respira ${x.respiro}s</span>` : '') +
             `</div><p>${escapar(x.texto)}</p></div>`,
         )
         .join('')
