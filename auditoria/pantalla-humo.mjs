@@ -239,7 +239,7 @@ export function proyectoYaEmpezado() {
 }
 
 /** Un almacén de mentira en memoria, con la forma que espera `app/local.js`. */
-function indexedDbDeMentira(semilla = null) {
+export function indexedDbDeMentira(semilla = null) {
   const bases = new Map();
   if (semilla) {
     bases.set('prisma-negro', new Map([['proyectos', new Map([[semilla.id, semilla]])]]));

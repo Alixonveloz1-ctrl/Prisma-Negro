@@ -527,6 +527,27 @@ export const invariantes = [
   },
 
   {
+    nombre: 'un-tropiezo-de-red-no-se-lleva-por-delante-lo-que-se-estaba-generando',
+    dice: '«Can\'t find variable: esperar». La función que espera entre reintentos se llamaba en dos sitios y no estaba escrita en ninguno, y esos dos sitios eran justo el corte de red y la respuesta que no es JSON. Así que cada tropiezo de red, en vez de esperar medio segundo y reintentar, reventaba con un mensaje que no quiere decir nada y se llevaba la tanda por delante. Desde un móvil eso no es raro: es lo normal.',
+    async comprobar(ctx) {
+      const { humoDeLaPuerta } = await import('../api-humo.mjs');
+      // Si la auditoría trae la puerta saboteada, se recorre ESA. Sin esto la
+      // prueba se haría siempre sobre el archivo bueno y saldría «ciega».
+      const enContexto = ctx.fuentes.get('app/api.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/api.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+
+      const { fallos } = await humoDeLaPuerta({ parche });
+      return fallos;
+    },
+    // Se rompe como estaba: sin la función que espera entre reintentos.
+    romper: (ctx) =>
+      editando(ctx, 'app/api.js', (t) =>
+        t.replace(/^const esperar = .*$/m, '// (quitada a propósito)'),
+      ),
+  },
+
+  {
     nombre: 'todas-las-puertas-del-proveedor-se-pueden-llamar',
     dice: 'La generación de imágenes nunca funcionó: la variable se llamaba «partes» y la petición decía «parts». Setenta y seis invariantes no lo cazaron porque todas MIRAN el código, y un identificador mal escrito se ve igual de bien que uno correcto. Lo único que lo caza es llamar a la función.',
     async comprobar(ctx) {

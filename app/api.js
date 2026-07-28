@@ -61,6 +61,27 @@ const dormir = (ms, senal) =>
     }, { once: true });
   });
 
+/**
+ * La espera entre reintentos: crece con cada intento y no pasa de ocho segundos.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * ESTA FUNCIÓN NO EXISTÍA. Se llamaba en dos sitios y no estaba escrita en
+ * ninguno, así que cada corte de red y cada 5xx —los dos únicos caminos que la
+ * usaban— reventaban con «Can't find variable: esperar» en vez de reintentar.
+ *
+ * Es el mismo fallo que `parts is not defined`, y por lo mismo no lo veía nadie:
+ * un identificador que no existe se lee exactamente igual que uno que sí, y
+ * `node --check` no se queja porque la sintaxis es correcta. Solo lo caza LLAMAR
+ * AL CÓDIGO por ese camino, que es lo que hace ahora `auditoria/api-humo.mjs`.
+ *
+ * Y explica por qué se caía a mitad tan a menudo: desde un móvil, un corte de red
+ * en una tanda de sesenta imágenes no es raro, es lo normal. En vez de esperar
+ * medio segundo y volver a intentarlo, la llamada moría con un mensaje que no
+ * quiere decir nada.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+const esperar = (intento, senal) => dormir(Math.min(8000, 600 * 2 ** intento), senal);
+
 /** ¿Es un «espera» y no un «no»? */
 const esEspera = (estado, texto) =>
   estado === 429 ||
@@ -155,7 +176,7 @@ export async function llamar(modo, datos = {}, { reintentos = 2, senal, alEspera
     } catch (e) {
       if (senal?.aborted) throw new ErrorPuerta('Detenido.');
       ultimo = new ErrorPuerta('No se pudo hablar con el servidor. ¿Hay conexión?');
-      await esperar(intento);
+      await esperar(intento, senal);
       continue;
     }
 
@@ -169,7 +190,7 @@ export async function llamar(modo, datos = {}, { reintentos = 2, senal, alEspera
         { estado: r.status },
       );
       if (r.status < 500) throw ultimo;
-      await esperar(intento);
+      await esperar(intento, senal);
       continue;
     }
 
@@ -219,7 +240,7 @@ export async function llamar(modo, datos = {}, { reintentos = 2, senal, alEspera
     // 413 = tamaño. El resto de 4xx = no va a cambiar. Ninguno se reintenta.
     if (r.status === 413 || (r.status >= 400 && r.status < 500)) throw err;
     ultimo = err;
-    await dormir(Math.min(8000, 600 * 2 ** intento), senal);
+    await esperar(intento, senal);
   }
 
   throw ultimo || new ErrorPuerta('Falló sin decir por qué.');
