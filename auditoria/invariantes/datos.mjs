@@ -1663,6 +1663,25 @@ export const invariantes = [
       if (veces < 3) {
         fallos.push(`El emparejador se aplica en ${veces} sitios y son 3: tras los clips, tras convertir y al revisar.`);
       }
+
+      // 6 · Y las gemelas que la huella NO caza —dos fichas con palabras
+      // distintas y casi la misma imagen— se emparejan A MANO desde la galería:
+      // los ojos de quien mira son el detector, la herramienta pone el botón.
+      const m = main.indexOf('async function emparejarAMano');
+      if (m < 0) return [...fallos, 'No hay forma de emparejar a mano dos tomas que la huella no caza.'];
+      const cuerpoMano = main.slice(m, m + 2600);
+      if (!/Gemela de…/.test(main) || !/emparejarAMano\(x\.i/.test(main)) {
+        fallos.push('El emparejado a mano existe y la galería no lo ofrece.');
+      }
+      if (!/claveFotograma\(P\.id, dueña, tomas\)/.test(cuerpoMano) || !/claveClip\(P\.id, dueña, tomas\)/.test(cuerpoMano)) {
+        fallos.push('El emparejado a mano no resuelve las claves por la cadena: apuntaría a archivos que no existen.');
+      }
+      if (!/no tiene material que prestar/.test(cuerpoMano)) {
+        fallos.push('Se puede emparejar con una toma sin material: quedaría apuntando al vacío.');
+      }
+      if (!/Mejor al revés/.test(cuerpoMano)) {
+        fallos.push('Emparejar al revés tiraría un clip pagado sin avisar.');
+      }
       return fallos;
     },
     // Se rompe como estaba: nadie empareja nada.

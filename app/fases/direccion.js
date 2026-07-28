@@ -119,6 +119,11 @@ Reglas de este documental:
 - igualQue: el índice de una toma ANTERIOR cuyo plano se ve igual —mismo lugar,
   mismo encuadre, misma luz, mismos sujetos—. Es con lo que se marcan las vueltas
   de un motivo, y con lo que se aprovecha cualquier otra coincidencia real.
+- Y cuando dos tomas comparten el sitio SIN ser el mismo plano, escribe lugar y
+  luz LETRA POR LETRA IGUAL en las dos («el pasillo del pabellón» en ambas, no
+  «pasillo del pabellón» y «el corredor del hospital»): el reaprovechado de
+  material compara ese texto literal, y dos maneras de decir lo mismo son dos
+  imágenes pagadas donde bastaba una.
   Dos reglas y son firmes:
     · NUNCA en tomas seguidas ni casi seguidas. Ver el mismo plano dos veces en
       veinte segundos parece un error de montaje, no un motivo. Deja al menos seis

@@ -1338,6 +1338,54 @@ async function emparejarGemelos(avisarDonde = null) {
   return cambios.length;
 }
 
+/**
+ * Empareja DOS TOMAS CONCRETAS, a mano: la que se toca hereda de la que se dice.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * El emparejador automático va por la huella literal del plano (lugar, encuadre
+ * y luz con las mismas palabras). Cuando el director escribe dos fichas con
+ * palabras distintas y sale casi la misma imagen —la 7 y la 18: el mismo
+ * pasillo, un ángulo de diferencia—, ninguna huella lo caza, y comparar
+ * «parecido» a ciegas emparejaría falsos gemelos. El detector con cien por
+ * ciento de acierto son los ojos de quien mira la galería: esto solo le da el
+ * botón para decirlo. La que se toca deja de pagar; usa el material de la otra.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+async function emparejarAMano(iRecibe, numeroDueña) {
+  const n = Number(numeroDueña);
+  if (!Number.isInteger(n)) throw new Error('Escribe el número de la toma, como sale en la galería (p. ej. 18).');
+  const jDueña = n - 1;
+  if (jDueña === iRecibe) throw new Error('Una toma no puede ser gemela de sí misma.');
+  const tomas = pieza().tomas;
+  const recibe = tomas.find((t) => t.i === iRecibe);
+  const dueña = tomas.find((t) => t.i === jDueña);
+  if (!recibe || !dueña) throw new Error(`No encuentro la toma ${n}.`);
+
+  const raiz = dueña.reusa !== null && dueña.reusa !== undefined ? tomas.find((y) => y.i === dueña.reusa) || dueña : dueña;
+  const hayImg = !!(dueña.heredado || raiz.heredado || raiz.imagen === 'ok');
+  const hayClip = !!(dueña.heredadoVid || raiz.heredadoVid || raiz.video === 'ok');
+  if (!hayImg && !hayClip) throw new Error(`La toma ${n} no tiene material que prestar todavía.`);
+
+  const recibeTieneClip = recibe.video === 'ok' || !!recibe.heredadoVid;
+  if (recibeTieneClip && !hayClip) {
+    throw new Error(`Mejor al revés: la toma ${iRecibe + 1} tiene clip y la ${n} no. Empareja la ${n} con la ${iRecibe + 1}.`);
+  }
+
+  const partes = [];
+  if (hayImg) {
+    recibe.heredado = claveFotograma(P.id, dueña, tomas);
+    partes.push('la imagen');
+  }
+  if (hayClip) {
+    recibe.heredadoVid = claveClip(P.id, dueña, tomas);
+    recibe.movimiento = true;
+    partes.push('el clip');
+  }
+  await guardar();
+  pintarTodo();
+  avisar('previa', `Toma ${iRecibe + 1}: usa ${partes.join(' y ')} de la toma ${n}. Ya no paga lo suyo.`, 'bueno');
+}
+
 function informar(r, que) {
   pintarPasos();
   if (r.detenida) {
@@ -1745,6 +1793,21 @@ function pintarPorTipo() {
     // Cualquier imagen se puede animar, la marcara el director o no. Mirando la
     // imagen es cuando se ve si merece moverse; decidirlo antes, a ciegas, era
     // decidirlo por una descripción.
+    // «Es casi la misma que la 18»: emparejar a mano, con el número que se ve.
+    const gem = document.createElement('button');
+    gem.className = 'btn chico fantasma';
+    gem.textContent = 'Gemela de…';
+    gem.onclick = async () => {
+      const n = prompt(`¿De qué toma usa el material la ${x.i + 1}? Escribe el número (p. ej. 18):`);
+      if (!n) return;
+      try {
+        await emparejarAMano(x.i, n.trim());
+      } catch (e) {
+        avisar('previa', e.message, 'malo');
+      }
+    };
+    cuerpo.appendChild(gem);
+
     // Con el clip ya pagado no se ofrece convertir: apretarlo lo pagaría otra
     // vez. La pastilla verde ya dice que está, y se ve en su pestaña.
     if (hay && !clipListo) {
