@@ -1344,4 +1344,98 @@ export const invariantes = [
         t.replace(/- LO CONCRETO, SIEMPRE\.[\s\S]*?explicando lo mismo\./, '- Frases cortas.'),
       ),
   },
+
+  {
+    nombre: 'la-imagen-se-queda-cuando-la-voz-calla',
+    dice: 'Cada toma duraba EXACTAMENTE lo que su locución, al fotograma. La última sílaba caía y venía el corte, ciento treinta y cuatro veces seguidas. No había suspense en ninguna parte porque no había SITIO donde ponerlo: al director se le pedía «silencio después del dato duro» y no existía ningún campo donde escribir esa decisión.',
+    comprobar(ctx) {
+      const { construirHoja, guionFfmpeg, repartirRespiros, RESPIROS, segundosDeClip, duracionMasCercana, sanear } = ctx.fn;
+      const fallos = [];
+      const plano = { encuadre: 'plano medio', movimientoCamara: 'fijo', lugar: 'x', luz: 'y', sujetos: [], descripcion: 'd' };
+      const fps = 30;
+
+      // 1 · La toma dura la locución MÁS el respiro, y el silencio queda dentro.
+      const tomas = [
+        { i: 0, escena: 0, segundos: 6, medida: true, plano, entrada: 2, respiro: 0 },
+        { i: 1, escena: 0, segundos: 6, medida: true, plano, respiro: 2.5 },
+        { i: 2, escena: 0, segundos: 6, medida: true, plano, respiro: 0 },
+      ];
+      const hoja = construirHoja({ pieza: 'p01', tomas, escenas: [{ n: 0 }], config: { fps } });
+      const [a, b, c] = hoja.tomas;
+
+      if (Math.abs(a.duracion - 8) > 1 / fps) fallos.push(`La toma de apertura dura ${a.duracion}, y con su entrada debía durar 8.`);
+      if (Math.abs(b.duracion - 8.5) > 1 / fps) fallos.push(`La toma con respiro dura ${b.duracion}, y debía durar 8,5.`);
+      if (Math.abs(c.duracion - 6) > 1 / fps) fallos.push(`Una toma sin respiro dura ${c.duracion} en vez de 6: se está alargando todo.`);
+      // Y el reloj sigue siendo la suma: si el respiro no entrara en `inicio`, la
+      // voz de la toma siguiente se adelantaría y volvería el desfase de siempre.
+      if (Math.abs(b.inicio - a.duracion) > 1e-6) fallos.push('El respiro no entra en el reloj: la toma siguiente empezaría antes de tiempo.');
+      if (Math.abs(c.inicio - (a.duracion + b.duracion)) > 1e-6) fallos.push('El reloj se desfasa después de un respiro.');
+
+      // 2 · El guion de montaje tiene que EJECUTARLO: la voz rellena con silencio
+      // hasta la duración de la toma, y la apertura retrasa la voz.
+      const guion = guionFfmpeg(hoja);
+      if (!/adelay=2000/.test(guion)) {
+        fallos.push('La apertura en frío no retrasa la voz: la primera palabra entraría con el primer fotograma.');
+      }
+      if (!new RegExp(`-t ${b.duracion.toFixed(4)}`).test(guion)) {
+        fallos.push('La voz no se rellena hasta la duración con respiro: el silencio no llegaría a existir.');
+      }
+      if (!/apad/.test(guion)) fallos.push('Sin relleno de silencio, el trozo de voz sale más corto que su hueco.');
+      // La música tiene que VOLVER en el silencio, que es de lo que se trata. Con
+      // un release largo el lecho no sube a tiempo y el respiro suena a nada.
+      const rel = /release=(\d+)/.exec(guion);
+      if (!/sidechaincompress/.test(guion)) fallos.push('La música no cede por compresión lateral: no podría volver sola al callar la voz.');
+      else if (!rel || Number(rel[1]) > 600) {
+        fallos.push(`La música tarda ${rel ? rel[1] : '?'} ms en volver: en un respiro de 1,5 s no da tiempo a oírla.`);
+      }
+
+      // 3 · El presupuesto. Ni ninguno ni todos: el error contrario es el mismo error.
+      // Veinte tomas de 10 s son 200 s hablados; el tope es un décimo, o sea 20 s.
+      // El director pide 8 largos SEGUIDOS y 12 cortos: mucho más de lo que cabe, y
+      // encima amontonado, que son los dos fallos que hay que atajar.
+      const muchas = Array.from({ length: 20 }, (_, n) => ({ i: n, segundos: 10, plano }));
+      const planos = new Map(
+        muchas.map((t) => [t.i, { i: t.i, respiro: t.i < 8 ? 'largo' : 'corto' }]),
+      );
+      const rep = repartirRespiros(muchas, planos, { montaje: { respiroMaximo: 0.1 } });
+      const gastado = [...rep.values()].reduce((s, x) => s + x, 0);
+      if (gastado > 200 * 0.1 + 1e-6) fallos.push(`Se reparten ${gastado} s de silencio sobre un tope de 20: la pieza se arrastraría.`);
+      if (gastado <= 0) fallos.push('No se reparte ni un respiro habiendo presupuesto: se queda como estaba.');
+      // Al no caber todo se caen los CORTOS, no los largos: los largos son los
+      // deliberados —el final de acto, el segundo antes del giro—.
+      const largos = [...rep.values()].filter((x) => x >= RESPIROS.largo).length;
+      if (!largos) fallos.push('Al recortar se han perdido todos los respiros largos, que son los que llevan el peso.');
+      // Dos largos pegados paran la pieza.
+      for (const [k, v] of rep) {
+        if (v >= RESPIROS.largo && (rep.get(k - 1) || 0) >= RESPIROS.largo) {
+          fallos.push(`Las tomas ${k - 1} y ${k} llevan respiro largo seguidas: eso no es ritmo, es que se paró.`);
+          break;
+        }
+      }
+
+      // 4 · El clip tiene que cubrir su propio silencio, o el montaje lo tapa
+      // congelando el último fotograma justo donde se está mirando.
+      const conRespiro = { i: 0, segundos: 6, respiro: 2.5, entrada: 0 };
+      if (segundosDeClip(conRespiro) !== 8.5) fallos.push(`Se pediría un clip de ${segundosDeClip(conRespiro)} s para 8,5 s de toma.`);
+      if (duracionMasCercana(segundosDeClip(conRespiro)) < 8) {
+        fallos.push('El clip se pide más corto que la toma: se congelaría dentro del respiro.');
+      }
+
+      // 5 · Y sobrevive a guardar y cargar. Es la avería que ya costó un proyecto
+      // entero: `sanear` devuelve lista blanca y lo que no esté se borra.
+      const vuelta = sanear({ piezas: [{ id: 'p01', tomas: [{ i: 0, respiro: 2.5, entrada: 2 }] }] });
+      const t0 = vuelta.piezas[0].tomas[0];
+      if (t0.respiro !== 2.5) fallos.push('El respiro no sobrevive a recargar: el ritmo se pierde al volver.');
+      if (t0.entrada !== 2) fallos.push('La apertura en frío no sobrevive a recargar.');
+      return fallos;
+    },
+    // Se rompe como estaba: la toma dura lo que dura la voz y nada más.
+    romper: (ctx) =>
+      conFuncion(ctx, 'construirHoja', ({ tomas, ...resto }) =>
+        ctx.fn.construirHoja({
+          ...resto,
+          tomas: (tomas || []).map((t) => ({ ...t, respiro: 0, entrada: 0 })),
+        }),
+      ),
+  },
 ];

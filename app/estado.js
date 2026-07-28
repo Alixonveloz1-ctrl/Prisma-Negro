@@ -253,6 +253,12 @@ function sanearToma(bruto, i, proyecto) {
     // La ficha cambió al volver a dirigir y el material anterior ya no vale.
     desfasada: t.desfasada === true,
     movimiento: t.movimiento === true,
+    // Los segundos que la imagen se queda DESPUÉS de la última palabra, y los que
+    // entra ANTES de la primera —esto último, solo la primera toma de la pieza—.
+    // Es donde vive el silencio; sin estos dos campos el montaje corta en seco en
+    // cada sílaba final y no hay suspense posible.
+    respiro: Math.max(0, Math.min(8, Number(t.respiro) || 0)),
+    entrada: Math.max(0, Math.min(8, Number(t.entrada) || 0)),
     // §8.2: cada toma sabe de qué tipo es su imagen, y eso puede salir en pantalla.
     tipoImagen: ['generada', 'archivo', 'reconstruccion'].includes(t.tipoImagen)
       ? t.tipoImagen

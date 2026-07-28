@@ -41,13 +41,37 @@ export function construirHoja({ pieza, tomas, escenas = [], config = {} }) {
   if (!tomas?.length) throw new Error('La hoja de montaje necesita al menos una toma.');
 
   let reloj = 0;
-  const filas = tomas.map((t) => {
-    const dur = Math.ceil(Math.max(t.segundos || 0, 0.2) * c.fps) / c.fps;
+  const filas = tomas.map((t, n) => {
+    // EL RESPIRO: la imagen se queda después de la última palabra.
+    //
+    // ─────────────────────────────────────────────────────────────────────────
+    // Antes esto era `duracion = lo que dura la locución`, y punto. Así que cada
+    // toma cortaba en seco en la última sílaba y entraba la siguiente. Ciento
+    // treinta y cuatro veces seguidas. No había suspense en ninguna parte porque
+    // NO HABÍA SITIO donde ponerlo: el modelo de datos no tenía un hueco para el
+    // silencio, y al director se le pedía «silencio después del dato duro»
+    // sabiendo que no había dónde escribirlo.
+    //
+    // Un documental respira al revés: la frase cae, el corte NO llega, la música
+    // sube sola —la compresión lateral la devuelve en cuanto calla la voz— y te
+    // quedas con la imagen dos o tres segundos. Ahí es donde el espectador siente
+    // lo que acaba de oír. Sin ese hueco, se lo cuentas y no le da tiempo.
+    //
+    // `entrada` es lo mismo al principio: la imagen antes de la primera palabra.
+    // Es la apertura en frío, y solo tiene sentido en la primera toma de la pieza.
+    // ─────────────────────────────────────────────────────────────────────────
+    const respiro = Math.max(0, Math.min(8, Number(t.respiro) || 0));
+    const entrada = n === 0 ? Math.max(0, Math.min(8, Number(t.entrada) || 0)) : 0;
+    const dur = Math.ceil((Math.max(t.segundos || 0, 0.2) + respiro + entrada) * c.fps) / c.fps;
     const fila = {
       i: t.i,
       escena: t.escena ?? 0,
       inicio: q(reloj, c.fps),
       duracion: dur,
+      // Van a la hoja porque el montaje los necesita: la voz se retrasa `entrada` y
+      // se rellena con silencio hasta `duracion`, que es lo que deja el respiro.
+      respiro,
+      entrada,
       // El origen visual, CON LA REUTILIZACIÓN YA RESUELTA en los dos casos —
       // nadie mira `reusa` aguas abajo, ni debe.
       //
@@ -270,9 +294,20 @@ export function guionFfmpeg(hoja) {
     const voz = `voz_${String(n).padStart(4, '0')}.wav`;
     // `apad` rellena con silencio hasta la duración exacta y `-t` la fija. Como la
     // duración se cuadró hacia arriba, esto siempre rellena y nunca recorta.
+    //
+    // Y ES LO QUE HACE EL RESPIRO: la duración de la toma ya lleva dentro los
+    // segundos de más, así que `apad` los rellena de silencio y la imagen se queda
+    // sola con la música. No hace falta nada más aquí —el silencio del respiro y
+    // el relleno de cuadre son el mismo mecanismo—.
+    const filtros = [`aresample=${a.muestreo}`];
+    // La apertura en frío: la imagen entra antes que la voz. Solo la primera toma
+    // la lleva, y desplaza SU audio dentro de SU hueco, no el de las demás: cada
+    // trozo se rellena a su duración exacta antes de pegarse.
+    if (t.entrada > 0) filtros.push(`adelay=${Math.round(t.entrada * 1000)}:all=1`);
+    filtros.push('apad');
     p(
       `ffmpeg -y -v error -i ${sh(nombreLocal(t.audio))} ` +
-        `-af ${sh(`aresample=${a.muestreo},apad`)} -t ${t.duracion.toFixed(4)} ` +
+        `-af ${sh(filtros.join(','))} -t ${t.duracion.toFixed(4)} ` +
         `-ac 2 -ar ${a.muestreo} -c:a pcm_s16le ${voz}`,
     );
     p(`printf "file '%s'\\n" ${sh(voz)} >> lista_voz.txt`);

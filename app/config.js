@@ -108,6 +108,19 @@ export const PREDETERMINADA = {
     volumen: 0.55,
   },
 
+  montaje: {
+    // EL SILENCIO, en dos cifras.
+    //
+    // `respiroMaximo` es cuánto puede alargarse la pieza en segundos de imagen sin
+    // voz, en proporción a lo hablado. Un décimo es un documental que respira; a
+    // partir de un quinto empieza a arrastrarse. El director reparte dentro de ese
+    // tope y lo que no cabe se cae, empezando por los respiros más cortos.
+    respiroMaximo: 0.1,
+    // La apertura en frío: los segundos de imagen antes de la primera palabra de
+    // toda la pieza. Es lo que hace que un documental empiece y no que arranque.
+    entradaEnFrio: 2,
+  },
+
   marca: {
     activa: true,
     texto: '',

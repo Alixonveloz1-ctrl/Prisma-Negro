@@ -35,6 +35,19 @@ export function planificar(tomas, { soloLasQueFaltan = true } = {}) {
   });
 }
 
+/**
+ * Lo que tiene que durar el clip de una toma: la locución MÁS su respiro.
+ *
+ * Sin sumar el respiro, el clip se quedaba corto justo en el silencio —que es el
+ * momento en que el espectador está mirando la imagen y nada más— y el montaje lo
+ * tapaba congelando el último fotograma. Un congelado de tres segundos en medio de
+ * un silencio deliberado no parece una pausa: parece que se colgó el video.
+ *
+ * Y no suele costar nada: las duraciones van en lista cerrada, así que muchas veces
+ * el respiro cabe dentro del mismo escalón que ya se iba a pedir.
+ */
+export const segundosDeClip = (t) => (Number(t.segundos) || 6) + (Number(t.respiro) || 0) + (Number(t.entrada) || 0);
+
 /** Cuánto va a costar esta fase, en clips. Se enseña ANTES de gastar. */
 export function resumen(tomas, clave) {
   const con = tomas.filter((t) => t.movimiento);
@@ -42,7 +55,7 @@ export function resumen(tomas, clave) {
     clips: con.length,
     faltan: planificar(tomas).length,
     proporcion: tomas.length ? +(con.length / tomas.length).toFixed(2) : 0,
-    segundos: con.reduce((s, t) => s + duracionMasCercana(t.segundos || 6, clave), 0),
+    segundos: con.reduce((s, t) => s + duracionMasCercana(segundosDeClip(t), clave), 0),
   };
 }
 
@@ -91,7 +104,9 @@ export async function generarClip({ toma, tomas, pieza, config, tratamiento = nu
     {
       instruccion,
       fotograma,
-      segundos: duracionMasCercana(toma.segundos || 6, config.videoModelo?.modelo),
+      // La locución MÁS el respiro: el silencio también hay que cubrirlo con
+      // movimiento, o el clip se congela justo donde se está mirando.
+      segundos: duracionMasCercana(segundosDeClip(toma), config.videoModelo?.modelo),
       aspecto: config.formato.vertical ? '9:16' : '16:9',
       // La misma clave que en la consulta: de ella sale la carpeta donde Veo
       // escribe el clip en vez de devolverlo en la respuesta.

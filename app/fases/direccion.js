@@ -66,8 +66,12 @@ const ESQUEMA = {
           },
           merecemovimiento: { type: 'boolean' },
           igualQue: { type: 'integer' },
+          // Cuánto se queda la imagen DESPUÉS de la última palabra. Va en palabras
+          // y no en segundos a propósito: un número libre sale disparatado, y lo
+          // que se decide aquí no es una cifra, es si esta toma pesa o no pesa.
+          respiro: { type: 'string', enum: ['ninguno', 'corto', 'medio', 'largo'] },
         },
-        required: ['i', 'encuadre', 'movimientoCamara', 'lugar', 'luz', 'sujetos', 'descripcion', 'tipoImagen', 'merecemovimiento'],
+        required: ['i', 'encuadre', 'movimientoCamara', 'lugar', 'luz', 'sujetos', 'descripcion', 'tipoImagen', 'merecemovimiento', 'respiro'],
       },
     },
   },
@@ -121,6 +125,24 @@ Reglas de este documental:
       tomas de por medio.
     · Solo si de verdad se vería igual. Un motivo repetido con la luz cambiada no
       es el mismo plano: es otro.
+- EL RESPIRO. Es lo que separa un documental de un noticiero, y es tuyo: cuánto se
+  queda la imagen DESPUÉS de que la voz calle. Ahí no hay narración, solo la música
+  y lo que se está viendo. Es donde el espectador siente lo que acaba de oír; sin
+  ese hueco se lo cuentas y no le da tiempo a que le importe.
+    · ninguno — la voz sigue de largo en la toma siguiente. Es LO NORMAL: la
+      mayoría de las tomas van así, o la pieza se arrastra.
+    · corto (1,5 s) — un respiro pequeño; sirve para separar dos ideas.
+    · medio (2,5 s) — después de un dato que pesa: una fecha, una cifra, lo que
+      declaró alguien, el detalle que no encaja. Es el más útil de los cuatro.
+    · largo (4 s) — el final de un acto, o el segundo justo antes del giro. Dos o
+      tres en toda la pieza, no más.
+  Tres reglas firmes:
+    · UNA DE CADA CUATRO O CINCO TOMAS, como mucho. Si respira todo, no respira
+      nada, y encima el documental se alarga sin contar más.
+    · Se respira sobre algo que MEREZCA MIRARSE tres segundos: una cara, un lugar
+      donde acaba de pasar algo, algo en movimiento. Sobre un objeto suelto en una
+      mesa no es un silencio, es un hueco muerto.
+    · Nunca dos largos seguidos.
 - La descripción es para un generador de imágenes: concreta, visual, sin metáforas
   ni adjetivos de opinión. Nombra la luz, la hora del día, la textura, el color.
 - Y descríbela COMO UN FOTOGRAMA, no como una foto de archivo. Es la diferencia
@@ -258,6 +280,13 @@ export async function dirigir({ tomas, escenas, tema, config, tratamiento = null
     }
   }
 
+  // El respiro también se acota aquí, por lo mismo que el cupo de movimiento: el
+  // director propone y el presupuesto decide. Solo que este presupuesto no es de
+  // dinero sino de DURACIÓN — cada segundo de silencio alarga la pieza sin contar
+  // nada más—, y un modelo generoso que marque «medio» en cuarenta tomas convierte
+  // diez minutos en trece de documental que se arrastra.
+  const respiros = repartirRespiros(tomas, planos, config);
+
   return tomas.map((t) => {
     const p = planos.get(t.i);
     if (!p) {
@@ -318,6 +347,10 @@ export async function dirigir({ tomas, escenas, tema, config, tratamiento = null
       claseVisual: p.tipoImagen,
       movimiento,
       reusa,
+      // Los segundos que la imagen se queda después de la última palabra, y —solo
+      // en la primera toma— los que entra antes de la primera.
+      respiro: respiros.get(t.i) || 0,
+      entrada: t.i === tomas[0].i ? entradaEnFrio(config) : 0,
       ...(cambio || cambioDeClase
         ? {
             imagen: reusa !== null || t.heredado ? t.imagen : null,
@@ -327,6 +360,55 @@ export async function dirigir({ tomas, escenas, tema, config, tratamiento = null
         : { desfasada: false }),
     };
   });
+}
+
+/** Lo que dura cada clase de respiro, en segundos. */
+export const RESPIROS = { ninguno: 0, corto: 1.5, medio: 2.5, largo: 4 };
+
+/** Los segundos de imagen antes de la primera palabra de toda la pieza. */
+export const entradaEnFrio = (config) =>
+  Math.max(0, Math.min(8, Number(config?.montaje?.entradaEnFrio ?? 2)));
+
+/**
+ * Reparte los respiros dentro de un presupuesto de duración.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * El silencio no es gratis: cada segundo alarga la pieza sin contar nada más. Un
+ * modelo generoso que marque «medio» en cuarenta tomas convierte diez minutos en
+ * trece de documental que se arrastra, y el problema del que veníamos era el
+ * contrario —ninguno—, así que pasarse al otro extremo sería el mismo error otra
+ * vez (§7.11: extremo a extremo, sin término medio).
+ *
+ * Cuando lo pedido pasa del presupuesto se quitan LOS MÁS CORTOS. Los largos son
+ * los deliberados —el final de un acto, el segundo antes del giro— y son justo los
+ * que no se pueden perder; los cortos son los que sobran cuando sobra algo.
+ *
+ * Y dos largos seguidos no pasan, porque eso no es ritmo: es que se paró la pieza.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export function repartirRespiros(tomas, planos, config) {
+  const hablado = tomas.reduce((s, t) => s + (Number(t.segundos) || 0), 0);
+  const tope = hablado * Math.max(0, Math.min(0.3, Number(config?.montaje?.respiroMaximo ?? 0.1)));
+
+  const pedidos = tomas
+    .map((t) => ({ i: t.i, segundos: RESPIROS[planos.get(t.i)?.respiro] || 0 }))
+    .filter((x) => x.segundos > 0);
+
+  // De más largo a más corto; a igualdad, el que va antes en la pieza.
+  pedidos.sort((a, b) => b.segundos - a.segundos || a.i - b.i);
+
+  const salida = new Map();
+  let gastado = 0;
+  for (const x of pedidos) {
+    if (gastado + x.segundos > tope) continue;
+    // Dos largos pegados paran la pieza. El segundo baja a medio en vez de caerse:
+    // el director quería peso ahí y algo de peso se le deja.
+    const previo = salida.get(x.i - 1) || 0;
+    const segundos = previo >= RESPIROS.largo && x.segundos >= RESPIROS.largo ? RESPIROS.medio : x.segundos;
+    salida.set(x.i, segundos);
+    gastado += segundos;
+  }
+  return salida;
 }
 
 /**
@@ -342,12 +424,20 @@ const huellaDeFicha = (x) =>
 
 /** Una toma ya dirigida, en la forma que devuelve el modelo. */
 function fichaDe(t) {
+  // El respiro vuelve a su nombre: si no, volver a dirigir un lote que ya estaba
+  // hecho lo perdería, y con él el ritmo que se había decidido.
+  const s = Number(t.respiro) || 0;
+  const respiro =
+    Object.keys(RESPIROS).find((k) => RESPIROS[k] === s) ||
+    (s >= RESPIROS.largo ? 'largo' : s >= RESPIROS.medio ? 'medio' : s > 0 ? 'corto' : 'ninguno');
+
   return {
     i: t.i,
     ...t.plano,
     tipoImagen: t.claseVisual || t.tipoImagen || 'reconstruccion',
     merecemovimiento: !!t.movimiento,
     igualQue: Number.isInteger(t.reusa) ? t.reusa : undefined,
+    respiro,
   };
 }
 

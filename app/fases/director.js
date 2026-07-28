@@ -113,9 +113,27 @@ que estaba a la vista y nadie miró. Sitúalo tú. Si el material no lo tiene, e
 documental es de otra clase y hay que decirlo: hay casos que se sostienen por
 acumulación y no por giro.
 
-EL RITMO
-Frase corta después de frase larga. Silencio después del dato duro. Cada acto tiene
-una función distinta y se nota al oírlo. Si dos actos hacen lo mismo, sobra uno.
+EL RITMO, Y ESTO ES LA MITAD DEL OFICIO
+Un documental no se sostiene por lo que dice: se sostiene por cuándo se calla.
+
+La unidad no es la frase, es el COMPÁS: frase, frase, y la imagen sola. La voz
+suelta el dato que pesa —la hora, la cifra, lo que declaró alguien, el detalle que
+no encaja— y entonces NO PASA NADA durante dos o tres segundos. La música sube sola
+al quedarse sin voz encima, y el espectador se queda mirando. Ahí es donde le
+importa. Si la frase siguiente entra pegada, se lo has contado y no le ha dado
+tiempo a sentirlo: eso es un informativo, y la gente se va.
+
+Los sitios donde ese silencio va, y son estos y no otros:
+- Después del dato duro. El más frecuente y el más útil.
+- Justo ANTES del giro, no después. Un segundo largo de nada y entonces la vuelta.
+- Al final de cada acto, más largo. Es el punto y aparte.
+- Al principio de todo: la imagen entra antes que la primera palabra. Un documental
+  empieza, no arranca.
+Y donde NO va: en todas partes. Si respira cada toma no respira ninguna, y encima
+la pieza se alarga sin contar más. Una de cada cuatro o cinco, como mucho.
+
+Lo demás del ritmo: frase corta después de frase larga; cada acto con una función
+distinta que se nota al oírlo; si dos actos hacen lo mismo, sobra uno.
 
 LA IMAGEN
 Decides una identidad visual y la sostienes las ochenta tomas. Nada de

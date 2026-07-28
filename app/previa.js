@@ -184,8 +184,13 @@ export function reproductor({ lienzo, marca, alCambiar, alTerminar }) {
         const f = ctx.createBufferSource();
         f.buffer = buf;
         f.connect(vozGanancia);
-        const cuando = inicioContexto + Math.max(0, t.inicio - desdeSegundos);
-        const salto = Math.max(0, desdeSegundos - t.inicio);
+        // La voz arranca DESPUÉS de la entrada en frío, igual que en el montaje. Si
+        // aquí empezara en `inicio`, la previa enseñaría un documental que no es el
+        // que se va a montar — y la previa existe justamente para no descubrirlo
+        // después de pagarlo.
+        const arranque = t.inicio + (t.entrada || 0);
+        const cuando = inicioContexto + Math.max(0, arranque - desdeSegundos);
+        const salto = Math.max(0, desdeSegundos - arranque);
         f.start(cuando, salto);
         fuentes.push(f);
       }

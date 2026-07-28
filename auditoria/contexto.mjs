@@ -177,6 +177,11 @@ async function funcionesPuras() {
     claveClip: cla.claveClip,
     construirHoja: hoj.construirHoja,
     componerManifiesto: hoj.componerManifiesto,
+    guionFfmpeg: hoj.guionFfmpeg,
+    repartirRespiros: dir.repartirRespiros,
+    RESPIROS: dir.RESPIROS,
+    segundosDeClip: mov.segundosDeClip,
+    duracionMasCercana: mov.duracionMasCercana,
   };
 }
 
