@@ -263,6 +263,13 @@ function sanearToma(bruto, i, proyecto) {
     tipoImagen: ['generada', 'archivo', 'reconstruccion'].includes(t.tipoImagen)
       ? t.tipoImagen
       : proyecto?.config?.imagen?.tipoPorDefecto || 'reconstruccion',
+    // La clase FINA del plano (dramatización, mapa, esquema…), que decide el
+    // director. No estaba en esta lista, así que moría en cada recarga —la misma
+    // avería que mató a `heredado`—: al volver a dirigir, las tomas ya dirigidas
+    // se re-sembraban como «reconstrucción» y las dramatizaciones se perdían.
+    claseVisual: ['dramatizacion', 'reconstruccion', 'mapa', 'esquema', 'recurso', 'archivo'].includes(t.claseVisual)
+      ? t.claseVisual
+      : null,
     // §8.1: cada toma conserva la referencia a la ficha que la respalda.
     fichas: Array.isArray(t.fichas) ? t.fichas : [],
     corteForzado: t.corteForzado === true,

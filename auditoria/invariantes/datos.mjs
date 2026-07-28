@@ -941,10 +941,13 @@ export const invariantes = [
         id: 'p02',
         piezas: [{
           id: 'p02',
+          // Y el cuaderno de actos a medias, que también tiene que sobrevivir: si
+          // muere al recargar, el fallo a mitad de guion vuelve a tirar lo pagado.
+          actosEscritos: { huella: 'Uno·4 | Dos·6', partes: ['## Uno\n\nTexto.'] },
           tomas: [
-            { i: 8, movimiento: true, video: 'ok', heredadoVid: 'p01/t003/vid', plano },
-            { i: 9, imagen: 'ok', heredado: 'p01/t004/img', plano },
-            { i: 10, imagen: 'ok', heredado: 'no-es-una-clave', plano },
+            { i: 8, movimiento: true, video: 'ok', heredadoVid: 'p01/t003/vid', plano, claseVisual: 'dramatizacion' },
+            { i: 9, imagen: 'ok', heredado: 'p01/t004/img', plano, respiro: 2.5 },
+            { i: 10, imagen: 'ok', heredado: 'no-es-una-clave', plano, claseVisual: 'cualquier-cosa' },
           ],
         }],
       });
@@ -953,6 +956,14 @@ export const invariantes = [
       if (a.heredadoVid !== 'p01/t003/vid') fallos.push('El clip heredado se pierde al cargar el proyecto.');
       if (b.heredado !== 'p01/t004/img') fallos.push('La imagen heredada se pierde al cargar el proyecto.');
       if (c.heredado !== null) fallos.push('Se acepta como clave heredada algo que no tiene forma de clave.');
+      // La clase fina del plano: sin ella, re-dirigir tras recargar convertía las
+      // dramatizaciones en «reconstrucción» y el documental volvía a ser objetos.
+      if (a.claseVisual !== 'dramatizacion') fallos.push('La clase del plano se pierde al recargar.');
+      if (c.claseVisual !== null) fallos.push('Se acepta una clase de plano que no existe.');
+      if (b.respiro !== 2.5) fallos.push('El respiro se pierde al recargar.');
+      if (P.piezas[0].actosEscritos?.partes?.[0] !== '## Uno\n\nTexto.') {
+        fallos.push('Los actos escritos a medias se pierden al recargar: el fallo a mitad vuelve a costar dinero.');
+      }
 
       // El viaje entero: guardado → cargado → ¿sigue apuntando a la otra pieza?
       if (claveClip('p02', a, [a]) !== 'p01/t003/vid') {
