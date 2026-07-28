@@ -41,9 +41,17 @@ export function planificar(tomas, config, { soloLasQueFaltan = true } = {}) {
   // §4: todas las fases tienen modo «solo las que faltan». Un bloque se rehace
   // entero si le falta el audio a alguna de sus tomas: el corte por silencios es
   // solidario entre las tomas del bloque y no se puede rehacer media.
+  //
+  // Y UN CORTE ESTIMADO CUENTA COMO FALTA. Es audio defectuoso: su final puede
+  // caer a mitad de palabra y su texto va corrido respecto a la voz. Sin esto,
+  // arreglar esos bloques exigía «rehacer todo» —volver a pagar las ochenta y
+  // tres tomas para reparar cinco—. Así, el mismo botón de siempre repite solo
+  // los bloques rotos, y lo exacto no se toca ni se vuelve a pagar.
   const bloques = bloquesDeNarracion(tomas, config);
   if (!soloLasQueFaltan) return bloques;
-  return bloques.filter((b) => b.tomas.some((t) => t.audio !== 'ok'));
+  return bloques.filter((b) =>
+    b.tomas.some((t) => t.audio !== 'ok' || t.corteExacto === false),
+  );
 }
 
 /**

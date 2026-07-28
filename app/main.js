@@ -437,7 +437,9 @@ function cuentasDeFases() {
   const clips = movimiento.planificar(t, { soloLasQueFaltan: false });
   const mus = musica.planificar(pieza().escenas, t, P.config, { soloLasQueFaltan: false });
   return [
-    ['cf-voz', 'Voz', t.filter((x) => x.audio === 'ok').length, t.length],
+    // Un corte estimado no cuenta como hecho: es audio defectuoso y el botón
+    // de Narración lo va a repetir. La cuenta tiene que decir lo mismo que él.
+    ['cf-voz', 'Voz', t.filter((x) => x.audio === 'ok' && x.corteExacto !== false).length, t.length],
     ['cf-imagenes', 'Imágenes', img.filter((x) => x.imagen === 'ok').length, img.length],
     ['cf-clips', 'Clips', clips.filter((x) => x.video === 'ok').length, clips.length],
     ['cf-musica', 'Música', mus.filter((e) => e.estado === 'ok').length, mus.length],
@@ -1537,7 +1539,9 @@ function pintarPorTipo() {
 
   // ── Voz, toma a toma ──
   const conTexto = t.filter((x) => (x.texto || '').trim());
-  $('cuenta-voz').textContent = conTexto.length ? `${conTexto.filter((x) => x.audio === 'ok').length}/${conTexto.length}` : '';
+  $('cuenta-voz').textContent = conTexto.length
+    ? `${conTexto.filter((x) => x.audio === 'ok' && x.corteExacto !== false).length}/${conTexto.length}`
+    : '';
   const cajaVoz = $('lista-voz');
   cajaVoz.innerHTML = conTexto.length ? '' : '<p class="nota">Todavía no hay tomas: genera el guion primero.</p>';
   for (const x of conTexto) {

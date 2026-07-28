@@ -886,6 +886,22 @@ export const invariantes = [
       }
       if (!t.every((x) => x.exacto)) fallos.push('Un corte por tiempos no se marca como exacto.');
 
+      // 3b · Un corte estimado cuenta como FALTA: el botón de siempre lo repite,
+      // sin obligar a rehacerlo todo para reparar cinco bloques.
+      const { planificarNarracion } = ctx.fn;
+      const cfg = { narracion: { segundosPorBloque: 45, topeBytesPorLlamada: 4000 } };
+      const roto = [
+        { i: 0, escena: 0, texto: 'Una frase.', segundos: 5, audio: 'ok', corteExacto: false },
+        { i: 1, escena: 1, texto: 'Otra frase.', segundos: 5, audio: 'ok', corteExacto: true },
+      ];
+      const pendientes = planificarNarracion(roto, cfg);
+      if (!pendientes.some((b) => b.tomas.some((x) => x.i === 0))) {
+        fallos.push('Un bloque con corte estimado no se repite: arreglarlo exigiría volver a pagar toda la narración.');
+      }
+      if (pendientes.some((b) => b.tomas.some((x) => x.i === 1))) {
+        fallos.push('Un bloque con corte exacto se volvería a pagar sin necesidad.');
+      }
+
       // 4 · Con tiempos manda el exacto; sin ellos, se estima y se dice.
       const conT = repartirBloque(audio, [1, 1, 1], { tiempos: [2.5, 6.1, 10], silencioInicialMs: 0 });
       if (!conT.every((x) => x.exacto)) fallos.push('Teniendo los tiempos, se sigue estimando.');

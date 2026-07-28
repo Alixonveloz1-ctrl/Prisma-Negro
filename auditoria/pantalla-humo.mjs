@@ -203,6 +203,10 @@ export function proyectoYaEmpezado() {
     medida: i < 8,
     plano,
     audio: i < 8 ? 'ok' : null,
+    // Con su corte exacto: así es un proyecto narrado con las marcas de hoy. Sin
+    // este campo, el saneador lo coacciona a falso y la voz contaría como
+    // defectuosa entera.
+    corteExacto: i < 8,
     imagen: i < 6 ? 'ok' : null,
     video: i === 2 ? 'ok' : null,
     movimiento: i === 2,
