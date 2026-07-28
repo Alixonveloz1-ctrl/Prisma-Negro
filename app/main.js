@@ -1511,11 +1511,13 @@ accion(
     for (const { i, de, tipo } of puede) {
       const t = z.tomas.find((x) => x.i === i);
       if (!t) continue;
+      // `de.clave` es la del archivo DE VERDAD: si el donante a su vez heredaba,
+      // apunta al original y no a un archivo que nunca se generó.
       if (tipo === 'vid') {
-        t.heredadoVid = claveToma(de.pieza, de.i, 'vid');
+        t.heredadoVid = de.clave;
         t.video = 'ok';
       } else {
-        t.heredado = claveToma(de.pieza, de.i, 'img');
+        t.heredado = de.clave;
         t.imagen = 'ok';
       }
     }

@@ -342,7 +342,7 @@ export const invariantes = [
     nombre: 'la-investigacion-a-fondo-busca-por-varios-angulos',
     dice: 'La investigación del caso elegido son VARIAS búsquedas distintas, con fuentes oficiales entre ellas. Una sola pregunta trae una sola versión, y con eso sale un resumen con voz grave, no un documental.',
     async comprobar(ctx) {
-      const { ANGULOS_DE_INVESTIGACION } = await import('../../app/fases/investigacion.js');
+      const { ANGULOS_DE_INVESTIGACION } = ctx.fn;
       const fallos = [];
       if (!Array.isArray(ANGULOS_DE_INVESTIGACION) || ANGULOS_DE_INVESTIGACION.length < 4) {
         fallos.push('La investigación a fondo no tiene suficientes ángulos distintos.');
@@ -505,7 +505,7 @@ export const invariantes = [
     nombre: 'cada-caso-lleva-sus-fichas-dentro',
     dice: 'El caso, el tema y las fichas son de la pieza, no del proyecto. Estando en el proyecto, elegir un caso nuevo dejaba las fichas del anterior y la investigación se fusionaba con ellas: en pantalla salió «no mezclar este caso con los datos de la discoteca Kiss», que era el caso de antes.',
     async comprobar(ctx) {
-      const estado = await import('../../app/estado.js');
+      const estado = ctx.fn;
       const fallos = [];
 
       // Un proyecto de los de antes migra: lo del proyecto pasa a su pieza.
@@ -578,7 +578,7 @@ export const invariantes = [
     nombre: 'una-continuacion-no-vuelve-a-contar-lo-contado',
     dice: 'Una continuación es otro video del mismo caso, no el mismo otra vez. El director y el que escribe tienen que ver los guiones anteriores ENTEROS: un resumen pierde qué frases están dichas, que es lo único que importa aquí.',
     async comprobar(ctx) {
-      const estado = await import('../../app/estado.js');
+      const estado = ctx.fn;
       const dir = fuente(ctx, 'app/fases/director.js');
       const gui = fuente(ctx, 'app/fases/guion.js');
       const main = fuente(ctx, 'app/main.js');
@@ -743,7 +743,7 @@ export const invariantes = [
     dice: 'El clip es la fase MÁS CARA con diferencia, y era la única que no reutilizaba nada: la hoja componía siempre la clave del clip propio de cada toma, así que un motivo animado que vuelve cinco veces se pagaba cinco veces.',
     async comprobar(ctx) {
       const { construirHoja, componerManifiesto } = ctx.fn;
-      const { planificar } = await import('../../app/fases/movimiento.js');
+      const { planificarClips: planificar } = ctx.fn;
       const fallos = [];
       const plano = {
         encuadre: 'plano general', movimientoCamara: 'acercamiento lento',
@@ -832,8 +832,8 @@ export const invariantes = [
   {
     nombre: 'el-corte-del-audio-lo-dice-la-voz-no-se-adivina',
     dice: 'El bloque se cortaba buscando el silencio más cercano a donde uno CALCULA que acaba cada toma. El corte caía en un silencio, así que sonaba perfecto, pero era el silencio de OTRA frase: el audio de una toma terminaba con las palabras de la siguiente y la imagen no correspondía a lo que se oía. Un fallo que no suena a fallo.',
-    async comprobar(ctx) {
-      const { repartirPorTiempos, repartirBloque } = await import('../../comun/audio.mjs');
+    comprobar(ctx) {
+      const { repartirPorTiempos, repartirBloque } = ctx.fn;
       const prov = fuente(ctx, 'api/_lib/proveedor.js');
       const nar = fuente(ctx, 'app/fases/narracion.js');
       const fallos = [];
@@ -927,5 +927,95 @@ export const invariantes = [
       editando(ctx, 'app/fases/direccion.js', (t) =>
         t.replace('const cambio = huellaDeFicha(t.plano) !== huellaDeFicha(plano);', 'const cambio = false;'),
       ),
+  },
+
+  {
+    nombre: 'lo-heredado-sobrevive-a-guardar-y-cargar',
+    dice: '`sanearToma` no hace spread: devuelve una lista blanca, y todo lo que no esté en ella se borra en CADA carga. `heredado` y `heredadoVid` no estaban, pero `imagen: ok` y `video: ok` sí: al recargar quedaba una toma que dice tener material y no dice cuál. El montaje se paraba y la fase ni siquiera lo regeneraba, porque para ella ya estaba hecho.',
+    comprobar(ctx) {
+      const { sanear, claveClip, claveFotograma } = ctx.fn;
+      const fallos = [];
+      const plano = { lugar: 'x', encuadre: 'plano general', luz: 'noche', descripcion: 'd', sujetos: [] };
+
+      const P = sanear({
+        id: 'p02',
+        piezas: [{
+          id: 'p02',
+          tomas: [
+            { i: 8, movimiento: true, video: 'ok', heredadoVid: 'p01/t003/vid', plano },
+            { i: 9, imagen: 'ok', heredado: 'p01/t004/img', plano },
+            { i: 10, imagen: 'ok', heredado: 'no-es-una-clave', plano },
+          ],
+        }],
+      });
+      const [a, b, c] = P.piezas[0].tomas;
+
+      if (a.heredadoVid !== 'p01/t003/vid') fallos.push('El clip heredado se pierde al cargar el proyecto.');
+      if (b.heredado !== 'p01/t004/img') fallos.push('La imagen heredada se pierde al cargar el proyecto.');
+      if (c.heredado !== null) fallos.push('Se acepta como clave heredada algo que no tiene forma de clave.');
+
+      // El viaje entero: guardado → cargado → ¿sigue apuntando a la otra pieza?
+      if (claveClip('p02', a, [a]) !== 'p01/t003/vid') {
+        fallos.push(`Tras cargar, el clip de la toma 8 apunta a ${claveClip('p02', a, [a])}.`);
+      }
+      if (claveFotograma('p02', b, [b]) !== 'p01/t004/img') {
+        fallos.push(`Tras cargar, la imagen de la toma 9 apunta a ${claveFotograma('p02', b, [b])}.`);
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: `sanear` borrando lo heredado y dejando el «ok».
+    romper: (ctx) =>
+      conFuncion(ctx, 'sanear', (bruto) => {
+        const p = ctx.fn.sanear(bruto);
+        for (const z of p.piezas) {
+          for (const t of z.tomas) delete t.heredadoVid;
+        }
+        return p;
+      }),
+  },
+
+  {
+    nombre: 'la-herencia-llega-hasta-el-archivo-de-verdad',
+    dice: 'Preguntar solo por la toma de partida no basta. Si la dueña de una cadena heredó su material de otra pieza, la repetición componía una clave local de un archivo que nadie ha generado ni va a generar. Y el banco repartía como donante a quien a su vez heredaba.',
+    comprobar(ctx) {
+      const { claveClip, claveFotograma, heredables } = ctx.fn;
+      const fallos = [];
+      const plano = { lugar: 'la comisaría', encuadre: 'plano general', luz: 'día', descripcion: 'd', sujetos: [] };
+
+      // 1 · Una repetición de una toma que heredó.
+      const dueña = { i: 8, movimiento: true, video: 'ok', heredadoVid: 'p01/t003/vid', reusa: null, plano };
+      const repite = { i: 27, movimiento: true, video: null, reusa: 8, plano };
+      if (claveClip('p02', repite, [dueña, repite]) !== 'p01/t003/vid') {
+        fallos.push(
+          `Una repetición de un clip heredado pide ${claveClip('p02', repite, [dueña, repite])}, ` +
+            'que no lo genera nadie.',
+        );
+      }
+      const dueñaImg = { i: 4, imagen: 'ok', heredado: 'p01/t009/img', reusa: null, plano };
+      const repiteImg = { i: 30, imagen: null, reusa: 4, plano };
+      if (claveFotograma('p02', repiteImg, [dueñaImg, repiteImg]) !== 'p01/t009/img') {
+        fallos.push('Una repetición de una imagen heredada pide un archivo que no existe.');
+      }
+
+      // 2 · El banco no puede repartir la clave de quien a su vez heredó.
+      const A = { id: 'p01', titulo: 'A', tomas: [{ i: 3, movimiento: true, video: 'ok', plano }] };
+      const B = {
+        id: 'p02', titulo: 'B',
+        tomas: [{ i: 7, movimiento: true, video: 'ok', heredadoVid: 'p01/t003/vid', plano }],
+      };
+      const h = heredables([{ i: 0, movimiento: true, video: null, plano }], [B, A]);
+      if (!h.length) fallos.push('El banco no encuentra nada donde sí hay material.');
+      else if (h[0].de.clave !== 'p01/t003/vid') {
+        fallos.push(`El banco reparte ${h[0].de.clave}, que es un archivo que nunca se generó.`);
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: sin preguntarle a la dueña de la cadena.
+    romper: (ctx) =>
+      conFuncion(ctx, 'claveClip', (pieza, toma, tomas) => {
+        if (toma.heredadoVid) return toma.heredadoVid;
+        const d = ctx.fn.tomaDelFotograma(toma, tomas);
+        return `${pieza}/t${String(d.i).padStart(3, '0')}/vid`;
+      }),
   },
 ];

@@ -239,6 +239,19 @@ function sanearToma(bruto, i, proyecto) {
     // Clave de otra toma cuyo fotograma se aprovecha: dos tomas con el mismo plano
     // no se pagan dos veces (§3).
     reusa: Number.isInteger(t.reusa) ? t.reusa : null,
+    // Material heredado de OTRA PIEZA, por su clave entera.
+    //
+    // Esto faltaba, y era de los caros. `sanearToma` no hace spread: devuelve una
+    // lista blanca, y todo lo que no esté aquí se borra en CADA carga del
+    // proyecto. `heredado` y `heredadoVid` no estaban, pero `imagen: 'ok'` y
+    // `video: 'ok'` sí. Así que al recargar quedaba una toma que dice tener
+    // material y no dice cuál: la clave se componía como local, el archivo no
+    // existía, el montaje se paraba y la fase de imagen ni siquiera lo regeneraba
+    // —porque para ella ya estaba hecho—. Callejón sin salida desde la interfaz.
+    heredado: claveHeredada(t.heredado),
+    heredadoVid: claveHeredada(t.heredadoVid),
+    // La ficha cambió al volver a dirigir y el material anterior ya no vale.
+    desfasada: t.desfasada === true,
     movimiento: t.movimiento === true,
     // §8.2: cada toma sabe de qué tipo es su imagen, y eso puede salir en pantalla.
     tipoImagen: ['generada', 'archivo', 'reconstruccion'].includes(t.tipoImagen)
@@ -247,8 +260,20 @@ function sanearToma(bruto, i, proyecto) {
     // §8.1: cada toma conserva la referencia a la ficha que la respalda.
     fichas: Array.isArray(t.fichas) ? t.fichas : [],
     corteForzado: t.corteForzado === true,
+    // Si el corte del audio lo dijo el servicio de voz o se estimó.
+    corteExacto: t.corteExacto === true,
   };
 }
+
+/**
+ * Una clave de material heredado, o null.
+ *
+ * Se valida la forma —`pieza/algo/tipo`— en vez de aceptar cualquier cadena: una
+ * clave inventada apuntaría a un archivo que no existe y el fallo aparecería en el
+ * montaje, media hora después y lejos de aquí.
+ */
+const FORMA_CLAVE = /^[\w.-]+\/[\w.-]+\/(img|vid|audio|mus|firma)$/;
+const claveHeredada = (v) => (typeof v === 'string' && FORMA_CLAVE.test(v) ? v : null);
 
 /** §8.1: afirmación, fuente, fecha, cita literal, enlace. */
 const TIPOS_FUENTE = ['oficial', 'judicial', 'policial', 'prensa', 'academica', 'testimonio', 'otra'];

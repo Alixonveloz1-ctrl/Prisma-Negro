@@ -485,6 +485,48 @@ export const invariantes = [
   },
 
   {
+    nombre: 'una-invariante-no-importa-lo-que-vigila',
+    dice: 'Seis veces ha pasado lo mismo: una invariante importa directamente la función que vigila, el sabotaje cambia la FUENTE, la función importada sigue siendo la buena, y la invariante sale «ciega». El mensaje culpa a la comprobación cuando lo roto era la forma de romperla. Lo que se vigila entra por el contexto.',
+    comprobar(ctx) {
+      const fallos = [];
+      for (const [ruta, texto] of ctx.fuentes) {
+        if (!ruta.startsWith('auditoria/invariantes/')) continue;
+        // Las importaciones de código VIVO —lo que la auditoría vigila— tienen que
+        // entrar por `ctx.fn`, no por `import`. Se permiten las de `comun/` que son
+        // tablas de datos: no se sabotean cambiando una función, se sabotean con
+        // `conCatalogo` y compañía, y esas sí llegan.
+        const TABLAS = ['estilos.mjs', 'modelos.mjs', 'temas.mjs', 'segmentar.mjs'];
+        // Un import DE VERDAD frente a uno que vive dentro de un sabotaje: los
+        // sabotajes llevan el patrón malo dentro de una cadena, porque su trabajo
+        // es escribirlo. Se distinguen contando las comillas dobles que hay antes
+        // en la misma línea: número impar significa que estamos dentro de una.
+        //
+        // Quitar todas las cadenas antes de mirar no vale: la ruta del import ES
+        // una cadena, y borrándola se deja de ver el import entero. Lo comprobé
+        // haciéndolo mal: la invariante pasó a no detectar nada.
+        for (const m of texto.matchAll(/await import\('\.\.\/\.\.\/((?:app|comun)\/[^']+)'\)/g)) {
+          const linea = texto.slice(texto.lastIndexOf('\n', m.index) + 1, m.index);
+          if ((linea.match(/"/g) || []).length % 2 === 1) continue;
+          const archivo = m[1].split('/').pop().split('?')[0];
+          if (TABLAS.includes(archivo)) continue;
+          fallos.push(
+            `${ruta} importa «${m[1]}» directamente. Lo que se vigila entra por ctx.fn, ` +
+              'o el sabotaje no lo alcanza y la invariante sale ciega.',
+          );
+        }
+      }
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'auditoria/invariantes/datos.mjs', (t) =>
+        t.replace(
+          'const { sanear, claveClip, claveFotograma } = ctx.fn;',
+          "const { sanear } = await import('../../app/estado.js');",
+        ),
+      ),
+  },
+
+  {
     nombre: 'todas-las-puertas-del-proveedor-se-pueden-llamar',
     dice: 'La generación de imágenes nunca funcionó: la variable se llamaba «partes» y la petición decía «parts». Setenta y seis invariantes no lo cazaron porque todas MIRAN el código, y un identificador mal escrito se ve igual de bien que uno correcto. Lo único que lo caza es llamar a la función.',
     async comprobar(ctx) {

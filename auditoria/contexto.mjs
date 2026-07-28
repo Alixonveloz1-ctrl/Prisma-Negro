@@ -137,18 +137,29 @@ async function funcionesPuras() {
   const cla = await import('../comun/claves.mjs');
   const hoj = await import('../comun/hoja.mjs');
   const cfg = await import('../app/config.js');
+  const est = await import('../app/estado.js');
   const mod = await import('../comun/modelos.mjs');
   const dir = await import('../app/fases/direccion.js');
   const gui = await import('../app/fases/guion.js');
   const img = await import('../app/fases/imagen.js');
+  const mov = await import('../app/fases/movimiento.js');
+  const inv = await import('../app/fases/investigacion.js');
+  const aud = await import('../comun/audio.mjs');
   return {
     repartirPorTramos: dir.repartirPorTramos,
     actosDe: gui.actosDe,
     heredables: img.heredables,
     componerInstruccion: img.componerInstruccion,
     planificarImagenes: img.planificar,
+    planificarClips: mov.planificar,
+    ANGULOS_DE_INVESTIGACION: inv.ANGULOS_DE_INVESTIGACION,
+    repartirPorTiempos: aud.repartirPorTiempos,
+    repartirBloque: aud.repartirBloque,
     contarPalabras: gui.contarPalabras,
     normalizar: cfg.normalizar,
+    sanear: est.sanear,
+    abrirPieza: est.abrirPieza,
+    ascendencia: est.ascendencia,
     duracionValida: mod.duracionValida,
     regionDe: mod.regionDe,
     modalidadesDe: mod.modalidadesDe,
@@ -157,6 +168,7 @@ async function funcionesPuras() {
     verificarCobertura: seg.verificarCobertura,
     tomaDelFotograma: cla.tomaDelFotograma,
     claveFotograma: cla.claveFotograma,
+    claveClip: cla.claveClip,
     construirHoja: hoj.construirHoja,
     componerManifiesto: hoj.componerManifiesto,
   };

@@ -117,11 +117,16 @@ export function tomaDelFotograma(toma, tomas) {
 export function claveClip(pieza, toma, tomas) {
   // Un clip heredado de otra pieza: la clave viene entera.
   if (toma.heredadoVid) return toma.heredadoVid;
-  // Y si no, la del clip de su dueña. La cadena se resuelve con el mismo ayudante
-  // que los fotogramas: «se ve igual que aquella» significa lo mismo para una
-  // imagen fija que para un clip, y quien decide cuál de las dos cosas es, es el
-  // campo `movimiento` de la toma.
-  return claveToma(pieza, tomaDelFotograma(toma, tomas).i, 'vid');
+  // Y si no, la del clip de SU DUEÑA — preguntándole también a ella si heredó.
+  //
+  // Preguntar solo por la toma de partida no bastaba: si la dueña de la cadena
+  // heredó su clip de otra pieza, el clip vive allí, y la repetición componía una
+  // clave local de un archivo que nadie ha generado ni va a generar —la dueña se
+  // salta por heredada y la repetición por repetir—. El montaje se paraba pidiendo
+  // un archivo sin dueño.
+  const dueña = tomaDelFotograma(toma, tomas);
+  if (dueña.heredadoVid) return dueña.heredadoVid;
+  return claveToma(pieza, dueña.i, 'vid');
 }
 
 export function claveFotograma(pieza, toma, tomas) {
@@ -132,5 +137,8 @@ export function claveFotograma(pieza, toma, tomas) {
   // Se mira ANTES que `reusa` a propósito: heredar es más fuerte que reusar dentro
   // de la pieza, porque la imagen ya existe y ya está pagada.
   if (toma.heredado) return toma.heredado;
-  return claveToma(pieza, tomaDelFotograma(toma, tomas).i, 'img');
+  // Y a la dueña de la cadena también: el mismo agujero que en los clips.
+  const dueña = tomaDelFotograma(toma, tomas);
+  if (dueña.heredado) return dueña.heredado;
+  return claveToma(pieza, dueña.i, 'img');
 }

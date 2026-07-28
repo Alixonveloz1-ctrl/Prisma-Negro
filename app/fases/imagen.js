@@ -78,9 +78,31 @@ export function heredables(tomas, piezasAnteriores) {
       if (!t.plano) continue;
       const k = huellaDePlano(t);
       if (!k) continue;
-      const de = { pieza: z.id, i: t.i, titulo: z.titulo };
-      if (t.video === 'ok' && t.movimiento && !clips.has(k)) clips.set(k, de);
-      if (t.imagen === 'ok' && !t.movimiento && !imagenes.has(k)) imagenes.set(k, de);
+
+      // LA CLAVE DEL ARCHIVO DE VERDAD, no la que le tocaría por su sitio.
+      //
+      // Una toma que a su vez HEREDÓ su material entraba en el estante con su
+      // pieza y su índice, y quien la eligiera como donante recibía la clave de un
+      // archivo que nunca se generó: el material está en una tercera pieza. La
+      // herencia no es transitiva por sí sola, y aquí se la hace transitiva
+      // apuntando siempre al original.
+      //
+      // Y una toma que repite un plano dentro de su pieza tampoco es donante por
+      // su índice: su archivo es el de su dueña.
+      const conClip = t.movimiento && t.video === 'ok';
+      const conImagen = !t.movimiento && t.imagen === 'ok';
+      if (!conClip && !conImagen) continue;
+
+      const propia = t.reusa !== null && t.reusa !== undefined
+        ? (z.tomas || []).find((x) => x.i === t.reusa)
+        : t;
+      const clave = conClip
+        ? t.heredadoVid || propia?.heredadoVid || claveToma(z.id, (propia || t).i, 'vid')
+        : t.heredado || propia?.heredado || claveToma(z.id, (propia || t).i, 'img');
+
+      const de = { pieza: z.id, i: t.i, titulo: z.titulo, clave };
+      if (conClip && !clips.has(k)) clips.set(k, de);
+      if (conImagen && !imagenes.has(k)) imagenes.set(k, de);
     }
   }
 
