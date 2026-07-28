@@ -60,8 +60,21 @@ const ESQUEMA = {
         atmosfera: { type: 'string' },
         instrumentacion: { type: 'string' },
         queEvitar: { type: 'string' },
+        // EN INGLÉS, y no por capricho: el generador de música solo entiende
+        // inglés y rechaza la petición entera si detecta otro idioma —«Unsupported
+        // language detected»—. Los tres de arriba son para leerlos en pantalla;
+        // estos tres son los que viajan a Lyria.
+        enIngles: {
+          type: 'object',
+          properties: {
+            mood: { type: 'string' },
+            instruments: { type: 'string' },
+            avoid: { type: 'string' },
+          },
+          required: ['mood', 'instruments', 'avoid'],
+        },
       },
-      required: ['atmosfera', 'instrumentacion', 'queEvitar'],
+      required: ['atmosfera', 'instrumentacion', 'queEvitar', 'enIngles'],
     },
     ritmo: {
       type: 'object',
@@ -209,7 +222,10 @@ export async function dirigirPieza({ caso, fichas, minutos = 10, anteriores = []
         `- cierre: cómo termina, sin moraleja.\n` +
         `- estructura: 3 a 5 actos con acto, titulo, funcion, contenido y minutos.\n` +
         `- identidadVisual: paleta, luz, textura, encuadrePreferido, queEvitar.\n` +
-        `- musica: atmosfera, instrumentacion, queEvitar.\n` +
+        `- musica: atmosfera, instrumentacion, queEvitar. Y DENTRO, «enIngles» con ` +
+        `mood, instruments y avoid ESCRITOS EN INGLÉS: el generador de música solo ` +
+        `entiende inglés y rechaza la petición si ve español. Vocabulario musical ` +
+        `concreto: «low sustained cello», «tape hiss», «no percussion».\n` +
         `- ritmo: segundosPorToma (8-14) y proporcionMovimiento (0-0.3).\n` +
         `- cuidado: qué NO se puede afirmar en este caso concreto, por lo que dice el ` +
         `material. Una entrada por cada cosa.\n\n` +

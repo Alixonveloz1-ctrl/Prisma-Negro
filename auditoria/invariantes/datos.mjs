@@ -1018,4 +1018,119 @@ export const invariantes = [
         return `${pieza}/t${String(d.i).padStart(3, '0')}/vid`;
       }),
   },
+
+  {
+    nombre: 'la-musica-se-pide-en-ingles-porque-es-lo-unico-que-entiende',
+    dice: 'La música falló SIEMPRE, no a veces: «Unsupported language detected. Please use one of the supported languages: en.» La instrucción iba en español como todo lo demás, y el generador rechaza la petición entera antes de generar nada. Reintentar no podía arreglarlo nunca.',
+    comprobar(ctx) {
+      const { atmosferaDe } = ctx.fn;
+      const fallos = [];
+      const tomas = [
+        { i: 0, escena: 1, plano: { lugar: 'el puerto', luz: 'noche' } },
+        { i: 1, escena: 2, plano: { lugar: 'la comisaría', luz: 'fluorescente' } },
+        { i: 2, escena: 3, plano: { lugar: 'el juzgado', luz: 'día' } },
+      ];
+
+      // Tres situaciones, y en las tres tiene que salir inglés: con ficha en inglés,
+      // con un tratamiento viejo que solo trae español, y sin tratamiento ninguno.
+      const casos = [
+        [
+          'con ficha en inglés',
+          { musica: { atmosfera: 'Tensión contenida', enIngles: { mood: 'cold dread', instruments: 'low cello', avoid: 'drums' } } },
+        ],
+        ['con tratamiento viejo, solo español', { musica: { atmosfera: 'Cuerdas graves sostenidas', instrumentacion: 'violonchelo', queEvitar: 'percusión' } }],
+        ['sin tratamiento', null],
+      ];
+
+      for (const [qué, tr] of casos) {
+        for (const escena of [{ n: 1, titulo: 'El puerto' }, { n: 3, titulo: 'El juicio' }]) {
+          const p = atmosferaDe(escena, tomas, tr);
+          // Nada fuera del ASCII imprimible: una sola tilde delata el idioma.
+          const raro = /[^\x20-\x7e]/.exec(p);
+          if (raro) {
+            fallos.push(`${qué}, escena ${escena.n}: la instrucción lleva «${raro[0]}» — eso no es inglés.`);
+          }
+          // Y tampoco palabras españolas sin tilde, que pasarían el filtro de arriba.
+          // Ojo con la lista: «tension» es española Y inglesa, y meterla marcaba
+          // como español un texto que estaba bien. Solo van las que no son ambas.
+          const español = /\b(de|la|el|los|las|sin|con|una|voz|graves|musica|escena|luz|cuerdas)\b/i.exec(p);
+          if (español) {
+            fallos.push(`${qué}, escena ${escena.n}: aparece «${español[0]}», que es español.`);
+          }
+          if (!/[a-z]/i.test(p)) fallos.push(`${qué}, escena ${escena.n}: la instrucción quedó vacía.`);
+        }
+      }
+
+      // Y no puede salir lo mismo para todas las escenas: se pagaría una pieza por
+      // escena para que todas sonaran idénticas, y el documental sale plano.
+      const tr = { musica: { enIngles: { mood: 'cold dread', instruments: 'low cello', avoid: 'drums' } } };
+      const arranque = atmosferaDe({ n: 1 }, tomas, tr);
+      const cierre = atmosferaDe({ n: 3 }, tomas, tr);
+      if (arranque === cierre) {
+        fallos.push('La apertura y el cierre piden exactamente lo mismo: se paga dos veces la misma música.');
+      }
+
+      // El director tiene que estar OBLIGADO a escribirla en inglés; si el esquema
+      // no la exige, vuelve el español por la puerta de atrás.
+      const dir = fuente(ctx, 'app/fases/director.js');
+      if (!/enIngles/.test(dir)) {
+        fallos.push('El director no escribe la ficha de música en inglés: no habría de dónde sacarla.');
+      }
+      if (!/required:\s*\[[^\]]*'enIngles'/.test(dir)) {
+        fallos.push('La ficha en inglés es opcional para el director: se la va a saltar.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: pasando el español del director tal cual.
+    romper: (ctx) =>
+      conFuncion(ctx, 'atmosferaDe', (escena, tomas, tratamiento) =>
+        `Música instrumental de documental. ${tratamiento?.musica?.atmosfera || 'Tensión contenida.'}`,
+      ),
+  },
+
+  {
+    nombre: 'un-clip-sale-de-su-imagen-y-si-falta-se-genera',
+    dice: 'Darle a Clips fallaba con «genera la imagen primero» y ahí se acababa. Pero un clip SIEMPRE parte de un fotograma —animar sin imagen de partida daría otra escena, no la de este documental—, así que en vez de mandar a nadie a otra pantalla se genera la imagen y se sigue.',
+    comprobar(ctx) {
+      const mov = fuente(ctx, 'app/fases/movimiento.js');
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      const i = mov.indexOf('export async function generarClip');
+      if (i < 0) return ['No se encuentra la generación de clips.'];
+      const cuerpo = mov.slice(i, i + 2500);
+
+      if (!/generarImagen/.test(mov)) {
+        fallos.push('El clip no sabe generar su imagen de partida: sigue dependiendo de que alguien la haya hecho antes.');
+      }
+      if (!/await generarImagen\(/.test(cuerpo)) {
+        fallos.push('Falta el fotograma y no se genera: el clip vuelve a fallar sin más.');
+      }
+      // Y el fotograma hay que volver a pedirlo: generarlo y seguir con el `fot`
+      // vacío de antes dejaría la petición sin imagen de partida.
+      const tras = cuerpo.indexOf('await generarImagen(');
+      if (tras > 0 && !/fot = await fotogramaDe/.test(cuerpo.slice(tras, tras + 400))) {
+        fallos.push('Se genera la imagen pero no se vuelve a leer: el clip saldría igualmente sin fotograma.');
+      }
+      // La imagen que se genere tiene que llevar el tratamiento, o sale con otra
+      // paleta y se nota justo en el plano que además lleva movimiento.
+      if (!/generarClip\([^)]*tratamiento/s.test(mov)) {
+        fallos.push('La generación de clips no recibe el tratamiento: la imagen saldría con otra paleta.');
+      }
+      const j = main.indexOf('movimiento.generarClip({');
+      if (j < 0) fallos.push('La pantalla no llama a la generación de clips.');
+      else if (!/tratamiento:/.test(main.slice(j, j + 700))) {
+        fallos.push('La pantalla no le pasa el tratamiento al clip.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: fallando en vez de generar el fotograma.
+    romper: (ctx) =>
+      editando(ctx, 'app/fases/movimiento.js', (t) =>
+        t.replace(
+          /await generarImagen\(\{[^}]*\}\);/s,
+          "throw new Error('Genera la imagen primero.');",
+        ),
+      ),
+  },
 ];

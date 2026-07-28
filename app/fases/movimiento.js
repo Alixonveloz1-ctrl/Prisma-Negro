@@ -15,7 +15,7 @@
 import { llamar, esperarOperacion } from '../api.js';
 import { claveToma } from '../../comun/claves.mjs';
 import { reducirFotogramaDePartida } from '../imagenes.js';
-import { fotogramaDe } from './imagen.js';
+import { fotogramaDe, generarImagen } from './imagen.js';
 import { duracionValida, PREDETERMINADO } from '../../comun/modelos.mjs';
 
 // Las duraciones válidas dependen del generador elegido —Veo 2 admite 5 y 7, los
@@ -54,10 +54,22 @@ export function resumen(tomas, clave) {
  * no censurado porque lleva dentro el del proyecto: censurarlo haría fallar la
  * consulta siguiente con un error incomprensible.
  */
-export async function generarClip({ toma, tomas, pieza, config, senal, aviso, alEsperar }) {
-  const fot = await fotogramaDe({ toma, tomas, pieza });
+export async function generarClip({ toma, tomas, pieza, config, tratamiento = null, senal, aviso, alEsperar }) {
+  // EL CLIP SALE DE LA IMAGEN. Si no está, se genera aquí.
+  //
+  // Antes esto se limitaba a fallar con «genera la imagen primero», y el usuario
+  // se encontraba con que darle a Clips daba error sin más. Pero es que un clip
+  // SIEMPRE parte de un fotograma: animar sin imagen de partida daría otra escena,
+  // no la de este documental. Así que en vez de mandar a nadie a otra pantalla, se
+  // hace lo que hay que hacer, en el orden que hay que hacerlo.
+  let fot = await fotogramaDe({ toma, tomas, pieza });
   if (!fot) {
-    throw new Error(`La toma ${toma.i} no tiene fotograma todavía. Genera la imagen primero.`);
+    aviso?.(`Toma ${toma.i + 1}: generando primero su imagen, que es de donde sale el clip…`);
+    await generarImagen({ toma, tomas, pieza, config, tratamiento, senal, alEsperar });
+    fot = await fotogramaDe({ toma, tomas, pieza });
+  }
+  if (!fot) {
+    throw new Error(`La toma ${toma.i} no tiene fotograma y no se pudo generar.`);
   }
 
   // §6: el fotograma de partida se reduce «al lado que el generador de video va a

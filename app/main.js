@@ -1009,6 +1009,9 @@ accion('b-movimiento', async () => {
         tomas: pieza().tomas,
         pieza: P.id,
         config: P.config,
+        // El clip parte de la imagen, y si falta se genera aquí: hace falta el
+        // tratamiento para que salga con la misma paleta que las demás.
+        tratamiento: pieza().tratamiento,
         senal,
         alEsperar,
         aviso: (m) => ($('progreso').textContent = m),

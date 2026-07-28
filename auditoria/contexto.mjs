@@ -145,7 +145,9 @@ async function funcionesPuras() {
   const mov = await import('../app/fases/movimiento.js');
   const inv = await import('../app/fases/investigacion.js');
   const aud = await import('../comun/audio.mjs');
+  const mus = await import('../app/fases/musica.js');
   return {
+    atmosferaDe: mus.atmosferaDe,
     repartirPorTramos: dir.repartirPorTramos,
     actosDe: gui.actosDe,
     heredables: img.heredables,
