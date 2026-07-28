@@ -1663,7 +1663,16 @@ function pintarPorTipo() {
     d.appendChild(visual);
     const cuerpo = document.createElement('div');
     cuerpo.className = 'cuerpo';
-    cuerpo.innerHTML = `<p>#${x.i + 1}${x.heredado ? ' · heredada' : ''} · ${escapar((x.texto || '').slice(0, 70))}…</p>`;
+    // El estado del clip, AQUÍ MISMO: con 83 imágenes, saber cuál tiene ya su
+    // video no puede exigir cruzar a la otra pestaña llevando la cuenta de cabeza.
+    const clipListo = x.video === 'ok';
+    cuerpo.innerHTML =
+      `<p>#${x.i + 1}${x.heredado ? ' · heredada' : ''} · ${escapar((x.texto || '').slice(0, 70))}…</p>` +
+      (clipListo
+        ? '<span class="pastilla p-ok">clip listo</span>'
+        : x.movimiento
+          ? '<span class="pastilla p-aviso">clip pendiente</span>'
+          : '');
     d.appendChild(cuerpo);
 
     if (hay) {
@@ -1699,10 +1708,13 @@ function pintarPorTipo() {
     // Cualquier imagen se puede animar, la marcara el director o no. Mirando la
     // imagen es cuando se ve si merece moverse; decidirlo antes, a ciegas, era
     // decidirlo por una descripción.
-    if (hay) {
+    // Con el clip ya pagado no se ofrece convertir: apretarlo lo pagaría otra
+    // vez. La pastilla verde ya dice que está, y se ve en su pestaña.
+    if (hay && !clipListo) {
       const c = document.createElement('button');
       c.className = 'btn chico fantasma';
-      c.textContent = 'Convertir en clip';
+      const rotulo = x.movimiento ? 'Generar su clip' : 'Convertir en clip';
+      c.textContent = rotulo;
       c.onclick = async () => {
         c.disabled = true;
         c.textContent = '…';
@@ -1712,7 +1724,7 @@ function pintarPorTipo() {
           avisar('previa', e.message, 'malo');
         }
         c.disabled = false;
-        c.textContent = 'Convertir en clip';
+        c.textContent = rotulo;
       };
       cuerpo.appendChild(c);
     }

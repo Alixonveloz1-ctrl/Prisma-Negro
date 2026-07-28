@@ -1320,6 +1320,16 @@ export const invariantes = [
       if (i < 0) return ['No hay forma de convertir una imagen en clip.'];
       const cuerpo = main.slice(i, i + 1800);
 
+      // La galería dice el estado del clip en cada tarjeta —con 83 imágenes no se
+      // puede cruzar de pestaña llevando la cuenta— y con el clip pagado no se
+      // vuelve a ofrecer convertir: apretarlo lo pagaría otra vez.
+      if (!/clip listo/.test(main) || !/clip pendiente/.test(main)) {
+        fallos.push('La galería no dice qué imagen tiene ya su clip: toca cruzar a la otra pestaña contando.');
+      }
+      if (!/hay && !clipListo/.test(main)) {
+        fallos.push('Se ofrece convertir una imagen cuyo clip ya está pagado: apretarlo lo paga otra vez.');
+      }
+
       if (!/Convertir en clip/.test(main)) fallos.push('No hay botón: la función existe y no la llama nadie.');
       if (!/\bconvertirEnClip\([tx]\.i/.test(main)) {
         fallos.push('El botón no dice de qué toma es: convertiría otra.');
