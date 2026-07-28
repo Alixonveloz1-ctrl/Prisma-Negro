@@ -78,12 +78,43 @@ export async function narrarBloque({ bloque, pieza, config, senal, alEsperar }) 
 
   const audio = leerWav(await (await fetch(`data:audio/wav;base64,${r.datos}`)).arrayBuffer());
 
-  // Si vinieron los tiempos, se corta EXACTAMENTE donde el servicio dice que acaba
-  // cada toma. Si no —voces que no admiten SSML—, se cae a la estimación de
-  // siempre, y cada trozo dice cuál de las dos cosas fue.
+  // SIN MARCAS NO SE ADIVINA: SE NARRA TOMA A TOMA.
+  //
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Cuando el servicio no devolvía sus tiempos —voces sin SSML, o una respuesta
+  // con las marcas incompletas—, esto caía EN SILENCIO a estimar el corte. El
+  // corte estimado cae donde sea: a mitad de palabra, a mitad de frase. Y desde
+  // que existe el respiro, encima se le plantaban ahí unos segundos de silencio
+  // «de tensión»: una pausa dramática en mitad de una palabra.
+  //
+  // La salida no es estimar mejor: es NO CORTAR. Un bloque de UNA toma no se
+  // corta —el audio entero es la toma, exacto por construcción—, así que cuando
+  // no hay tiempos se repite la narración toma a toma. Cuesta más llamadas una
+  // vez; adivinar costaba el documental entero cada vez.
+  // ─────────────────────────────────────────────────────────────────────────────
+  if (!r.tiempos && bloque.tomas.length > 1) {
+    const salida = [];
+    for (const toma of bloque.tomas) {
+      if (senal?.aborted) throw new Error('Detenido.');
+      const solo = {
+        ...bloque,
+        tomas: [toma],
+        texto: (toma.texto || '').trim(),
+        segundos: toma.segundos || 1,
+      };
+      salida.push(...(await narrarBloque({ bloque: solo, pieza, config, senal, alEsperar })));
+    }
+    return salida;
+  }
+
+  // Con una sola toma no hay nada que cortar: el final del audio ES el final de
+  // la toma, y ese tiempo se declara para que el trozo salga marcado EXACTO.
+  const tiempos =
+    r.tiempos || (bloque.tomas.length === 1 ? [audio.muestras.length / audio.frecuencia] : null);
+
   const objetivos = bloque.tomas.map((t) => t.segundos || 1);
   const trozos = repartirBloque(audio, objetivos, {
-    tiempos: r.tiempos,
+    tiempos,
     // §7.8: el dedal va DENTRO del primer trozo, así que forma parte de su duración
     // medida y llega al montaje sin que nadie tenga que acordarse de sumarlo.
     silencioInicialMs: n.silencioInicialMs,

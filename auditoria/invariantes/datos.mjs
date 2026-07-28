@@ -859,8 +859,18 @@ export const invariantes = [
       if (!/marcas: bloque\.tomas\.map/.test(nar)) {
         fallos.push('La narración no manda los textos por toma: el servicio no puede marcar nada.');
       }
-      if (!/tiempos: r\.tiempos/.test(nar)) {
+      if (!/tiempos,/.test(nar) || !/r\.tiempos \|\|/.test(nar)) {
         fallos.push('Vienen los tiempos y no se usan.');
+      }
+      // 2b · Y SIN tiempos NO SE ADIVINA: se narra toma a toma. Un bloque de una
+      // toma es exacto por construcción —no hay nada que cortar—. Adivinar ponía
+      // el corte a mitad de palabra, y el respiro le plantaba encima segundos de
+      // silencio: una «pausa dramática» dentro de una palabra.
+      if (!/!r\.tiempos && bloque\.tomas\.length > 1/.test(nar)) {
+        fallos.push('Sin tiempos del servicio se sigue adivinando el corte, en vez de narrar toma a toma.');
+      }
+      if (!/bloque\.tomas\.length === 1 \? \[audio\.muestras\.length \/ audio\.frecuencia\]/.test(nar)) {
+        fallos.push('Una toma sola no declara su final como tiempo exacto: saldría marcada como estimada.');
       }
 
       // 3 · Y el reparto exacto tiene que ser exacto: sin huecos, sin solapes, y
@@ -883,8 +893,11 @@ export const invariantes = [
       if (sinT.some((x) => x.exacto)) fallos.push('Un reparto estimado se hace pasar por exacto.');
       return fallos;
     },
+    // Se rompe como estaba: sin tiempos, volver a adivinar en vez de partir.
     romper: (ctx) =>
-      editando(ctx, 'app/fases/narracion.js', (t) => t.replace('tiempos: r.tiempos,', '')),
+      editando(ctx, 'app/fases/narracion.js', (t) =>
+        t.replace('if (!r.tiempos && bloque.tomas.length > 1) {', 'if (false && bloque.tomas.length > 1) {'),
+      ),
   },
 
   {
@@ -1371,15 +1384,22 @@ export const invariantes = [
       // 1 · La toma dura la locución MÁS el respiro, y el silencio queda dentro.
       const tomas = [
         { i: 0, escena: 0, segundos: 6, medida: true, plano, entrada: 2, respiro: 0 },
-        { i: 1, escena: 0, segundos: 6, medida: true, plano, respiro: 2.5 },
+        { i: 1, escena: 0, segundos: 6, medida: true, plano, respiro: 2.5, audio: 'ok', corteExacto: true },
         { i: 2, escena: 0, segundos: 6, medida: true, plano, respiro: 0 },
+        // El corte de esta vino ESTIMADO: su final puede caer a mitad de frase, y
+        // plantarle un respiro encima es una pausa dramática dentro de una
+        // palabra. Sin corte fiable, no hay respiro.
+        { i: 3, escena: 0, segundos: 6, medida: true, plano, respiro: 4, audio: 'ok', corteExacto: false },
       ];
       const hoja = construirHoja({ pieza: 'p01', tomas, escenas: [{ n: 0 }], config: { fps } });
-      const [a, b, c] = hoja.tomas;
+      const [a, b, c, d] = hoja.tomas;
 
       if (Math.abs(a.duracion - 8) > 1 / fps) fallos.push(`La toma de apertura dura ${a.duracion}, y con su entrada debía durar 8.`);
       if (Math.abs(b.duracion - 8.5) > 1 / fps) fallos.push(`La toma con respiro dura ${b.duracion}, y debía durar 8,5.`);
       if (Math.abs(c.duracion - 6) > 1 / fps) fallos.push(`Una toma sin respiro dura ${c.duracion} en vez de 6: se está alargando todo.`);
+      if (Math.abs(d.duracion - 6) > 1 / fps) {
+        fallos.push('El respiro se apoya en un corte estimado: el silencio caería a mitad de una palabra.');
+      }
       // Y el reloj sigue siendo la suma: si el respiro no entrara en `inicio`, la
       // voz de la toma siguiente se adelantaría y volvería el desfase de siempre.
       if (Math.abs(b.inicio - a.duracion) > 1e-6) fallos.push('El respiro no entra en el reloj: la toma siguiente empezaría antes de tiempo.');

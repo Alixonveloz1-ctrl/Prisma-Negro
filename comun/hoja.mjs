@@ -60,7 +60,14 @@ export function construirHoja({ pieza, tomas, escenas = [], config = {} }) {
     // `entrada` es lo mismo al principio: la imagen antes de la primera palabra.
     // Es la apertura en frío, y solo tiene sentido en la primera toma de la pieza.
     // ─────────────────────────────────────────────────────────────────────────
-    const respiro = Math.max(0, Math.min(8, Number(t.respiro) || 0));
+    // EL RESPIRO NO SE APOYA EN UN CORTE DUDOSO. Si el audio de esta toma se
+    // cortó estimando —narración anterior a las marcas exactas—, su final puede
+    // caer a mitad de una frase, y plantar ahí segundos de silencio convierte un
+    // corte malo en una «pausa dramática» a mitad de palabra. Sin corte fiable no
+    // hay respiro; al rehacer la narración, todos los cortes salen exactos y los
+    // respiros vuelven solos.
+    const corteFiable = t.audio !== 'ok' || t.corteExacto !== false;
+    const respiro = corteFiable ? Math.max(0, Math.min(8, Number(t.respiro) || 0)) : 0;
     const entrada = n === 0 ? Math.max(0, Math.min(8, Number(t.entrada) || 0)) : 0;
     const dur = Math.ceil((Math.max(t.segundos || 0, 0.2) + respiro + entrada) * c.fps) / c.fps;
     const fila = {
