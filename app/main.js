@@ -386,6 +386,9 @@ function pintarFiltros() {
 }
 
 function pintarTodo() {
+  // El formato elegido manda también en los VISORES: sin esta clase, la pantalla
+  // enseñaba un 9:16 recortado a 16:9 y parecía que se generaba mal.
+  document.body.classList.toggle('formato-vertical', !!P.config.formato.vertical);
   pintarFiltros();
   $('titulo').value = P.titulo;
   $('guion').value = pieza().guion;

@@ -261,6 +261,17 @@ nav.pestanas button.on{background:var(--violeta);border-color:var(--violeta);col
 .tira .sin{width:100%;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;color:var(--rojo);font-size:10.5px}
 .tira .pie{padding:5px 7px 7px;font-size:10.5px;color:var(--tinta-3);display:flex;gap:4px;align-items:center;flex-wrap:wrap}
 
+/* ── Formato vertical (9:16) ─────────────────────────────────────────────────
+   Los visores SIGUEN al formato elegido. Estaban dibujados a 16:9 fijo, y con
+   `object-fit:cover` recortaban las imágenes verticales para llenar el marco:
+   el material estaba bien en 9:16 y la pantalla lo enseñaba amputado a 16:9,
+   que se lee como «se está generando mal». La clase la pone la aplicación al
+   cargar y al guardar Ajustes. */
+.formato-vertical .visor{aspect-ratio:9/16;max-width:min(100%,340px);margin-inline:auto}
+.formato-vertical .pieza-mat img,.formato-vertical .pieza-mat video{aspect-ratio:9/16;object-fit:cover}
+.formato-vertical .tira img,.formato-vertical .tira .sin{aspect-ratio:9/16}
+.formato-vertical .tiras{grid-template-columns:repeat(auto-fill,minmax(84px,1fr))}
+
 /* ── Interruptor ────────────────────────────────────────────────────────── */
 .interruptor{display:flex;align-items:center;gap:9px;margin:12px 0 0;text-transform:none;letter-spacing:0;font-size:13.5px;color:var(--tinta-2);font-weight:500;cursor:pointer}
 .interruptor input{width:18px;height:18px;flex:none;accent-color:var(--violeta-2);margin:0}

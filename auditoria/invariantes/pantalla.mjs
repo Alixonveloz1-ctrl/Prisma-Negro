@@ -656,4 +656,53 @@ export const invariantes = [
         ),
       ),
   },
+
+  {
+    nombre: 'el-formato-elegido-manda-tambien-en-los-visores',
+    dice: 'Se eligió 9:16 y la previa salía «en 16:9». El material estaba bien —las imágenes se piden en 9:16 y la hoja intercambia ancho y alto— pero los visores estaban dibujados a 16:9 FIJO en el CSS, y con object-fit:cover recortaban lo vertical para llenar el marco: un 9:16 amputado se lee como «se está generando mal».',
+    async comprobar(ctx) {
+      const css = hoja(ctx);
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      for (const [regla, que] of [
+        ['.formato-vertical .visor', 'el visor del montado'],
+        ['.formato-vertical .pieza-mat img', 'las miniaturas de la galería'],
+        ['.formato-vertical .tira img', 'las tiras'],
+      ]) {
+        const i = css.indexOf(regla);
+        if (i < 0) fallos.push(`No hay regla vertical para ${que}: seguiría clavado en 16:9.`);
+        else if (!/9\/16/.test(css.slice(i, css.indexOf('}', i)))) {
+          fallos.push(`La regla vertical de ${que} no dice 9/16.`);
+        }
+      }
+      if (!/classList\.toggle\('formato-vertical', !!P\.config\.formato\.vertical\)/.test(main)) {
+        fallos.push('Nadie pone la clase en el cuerpo: las reglas verticales no se aplicarían nunca.');
+      }
+
+      // Y EN EJECUCIÓN, los dos formatos: con vertical elegido la clase está; sin
+      // él, no está. La configuración pasa por sanear, como en la vida real.
+      const { humoDeLaPantalla, proyectoYaEmpezado } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+
+      const vertical = proyectoYaEmpezado();
+      vertical.config = { formato: { vertical: true } };
+      const v = await humoDeLaPantalla({ parche, proyecto: vertical });
+      if (!v.claseCuerpo('formato-vertical')) {
+        fallos.push('Con 9:16 elegido, el cuerpo no lleva la clase: los visores siguen en 16:9.');
+      }
+      const h = await humoDeLaPantalla({ parche });
+      if (h.claseCuerpo('formato-vertical')) {
+        fallos.push('Sin 9:16 elegido, la clase está puesta igual: el 16:9 saldría amputado.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: nadie pone la clase.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace("  document.body.classList.toggle('formato-vertical', !!P.config.formato.vertical);\n", ''),
+      ),
+  },
 ];

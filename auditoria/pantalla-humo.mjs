@@ -481,6 +481,7 @@ export async function humoDeLaPantalla({
     opcionesDe: (id) => elementos.get(id)?.children.length || 0,
     texto: (id) => elementos.get(id)?.textContent || '',
     html: (id) => elementos.get(id)?.innerHTML || '',
+    claseCuerpo: (c) => doc.body.classList.contains(c),
     /**
      * Lo que la pantalla ESTÁ DICIENDO en rojo después de arrancar.
      *
