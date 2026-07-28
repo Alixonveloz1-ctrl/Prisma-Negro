@@ -136,8 +136,12 @@ class Elemento {
 }
 
 /** Lo que contesta la nube de mentira a cada modo. */
-function respuestaDe(modo, cuerpo) {
+function respuestaDe(modo, cuerpo, nube = null) {
   switch (modo) {
+    case 'proyecto.cargar':
+      return nube ? { existe: true, proyecto: nube } : { existe: false };
+    case 'proyecto.guardar':
+      return { guardado: true };
     case 'salud':
       return {
         configuracion: { lista: true, faltan: [] },
@@ -148,7 +152,7 @@ function respuestaDe(modo, cuerpo) {
         ],
       };
     case 'proyecto.listar':
-      return { proyectos: [] };
+      return { proyectos: nube ? [nube.id] : [] };
     case 'modelos.catalogo':
       return {
         disponibles: {
@@ -324,6 +328,9 @@ export async function humoDeLaPantalla({
   // Modos a los que la nube de mentira contesta con un error, para comprobar qué
   // queda en pie cuando algo no llega. Con `['*']`, ninguno contesta.
   fallan = [],
+  // Un proyecto guardado EN LA NUBE de mentira. Con `proyecto: null` y esto
+  // puesto se prueba la recuperación: el teléfono perdió todo y la nube lo tiene.
+  nube = null,
 } = {}) {
   const antes = {
     fetch: globalThis.fetch,
@@ -407,7 +414,7 @@ export async function humoDeLaPantalla({
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    return new Response(JSON.stringify({ ok: true, ...respuestaDe(modo, cuerpo) }), {
+    return new Response(JSON.stringify({ ok: true, ...respuestaDe(modo, cuerpo, nube) }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -453,8 +460,11 @@ export async function humoDeLaPantalla({
     globalThis.sessionStorage = antes.sessionStorage;
     globalThis.localStorage = antes.localStorage;
     URL.createObjectURL = antes.URL_createObjectURL;
-    // Y no se le deja al siguiente arnés la conexión a ESTA base de mentira.
+    // Y no se le deja al siguiente arnés la conexión a ESTA base de mentira,
+    // ni una subida a la nube pendiente que dispararía un fetch DE VERDAD
+    // cuando el de mentira ya no esté puesto.
     (await import('../app/local.js')).olvidarBase();
+    (await import('../app/estado.js')).cancelarSubida();
   }
 
   return {

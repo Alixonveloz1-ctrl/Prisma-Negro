@@ -201,6 +201,28 @@ async function arrancar() {
   P = locales.length
     ? await estado.cargarLocal(locales.sort((a, b) => b.modificado - a.modificado)[0].id)
     : estado.nuevoProyecto();
+
+  // LA NUBE DEVUELVE LO QUE EL TELÉFONO PIERDA.
+  //
+  // Safari borra su almacén local cuando le parece —presión de espacio, días sin
+  // entrar— y aquí el teléfono era el único que tenía el proyecto: las fichas, la
+  // dirección y el guion desaparecían «guardados» y tocaba volver a pagarlos. La
+  // copia de la nube ahora se mantiene sola al guardar; esto es el otro sentido:
+  // si la de la nube es más nueva que la local —o si aquí no hay nada—, manda
+  // ella. Sin nube se sigue con lo local, como siempre.
+  try {
+    const ids = await estado.listarRemotos();
+    const id = ids.includes(P.id) ? P.id : ids[0];
+    if (id) {
+      const nube = await estado.cargarRemoto(id);
+      if (nube && (!locales.length || (nube.modificado || 0) > (P.modificado || 0))) {
+        P = nube;
+        avisar('proyecto', 'Recuperado de tu nube: aquí faltaba lo último.', 'bueno');
+      }
+    }
+  } catch {
+    /* sin nube se trabaja igual */
+  }
   ponerModeloTexto(P.config.texto.modelo);
   ponerModelos({ imagen: P.config.imagenModelo.modelo, video: P.config.videoModelo.modelo });
   await guardar();

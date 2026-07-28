@@ -533,4 +533,56 @@ export const invariantes = [
     romper: (ctx) =>
       editando(ctx, 'app/main.js', (t) => t.replace('  pintarCuentasFase();\n', '')),
   },
+
+  {
+    nombre: 'la-nube-devuelve-lo-que-el-telefono-pierda',
+    dice: '«Se supone que iban a quedar guardadas, pero cada vez que actualizo se borran.» El proyecto vivía SOLO en el teléfono: la copia de la nube existía pero había que subirla a mano con un botón, y Safari borra su almacén local cuando le parece. Las fichas, la dirección y el guion desaparecían «guardados» y tocaba volver a pagarlos.',
+    async comprobar(ctx) {
+      const estado = fuente(ctx, 'app/estado.js');
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      // 1 · La subida se mantiene sola: cada guardado la programa, con calma.
+      if (!/programarSubida\(proyecto\)/.test(estado)) {
+        fallos.push('Guardar no programa la copia de la nube: el teléfono vuelve a ser el único que tiene el proyecto.');
+      }
+      if (!/ENTRE_SUBIDAS/.test(estado)) {
+        fallos.push('Las subidas no van espaciadas: una por toma generada saturaría la puerta.');
+      }
+      if (!/subidaPendiente\.unref\?\.\(\)/.test(estado)) {
+        fallos.push('El temporizador retendría vivo el proceso de las pruebas.');
+      }
+
+      // 2 · Y EN EJECUCIÓN, los dos sentidos. El teléfono perdió todo y la nube lo
+      // tiene: el arranque lo recupera solo. La nube es más vieja: no pisa.
+      const { humoDeLaPantalla, proyectoYaEmpezado } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+
+      const rec = await humoDeLaPantalla({ parche, proyecto: null, nube: proyectoYaEmpezado() });
+      if (rec.texto('cf-voz') !== '8/12') {
+        fallos.push(
+          `El teléfono sin nada y la nube con el proyecto: tras arrancar, la voz dice ` +
+            `«${rec.texto('cf-voz')}» en vez de «8/12». No se recuperó.`,
+        );
+      }
+
+      const vieja = proyectoYaEmpezado();
+      vieja.modificado = 1;
+      vieja.piezas[0].tomas = [];
+      const localNueva = proyectoYaEmpezado();
+      localNueva.modificado = 9e15;
+      const pisa = await humoDeLaPantalla({ parche, proyecto: localNueva, nube: vieja });
+      if (pisa.texto('cf-voz') !== '8/12') {
+        fallos.push('Una copia de nube MÁS VIEJA pisó el trabajo local más nuevo.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: el arranque sin mirar la nube.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace('const ids = await estado.listarRemotos();', 'const ids = [];'),
+      ),
+  },
 ];

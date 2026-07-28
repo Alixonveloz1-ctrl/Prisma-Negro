@@ -326,8 +326,55 @@ export async function guardar(proyecto, { remoto = false } = {}) {
     // El almacén es la única fuente de verdad (§1): si esto falla, hay que
     // enterarse. No se traga el error.
     await llamar('proyecto.guardar', { id: proyecto.id, proyecto });
+    ultimaSubida = Date.now();
+    proyectoASubir = null;
+    return proyecto;
   }
+  // Y la copia de la nube se mantiene SOLA. Antes solo se subía al darle a un
+  // botón, así que el teléfono era el único que tenía el proyecto — y Safari
+  // borra su almacén local cuando le parece. Las fichas, la dirección y el guion
+  // desaparecían «guardados».
+  programarSubida(proyecto);
   return proyecto;
+}
+
+// ── La copia de la nube, que se mantiene sola ─────────────────────────────────
+//
+// Sin aspavientos: como mucho una subida cada veinte segundos, en silencio, y si
+// falla no pasa nada — la local ya está, y el siguiente guardado lo vuelve a
+// intentar. Las fases guardan constantemente, así que la nube va siempre a menos
+// de un minuto del teléfono.
+
+const ENTRE_SUBIDAS = 20000;
+let subidaPendiente = null;
+let proyectoASubir = null;
+let ultimaSubida = 0;
+
+function programarSubida(proyecto) {
+  proyectoASubir = proyecto;
+  if (subidaPendiente) return;
+  const espera = Math.max(500, ENTRE_SUBIDAS - (Date.now() - ultimaSubida));
+  subidaPendiente = setTimeout(async () => {
+    subidaPendiente = null;
+    const p = proyectoASubir;
+    if (!p) return;
+    try {
+      await llamar('proyecto.guardar', { id: p.id, proyecto: p });
+      ultimaSubida = Date.now();
+      proyectoASubir = null;
+    } catch {
+      // La local ya está. El próximo guardado vuelve a programar esta.
+    }
+  }, espera);
+  // En Node (las pruebas), un temporizador vivo retendría el proceso entero.
+  subidaPendiente.unref?.();
+}
+
+/** Cancela la subida pendiente. Lo usan las pruebas al recoger sus globales. */
+export function cancelarSubida() {
+  if (subidaPendiente) clearTimeout(subidaPendiente);
+  subidaPendiente = null;
+  proyectoASubir = null;
 }
 
 export const listarLocales = () => local.listarProyectos();
