@@ -869,6 +869,11 @@ export const invariantes = [
       if (!/!r\.tiempos && bloque\.tomas\.length > 1/.test(nar)) {
         fallos.push('Sin tiempos del servicio se sigue adivinando el corte, en vez de narrar toma a toma.');
       }
+      // Y una voz que NUNCA da marcas (Chirp, Studio, Journey, Gemini) ni pide el
+      // bloque: ese audio se tiraría entero — el guion pagado dos veces.
+      if (!/VOZ_SIN_MARCAS/.test(nar) || !/VOZ_SIN_MARCAS\.test\(n\.nombreVoz/.test(nar)) {
+        fallos.push('Con una voz sin marcas se pide el bloque entero y se tira: el guion se paga dos veces.');
+      }
       if (!/bloque\.tomas\.length === 1 \? \[audio\.muestras\.length \/ audio\.frecuencia\]/.test(nar)) {
         fallos.push('Una toma sola no declara su final como tiempo exacto: saldría marcada como estimada.');
       }
