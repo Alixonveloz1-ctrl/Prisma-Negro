@@ -1082,6 +1082,79 @@ accion('b-musica', async () => {
   informar(r, 'música');
 });
 
+/**
+ * Le pregunta al almacén qué hay generado de verdad, y lo apunta.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «No sé qué está generado y qué no.»
+ *
+ * Y no había manera de saberlo. El proyecto anotaba «imagen: ok» cuando la llamada
+ * VOLVÍA, así que todo lo que se generó y se subió pero cuya respuesta se perdió
+ * —un corte de red, la plataforma cortando por tiempo— quedaba pagado, guardado en
+ * la nube, y marcado como si no existiera. Al volver a darle se pagaba otra vez.
+ *
+ * Con esto la verdad la dice el almacén, que es donde está el material, y no la
+ * memoria de una llamada que a lo mejor no llegó. Cuesta una consulta y no genera
+ * nada.
+ *
+ * Va en los dos sentidos, y el segundo importa igual: lo que el proyecto da por
+ * hecho y NO está arriba se desmarca. Si no, quedaría una toma que dice tener
+ * imagen y cuya imagen no existe, y eso para el montaje a mitad.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+accion('b-inventario', async () => {
+  avisar('paso4', 'Preguntando al almacén qué hay generado…');
+  const r = await llamar('listar', { prefijo: `${P.id}/` });
+  const hay = new Map((r.materiales || []).filter((m) => m.bytes > 0).map((m) => [m.clave, m]));
+
+  const cambios = { puestas: [], quitadas: [] };
+  const mirar = (etiqueta, tiene, poner) => {
+    const esta = hay.has(etiqueta.clave);
+    if (esta && !tiene) {
+      poner('ok');
+      cambios.puestas.push(etiqueta.dice);
+    } else if (!esta && tiene) {
+      poner(null);
+      cambios.quitadas.push(etiqueta.dice);
+    }
+  };
+
+  for (const t of pieza().tomas) {
+    // Lo heredado y lo que repite otra toma no tiene archivo propio: preguntar por
+    // él daría «no está» y lo desmarcaría, que es justo al revés de la verdad.
+    const propia = t.reusa === null || t.reusa === undefined;
+    mirar({ clave: claveToma(P.id, t.i, 'audio'), dice: `voz ${t.i + 1}` }, t.audio === 'ok', (v) => (t.audio = v));
+    if (propia && !t.heredado) {
+      mirar({ clave: claveToma(P.id, t.i, 'img'), dice: `imagen ${t.i + 1}` }, t.imagen === 'ok', (v) => (t.imagen = v));
+    }
+    if (propia && t.movimiento && !t.heredadoVid) {
+      mirar({ clave: claveToma(P.id, t.i, 'vid'), dice: `clip ${t.i + 1}` }, t.video === 'ok', (v) => (t.video = v));
+    }
+  }
+  for (const e of pieza().escenas) {
+    const clave = `${P.id}/mus/${String(e.n).padStart(3, '0')}`;
+    mirar({ clave, dice: `música ${e.n}` }, e.musica === 'ok', (v) => (e.musica = v));
+  }
+
+  await guardar();
+  pintarTodo();
+
+  const partes = [];
+  if (cambios.puestas.length) {
+    partes.push(`${cambios.puestas.length} estaban generadas y no constaban (${cambios.puestas.slice(0, 6).join(', ')}${cambios.puestas.length > 6 ? '…' : ''})`);
+  }
+  if (cambios.quitadas.length) {
+    partes.push(`${cambios.quitadas.length} constaban y no están (${cambios.quitadas.slice(0, 6).join(', ')}${cambios.quitadas.length > 6 ? '…' : ''})`);
+  }
+  avisar(
+    'paso4',
+    partes.length
+      ? `${hay.size} materiales en el almacén. ${partes.join('. ')}.`
+      : `${hay.size} materiales en el almacén, y el proyecto ya decía exactamente eso.`,
+    partes.length ? 'bueno' : '',
+  );
+});
+
 function informar(r, que) {
   pintarPasos();
   if (r.detenida) {

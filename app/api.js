@@ -82,6 +82,63 @@ const dormir = (ms, senal) =>
  */
 const esperar = (intento, senal) => dormir(Math.min(8000, 600 * 2 ** intento), senal);
 
+/**
+ * Qué decir cuando el servidor contesta algo que no es JSON.
+ *
+ * Que no sea JSON significa que la respuesta no la escribió la herramienta: la
+ * escribió la plataforma, y por eso hay que traducirla. Y hay que traducirla BIEN,
+ * porque cada una manda a arreglar una cosa distinta.
+ */
+function mensajeDeRespuestaCruda(estado) {
+  if (estado === 504 || estado === 502 || estado === 524) {
+    return (
+      'La generación tardó más de lo que la plataforma permite y la cortó a mitad ' +
+      `(HTTP ${estado}). No es tamaño: es tiempo. Si pasa a menudo, en Ajustes hay ` +
+      'generadores más rápidos — Nano Banana 2 para imagen tarda menos de la mitad ' +
+      'que Nano Banana Pro. Lo que llegara a terminar se guarda igual, así que ' +
+      'volver a darle no lo paga otra vez.'
+    );
+  }
+  if (estado === 413) {
+    return 'Lo que se mandó no cabe en una petición (HTTP 413). El tope de la plataforma es 4,5 MB.';
+  }
+  return `El servidor respondió algo que no es JSON (HTTP ${estado}).`;
+}
+
+/**
+ * ¿Llegó el material al almacén a pesar de todo?
+ *
+ * Se pregunta cuando la respuesta se perdió: si el archivo está y se escribió HACE
+ * NADA, es que la generación sí terminó y lo único que falló fue el viaje de
+ * vuelta. Se da por buena y no se vuelve a pagar.
+ *
+ * Lo de «hace nada» importa: sin mirar la fecha, rehacer una imagen que ya existía
+ * daría por buena la vieja en cuanto hubiera un corte. La función de la plataforma
+ * no puede durar más de un minuto, así que cuatro sobran para cubrir el hueco y no
+ * llegan a alcanzar nada de una sesión anterior.
+ */
+const FRESCO_MS = 4 * 60 * 1000;
+
+async function llegoDeTodasFormas(clave, senal) {
+  try {
+    const r = await fetch(PUERTA, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modo: 'ficha', clave, acceso: claveAcceso }),
+      signal: senal,
+    });
+    if (!r.ok) return null;
+    const c = await r.json();
+    const f = c?.ficha;
+    if (!f?.existe || !f.actualizado) return null;
+    if (Date.now() - Date.parse(f.actualizado) > FRESCO_MS) return null;
+    return { bytes: f.bytes };
+  } catch {
+    // Si ni siquiera se puede preguntar, se reintenta como siempre.
+    return null;
+  }
+}
+
 /** ¿Es un «espera» y no un «no»? */
 const esEspera = (estado, texto) =>
   estado === 429 ||
@@ -184,12 +241,28 @@ export async function llamar(modo, datos = {}, { reintentos = 2, senal, alEspera
     try {
       cuerpo = await r.json();
     } catch {
-      ultimo = new ErrorPuerta(
-        `El servidor respondió algo que no es JSON (HTTP ${r.status}). ` +
-          'Si venía de una generación grande, casi seguro es el tope de 4,5 MB.',
-        { estado: r.status },
-      );
+      // 504 NO ES TAMAÑO, ES TIEMPO. Y el mensaje decía lo contrario.
+      //
+      // Cuando la plataforma corta la función por tiempo devuelve una página de
+      // error suya, no JSON, y esto contestaba «casi seguro es el tope de 4,5 MB».
+      // Mandaba a mirar el sitio equivocado: no había nada que encoger, había que
+      // tardar menos. Un mensaje que apunta mal cuesta más que no decir nada.
+      ultimo = new ErrorPuerta(mensajeDeRespuestaCruda(r.status), { estado: r.status });
       if (r.status < 500) throw ultimo;
+
+      // Y LO QUE SE HIZO ANTES DE QUE CORTARAN, SE HIZO.
+      //
+      // La imagen se genera y se sube al almacén, y solo después se contesta. Si
+      // el corte llega en medio, el archivo YA ESTÁ ARRIBA y la respuesta se
+      // perdió por el camino. Volver a generarlo es pagarlo dos veces por un
+      // problema de fontanería.
+      if (datos.guardarEn) {
+        const ya = await llegoDeTodasFormas(datos.guardarEn, senal);
+        if (ya) {
+          aflojar();
+          return { ok: true, guardado: ya, recuperado: true };
+        }
+      }
       await esperar(intento, senal);
       continue;
     }

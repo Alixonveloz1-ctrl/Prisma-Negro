@@ -67,12 +67,6 @@ const CAMINOS = [
     dice: /no es JSON/i,
   },
   {
-    nombre: 'el servidor contesta algo que no es JSON, con un 413',
-    respuestas: [{ tipo: 'crudo', estado: 413, texto: 'demasiado grande' }],
-    esperado: 'falla',
-    dice: /no es JSON|4,5 MB/i,
-  },
-  {
     nombre: 'la cuota está agotada y luego se abre',
     respuestas: [
       { tipo: 'ok', estado: 429, cuerpo: { ok: false, error: 'Resource has been exhausted' } },
@@ -111,6 +105,42 @@ const CAMINOS = [
     esperado: 'vale',
   },
   {
+    // EL CASO DEL 504. La plataforma corta la función por tiempo cuando la imagen
+    // YA SE GENERÓ Y YA SE SUBIÓ: lo único que se perdió fue el viaje de vuelta.
+    // Volver a generarla es pagarla dos veces por un problema de fontanería.
+    nombre: 'la plataforma corta por tiempo pero el material ya está arriba',
+    datos: { guardarEn: 'p01/t000/img' },
+    respuestas: [{ tipo: 'crudo', estado: 504, texto: '<html>Gateway Timeout</html>' }],
+    ficha: { existe: true, bytes: 900000, actualizado: 'ahora' },
+    esperado: 'vale',
+    // Y no puede haber vuelto a llamar al generador: eso sería pagarla otra vez.
+    sinRepetir: true,
+  },
+  {
+    nombre: 'la plataforma corta por tiempo y no había llegado nada',
+    datos: { guardarEn: 'p01/t000/img' },
+    respuestas: [{ tipo: 'crudo', estado: 504, texto: '<html>Gateway Timeout</html>' }],
+    ficha: { existe: false, bytes: 0, actualizado: null },
+    esperado: 'falla',
+    dice: /tiempo/i,
+  },
+  {
+    // La misma foto, pero de la semana pasada: eso NO es lo que se acaba de
+    // generar. Sin mirar la fecha, rehacer una imagen daría por buena la vieja.
+    nombre: 'corta por tiempo y lo que hay en el almacén es viejo',
+    datos: { guardarEn: 'p01/t000/img' },
+    respuestas: [{ tipo: 'crudo', estado: 504, texto: '<html>Gateway Timeout</html>' }],
+    ficha: { existe: true, bytes: 900000, actualizado: 'hace una semana' },
+    esperado: 'falla',
+    dice: /tiempo/i,
+  },
+  {
+    nombre: 'lo que se manda no cabe',
+    respuestas: [{ tipo: 'crudo', estado: 413, texto: 'Payload Too Large' }],
+    esperado: 'falla',
+    dice: /4,5 MB/,
+  },
+  {
     nombre: 'se pulsa detener',
     respuestas: [{ tipo: 'revienta' }],
     abortar: true,
@@ -134,6 +164,8 @@ export async function humoDeLaPuerta({ parche = null } = {}) {
   const fallos = [];
   let cola = [];
   let pedidos = 0;
+  let generaciones = 0;
+  let ficha = { existe: false, bytes: 0, actualizado: null };
 
   globalThis.indexedDB = indexedDbDeMentira();
   // El reloj en falso: las esperas de cuota son de minutos y aquí no pueden costar
@@ -143,8 +175,25 @@ export async function humoDeLaPuerta({ parche = null } = {}) {
     return 0;
   };
 
-  globalThis.fetch = async () => {
+  globalThis.fetch = async (url, opciones = {}) => {
     pedidos++;
+    let cuerpo = null;
+    try {
+      cuerpo = opciones.body ? JSON.parse(opciones.body) : null;
+    } catch {
+      cuerpo = null;
+    }
+
+    // Preguntar por una ficha NO es generar: es lo que se hace para NO generar.
+    // Va aparte para poder contar las generaciones de verdad.
+    if (cuerpo?.modo === 'ficha') {
+      return new Response(JSON.stringify({ ok: true, ficha }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    generaciones++;
     const paso = cola.length > 1 ? cola.shift() : cola[0];
     if (paso.tipo === 'revienta') throw new TypeError('Failed to fetch');
     if (paso.tipo === 'crudo') {
@@ -171,6 +220,18 @@ export async function humoDeLaPuerta({ parche = null } = {}) {
     for (const c of CAMINOS) {
       cola = [...c.respuestas];
       pedidos = 0;
+      generaciones = 0;
+      ficha = c.ficha
+        ? {
+            ...c.ficha,
+            actualizado:
+              c.ficha.actualizado === 'ahora'
+                ? new Date(Date.now() - 5000).toISOString()
+                : c.ficha.actualizado === 'hace una semana'
+                  ? new Date(Date.now() - 7 * 864e5).toISOString()
+                  : c.ficha.actualizado,
+          }
+        : { existe: false, bytes: 0, actualizado: null };
       const control = new AbortController();
       if (c.abortar) control.abort();
 
@@ -210,8 +271,14 @@ export async function humoDeLaPuerta({ parche = null } = {}) {
       }
 
       // Y el que tiene que reintentar, que reintente de verdad.
-      if (/vuelve|se abre/.test(c.nombre) && pedidos < 2) {
-        fallos.push(`«${c.nombre}»: no se reintentó ni una vez (${pedidos} petición).`);
+      if (/vuelve|se abre/.test(c.nombre) && generaciones < 2) {
+        fallos.push(`«${c.nombre}»: no se reintentó ni una vez (${generaciones} petición).`);
+      }
+      // Y el que NO tiene que reintentar, que no lo haga: eso es dinero.
+      if (c.sinRepetir && generaciones > 1) {
+        fallos.push(
+          `«${c.nombre}»: se volvió a generar ${generaciones} veces algo que ya estaba en el almacén. Se paga dos veces.`,
+        );
       }
     }
   } catch (e) {

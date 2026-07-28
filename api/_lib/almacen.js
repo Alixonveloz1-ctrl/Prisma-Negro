@@ -169,11 +169,15 @@ export async function ficha(clave) {
   const ruta = rutaDe(clave);
   const url = `${RAIZ}/storage/v1/b/${encodeURIComponent(bucket())}/o/${encodeURIComponent(ruta)}`;
   const r = await conToken((token) => fetch(url, { headers: { Authorization: `Bearer ${token}` } }));
-  if (r.status === 404) return { existe: false, bytes: 0 };
+  if (r.status === 404) return { existe: false, bytes: 0, actualizado: null };
   if (!r.ok) throw await fallo(r, `consultar «${clave}»`);
   const meta = await r.json();
   const bytes = Number(meta.size || 0);
-  return { existe: bytes > 0, bytes };
+  // CUÁNDO se escribió, no solo si está. Con eso, el navegador puede distinguir
+  // «esto se acaba de generar y la respuesta se perdió por el camino» de «esto es
+  // de la semana pasada». Sin la fecha, un tiempo agotado al REHACER daría por
+  // buena la imagen vieja.
+  return { existe: bytes > 0, bytes, actualizado: meta.updated || null };
 }
 
 /** Fichas de muchos materiales de una vez. El navegador pregunta «qué falta». */

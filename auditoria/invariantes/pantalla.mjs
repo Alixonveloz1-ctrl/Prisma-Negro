@@ -431,4 +431,42 @@ export const invariantes = [
         t.replace('async function cargarModelos() {\n  await pintarModelos();', 'async function cargarModelos() {'),
       ),
   },
+
+  {
+    nombre: 'se-puede-preguntar-al-almacen-que-hay-generado-de-verdad',
+    dice: '«No sé qué está generado y qué no.» Y no había manera de saberlo: el proyecto anotaba «ok» cuando la llamada VOLVÍA, así que todo lo que se generó y se subió pero cuya respuesta se perdió —un corte de red, la plataforma cortando por tiempo— quedaba pagado, guardado en la nube, y marcado como si no existiera. Al volver a darle se pagaba otra vez.',
+    comprobar(ctx) {
+      const main = fuente(ctx, 'app/main.js');
+      const html = ctx.fuentes.get('index.html') || '';
+      const fallos = [];
+
+      if (!/id="b-inventario"/.test(html)) return ['No hay forma de preguntar qué hay generado.'];
+      const i = main.indexOf("accion('b-inventario'");
+      if (i < 0) return ['El botón de revisar existe y no hace nada.'];
+      const cuerpo = main.slice(i, main.indexOf('\nfunction informar', i));
+
+      // La verdad la dice el ALMACÉN, no una llamada que a lo mejor no llegó.
+      if (!/llamar\('listar'/.test(cuerpo)) {
+        fallos.push('No se le pregunta al almacén: seguiría mandando la memoria de la llamada.');
+      }
+      if (!/bytes > 0/.test(cuerpo)) {
+        fallos.push('Un archivo vacío contaría como generado.');
+      }
+      // Va en los DOS sentidos. Solo marcar lo que hay dejaría tomas que dicen
+      // tener imagen y cuya imagen no existe, y eso para el montaje a mitad.
+      if (!/quitadas/.test(cuerpo)) {
+        fallos.push('Solo se marca lo que hay; lo que consta y no está seguiría constando.');
+      }
+      // Y lo heredado o repetido no tiene archivo propio: preguntar por él daría
+      // «no está» y lo desmarcaría, que es al revés de la verdad.
+      if (!/heredado/.test(cuerpo) || !/reusa/.test(cuerpo)) {
+        fallos.push('Lo heredado o repetido se desmarcaría por no tener archivo propio.');
+      }
+      // Y se escribe (§7.3): si no se guarda, al recargar vuelve lo de antes.
+      if (!/await guardar\(\)/.test(cuerpo)) fallos.push('Lo averiguado no se guarda.');
+      if (!/pintarTodo\(\)/.test(cuerpo)) fallos.push('Se averigua y la pantalla no se entera.');
+      return fallos;
+    },
+    romper: (ctx) => editando(ctx, 'app/main.js', (t) => t.replace(/\bquitadas\b/g, 'puestas')),
+  },
 ];

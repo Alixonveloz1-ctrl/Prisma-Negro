@@ -1182,7 +1182,15 @@ export const invariantes = [
         fallos.push(`Un modo exige el campo «${campo}», que es el de la contraseña: uno pisa al otro.`);
       }
       // Y el cliente tiene que ponerlo DESPUÉS de la carga útil.
-      const cuerpo = cliente.slice(cliente.indexOf('body: JSON.stringify('), cliente.indexOf('signal: senal'));
+      //
+      // Se busca DENTRO de `llamar` y no en el primer `body:` del archivo: en
+      // cuanto apareció una segunda petición más arriba —la que pregunta si el
+      // material llegó a pesar del corte—, esto miraba ESA, que no lleva carga
+      // útil, y la comprobación pasaba siempre. Salió «ciega» en el mismo paso en
+      // que se añadió, que es exactamente para lo que sirve `--romper`.
+      const enLlamar = cliente.indexOf('export async function llamar');
+      const desde = cliente.indexOf('body: JSON.stringify(', enLlamar);
+      const cuerpo = cliente.slice(desde, cliente.indexOf('signal: senal', desde));
       const posDatos = cuerpo.indexOf('...datos');
       const posCampo = cuerpo.indexOf(`${campo}:`);
       if (posCampo < 0) fallos.push(`El cliente no manda el campo «${campo}».`);
