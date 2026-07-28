@@ -129,7 +129,9 @@ Reglas de este documental:
       veinte segundos parece un error de montaje, no un motivo. Deja al menos seis
       tomas de por medio.
     · Solo si de verdad se vería igual. Un motivo repetido con la luz cambiada no
-      es el mismo plano: es otro.
+      es el mismo plano: es otro. Y si el ESTADO cambió —el mismo cuarto pero el
+      paciente ya mejoró, la misma casa pero precintada—, eso son DOS imágenes:
+      cambia la descripción y no marques igualQue.
 - EL RESPIRO. Es lo que separa un documental de un noticiero, y es tuyo: cuánto se
   queda la imagen DESPUÉS de que la voz calle. Ahí no hay narración, solo la música
   y lo que se está viendo. Es donde el espectador siente lo que acaba de oír; sin

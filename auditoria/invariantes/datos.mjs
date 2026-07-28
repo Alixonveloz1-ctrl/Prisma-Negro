@@ -1632,13 +1632,27 @@ export const invariantes = [
       const plano = { lugar: 'la comisaría', encuadre: 'plano general', luz: 'noche', descripcion: 'd', sujetos: [] };
       const otra = { ...plano, luz: 'día' };
 
+      // Mismo sitio, otra escena: el cuarto del hospital con el paciente ya
+      // mejorado. La huella suelta (lugar+encuadre+luz) sería idéntica, y AHÍ VAN
+      // DOS IMÁGENES: el emparejado automático solo puede actuar cuando la ficha
+      // entera es idéntica, descripción y sujetos incluidos.
+      const mismoSitioOtraEscena = { ...plano, descripcion: 'el paciente ya mejoró, la cama recogida' };
+
       const tomas = [
         { i: 18, plano, reusa: null, movimiento: false, imagen: 'ok', video: null },
         { i: 30, plano: otra, reusa: null, movimiento: false, imagen: null, video: null },
         { i: 44, plano, reusa: null, movimiento: false, imagen: null, video: null },
         { i: 50, plano, reusa: null, movimiento: true, imagen: 'ok', video: 'ok' },
+        { i: 60, plano: mismoSitioOtraEscena, reusa: null, movimiento: false, imagen: null, video: null },
       ];
       const cambios = emparejarDentroDelCaso('p01', tomas);
+
+      // 0 · El caso del paciente: mismo lugar, misma luz, OTRA descripción. Si se
+      // emparejara, el documental enseñaría al paciente grave donde el guion dice
+      // que mejoró — con la imagen «ahorrada» costando la credibilidad entera.
+      if (cambios.some((c) => c.i === 60)) {
+        fallos.push('Se emparejó el mismo sitio con OTRA escena: el paciente mejorado saldría grave.');
+      }
 
       // 1 · La 18 agarra el clip de la 50, automática.
       const c18 = cambios.find((c) => c.i === 18);

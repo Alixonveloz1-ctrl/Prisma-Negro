@@ -171,12 +171,33 @@ const huellaDePlano = (t) =>
  * tiene material propio. Quien llama los aplica y guarda.
  * ─────────────────────────────────────────────────────────────────────────────
  */
+/**
+ * La huella ESTRICTA: la ficha entera, letra por letra.
+ *
+ * El emparejado automático dentro del caso no puede usar la huella suelta del
+ * banco (lugar + encuadre + luz): el cuarto del hospital con el paciente grave
+ * y el mismo cuarto con el paciente mejorado dan la misma huella suelta, y ahí
+ * van DOS imágenes — el sitio se repite, la escena no. Solo si la descripción y
+ * los sujetos también son idénticos es de verdad la misma imagen. Lo que se
+ * parece sin ser idéntico lo decide una persona, con «Gemela de…».
+ */
+const huellaEstricta = (t) =>
+  [
+    t.plano?.lugar,
+    t.plano?.encuadre,
+    t.plano?.luz,
+    (t.plano?.sujetos || []).join('|'),
+    t.plano?.descripcion,
+  ]
+    .map((x) => String(x || '').trim().toLowerCase().replace(/\s+/g, ' '))
+    .join(' · ');
+
 export function emparejarDentroDelCaso(idPieza, tomas) {
   const clips = new Map();
   const imagenes = new Map();
   for (const t of tomas) {
     if (!t.plano) continue;
-    const k = huellaDePlano(t);
+    const k = huellaEstricta(t);
     if (!k) continue;
     const dueña = t.reusa !== null && t.reusa !== undefined ? tomas.find((y) => y.i === t.reusa) || t : t;
     if (!clips.has(k) && (t.heredadoVid || dueña.heredadoVid || dueña.video === 'ok')) {
@@ -190,7 +211,7 @@ export function emparejarDentroDelCaso(idPieza, tomas) {
   const cambios = [];
   for (const t of tomas) {
     if (!t.plano || t.reusa !== null) continue;
-    const k = huellaDePlano(t);
+    const k = huellaEstricta(t);
 
     const clip = clips.get(k);
     const sinClip = !t.heredadoVid && t.video !== 'ok';
