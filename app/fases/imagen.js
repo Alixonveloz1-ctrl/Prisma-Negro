@@ -360,7 +360,11 @@ export async function generarImagen({ toma, tomas, pieza, config, tratamiento = 
  */
 export async function fotogramaDe({ toma, tomas, pieza }) {
   const dueña = tomaDelFotograma(toma, tomas);
-  const clave = claveToma(pieza, dueña.i, 'img');
+  // Por `claveFotograma`, NO componiendo la clave local a mano: si la imagen es
+  // heredada —de otro caso o de un plano gemelo de este—, la clave local no
+  // existe, esto devolvía «no hay fotograma», y convertir a clip GENERABA una
+  // imagen nueva idéntica a la ya pagada. La herencia también vale de partida.
+  const clave = claveFotograma(pieza, toma, tomas);
   const copia = await local.leerMaterial(clave);
   if (copia) return { clave, blob: copia, de: dueña.i };
 

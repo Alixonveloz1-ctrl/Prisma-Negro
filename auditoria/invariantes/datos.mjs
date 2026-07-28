@@ -1045,6 +1045,15 @@ export const invariantes = [
         fallos.push('Una repetición de una imagen heredada pide un archivo que no existe.');
       }
 
+      // 1b · Y quien LEE un fotograma pasa por la misma resolución: componer la
+      // clave local a mano ignoraba lo heredado, y convertir a clip una imagen
+      // heredada generaba una imagen nueva idéntica a la ya pagada.
+      const img = fuente(ctx, 'app/fases/imagen.js');
+      const j = img.indexOf('export async function fotogramaDe');
+      if (j < 0 || !/const clave = claveFotograma\(pieza, toma, tomas\);/.test(img.slice(j, j + 700))) {
+        fallos.push('El lector de fotogramas compone la clave a mano: lo heredado no le sirve de partida y se paga otra vez.');
+      }
+
       // 2 · El banco no puede repartir la clave de quien a su vez heredó.
       const A = { id: 'p01', titulo: 'A', tomas: [{ i: 3, movimiento: true, video: 'ok', plano }] };
       const B = {
