@@ -20,7 +20,13 @@
 import { llamar } from '../api.js';
 import { claveToma, tomaDelFotograma } from '../../comun/claves.mjs';
 import { reducirReferencias, deBase64 } from '../imagenes.js';
-import { estiloPorId, ESTILOS, BARRERA_DOCUMENTAL } from '../../comun/estilos.mjs';
+import {
+  estiloPorId,
+  ESTILOS,
+  BARRERA_DOCUMENTAL,
+  SIN_TEXTO_LEGIBLE,
+  OFICIO_CINEMATOGRAFICO,
+} from '../../comun/estilos.mjs';
 import * as local from '../local.js';
 import { material } from '../material.js';
 
@@ -40,6 +46,10 @@ export function planificar(tomas, { soloLasQueFaltan = true } = {}) {
     if (t.heredado) return false;
     if (t.reusa !== null && t.reusa !== undefined) return false;
     if (!t.plano) return false;
+    // Y si su clip viene heredado, su imagen NO SE VE NUNCA: en el montaje una toma
+    // con movimiento se monta con el clip, no con el fotograma. Se estaba pagando
+    // una imagen por cada clip reutilizado para no enseñarla jamás.
+    if (t.movimiento && t.heredadoVid) return false;
     return soloLasQueFaltan ? t.imagen !== 'ok' : true;
   });
 }
@@ -89,20 +99,33 @@ export function heredables(tomas, piezasAnteriores) {
       //
       // Y una toma que repite un plano dentro de su pieza tampoco es donante por
       // su índice: su archivo es el de su dueña.
-      const conClip = t.movimiento && t.video === 'ok';
-      const conImagen = !t.movimiento && t.imagen === 'ok';
+      // LOS DOS ESTANTES SON INDEPENDIENTES, y antes no lo eran.
+      //
+      // Decía «es donante de imagen solo si NO lleva movimiento», y eso tiraba a la
+      // basura la mitad del banco: una toma con clip TAMBIÉN tiene su imagen —el
+      // clip sale de ella, siempre—, y esa imagen sirve igual de bien para otro
+      // documental. Con la conversión a clip a mano se notaba el doble: convertías
+      // una imagen en video y la imagen desaparecía del banco.
+      const conClip = t.video === 'ok' || !!t.heredadoVid;
+      const conImagen = t.imagen === 'ok' || !!t.heredado;
       if (!conClip && !conImagen) continue;
 
       const propia = t.reusa !== null && t.reusa !== undefined
         ? (z.tomas || []).find((x) => x.i === t.reusa)
         : t;
-      const clave = conClip
-        ? t.heredadoVid || propia?.heredadoVid || claveToma(z.id, (propia || t).i, 'vid')
-        : t.heredado || propia?.heredado || claveToma(z.id, (propia || t).i, 'img');
-
-      const de = { pieza: z.id, i: t.i, titulo: z.titulo, clave };
-      if (conClip && !clips.has(k)) clips.set(k, de);
-      if (conImagen && !imagenes.has(k)) imagenes.set(k, de);
+      const de = { pieza: z.id, i: t.i, titulo: z.titulo };
+      if (conClip && !clips.has(k)) {
+        clips.set(k, {
+          ...de,
+          clave: t.heredadoVid || propia?.heredadoVid || claveToma(z.id, (propia || t).i, 'vid'),
+        });
+      }
+      if (conImagen && !imagenes.has(k)) {
+        imagenes.set(k, {
+          ...de,
+          clave: t.heredado || propia?.heredado || claveToma(z.id, (propia || t).i, 'img'),
+        });
+      }
     }
   }
 
@@ -193,6 +216,12 @@ export function componerInstruccion(toma, config, { conReferencias = false, trat
     estilo.prompt,
     v ? `Paleta: ${v.paleta}. Luz general: ${v.luz}. Textura: ${v.textura}.` : '',
     v?.queEvitar ? `Evitar: ${v.queEvitar}.` : '',
+    // Lo que hace que sea un fotograma y no una foto de catálogo, y lo que impide
+    // los garabatos donde debería haber un expediente. Van en todas las imágenes,
+    // sea cual sea el estilo: son las dos cosas que el usuario vio mal de un
+    // vistazo, y ninguna de las dos la arregla el estilo por su cuenta.
+    OFICIO_CINEMATOGRAFICO,
+    SIN_TEXTO_LEGIBLE,
     BARRERA_DOCUMENTAL,
     'Decide tú la puesta en escena: la distancia exacta, la posición de los sujetos y hacia dónde miran.',
   ];

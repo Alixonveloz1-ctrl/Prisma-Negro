@@ -1133,4 +1133,215 @@ export const invariantes = [
         ),
       ),
   },
+
+  {
+    nombre: 'ninguna-imagen-pide-letras-y-ninguna-sale-de-catalogo',
+    dice: 'Los expedientes y los titulares salían con garabatos —el generador no sabe escribir— y un texto ilegible en primer plano delata que la imagen es falsa. Y el resto salía «básico»: sujeto centrado, todo enfocado, todo iluminado, el sitio recién ordenado. Eso es una foto de banco de imágenes, no un fotograma.',
+    comprobar(ctx) {
+      const { componerInstruccion, ESTILOS } = ctx.fn;
+      const fallos = [];
+      const toma = {
+        i: 0,
+        plano: {
+          encuadre: 'detalle',
+          lugar: 'el archivo judicial',
+          luz: 'un flexo',
+          sujetos: ['un archivero de unos sesenta'],
+          descripcion: 'Una carpeta abierta sobre la mesa.',
+        },
+      };
+
+      // Las dos exigencias van en TODOS los estilos, no solo en el que esté puesto:
+      // quien añada el séptimo estilo no tiene que acordarse de copiarlas.
+      for (const estilo of ESTILOS) {
+        const config = { ...ctx.config, imagen: { ...ctx.config.imagen, estilo: estilo.id } };
+        const p = componerInstruccion(toma, config, { tratamiento: null });
+
+        if (!/NADA DE TEXTO LEGIBLE/.test(p)) {
+          fallos.push(`Estilo «${estilo.id}»: no se prohíbe el texto legible; los documentos saldrían con garabatos.`);
+        }
+        // Y no basta con prohibirlo: hay que decir CÓMO se resuelve un documento,
+        // o el generador se limita a quitar el documento.
+        if (!/escorzo|fuera de foco|cortad/i.test(p)) {
+          fallos.push(`Estilo «${estilo.id}»: se prohíbe el texto sin decir cómo encuadrar un documento.`);
+        }
+        if (!/FOTOGRAMA de documental, no una foto de banco/.test(p)) {
+          fallos.push(`Estilo «${estilo.id}»: no se pide un fotograma, así que sale una foto de catálogo.`);
+        }
+        // Los tres puntos concretos que separan un fotograma de una foto de stock.
+        // «Que sea cinematográfico» no significa nada para un generador.
+        for (const [qué, re] of [
+          ['un primer término que tape parte del cuadro', /primer t[eé]rmino/i],
+          ['una sola fuente de luz con dirección', /una sola fuente de luz|UNA sola fuente/i],
+          ['textura en el aire', /polvo|vaho|llovizna/i],
+        ]) {
+          if (!re.test(p)) fallos.push(`Estilo «${estilo.id}»: no se pide ${qué}.`);
+        }
+      }
+
+      // Y el director no puede pedir texto por su cuenta: si la descripción dice
+      // «el titular reza DESAPARECIDA», el generador lo intenta igual.
+      const dir = fuente(ctx, 'app/fases/direccion.js');
+      if (!/NADA DE TEXTO LEGIBLE/.test(dir)) {
+        fallos.push('El director puede describir lo que pone un papel, y entonces el generador lo intenta.');
+      }
+      if (!/fotograma/i.test(dir)) {
+        fallos.push('Al director no se le pide que describa fotogramas: seguirá describiendo fotos de archivo.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: la instrucción sin los dos bloques.
+    //
+    // Se sabotea LA FUNCIÓN y no el archivo, que es la lección de siempre: esta
+    // invariante COMPONE instrucciones de verdad, así que tocar el texto del
+    // fuente no la alcanza y salía «ciega».
+    romper: (ctx) =>
+      conFuncion(ctx, 'componerInstruccion', (...a) =>
+        ctx.fn
+          .componerInstruccion(...a)
+          .replace(/Esto es un FOTOGRAMA[\s\S]*?iluminación de estudio\./, '')
+          .replace(/NADA DE TEXTO LEGIBLE[\s\S]*?página escrita\./, ''),
+      ),
+  },
+
+  {
+    nombre: 'una-imagen-convertida-en-clip-sigue-estando-en-el-banco',
+    dice: 'El banco decía «es donante de imagen solo si NO lleva movimiento», y eso tiraba media reserva: una toma con clip TAMBIÉN tiene su imagen —el clip sale de ella, siempre—. Convertías una imagen en video y la imagen desaparecía del banco. Y al revés: una toma que hereda su clip seguía pagando una imagen que no se ve nunca, porque en el montaje manda el clip.',
+    comprobar(ctx) {
+      const { heredables, planificarImagenes } = ctx.fn;
+      const fallos = [];
+      const plano = { lugar: 'la comisaría', encuadre: 'plano general', luz: 'noche', descripcion: 'd', sujetos: [] };
+
+      // 1 · Una toma convertida a clip conserva su imagen y suma su clip: las dos
+      // cosas quedan disponibles para las demás producciones.
+      const anterior = {
+        id: 'p01',
+        titulo: 'Caso A',
+        tomas: [{ i: 5, movimiento: true, imagen: 'ok', video: 'ok', plano }],
+      };
+      const pideImagen = { i: 0, movimiento: false, imagen: null, plano };
+      const pideClip = { i: 1, movimiento: true, video: null, plano };
+      const h = heredables([pideImagen, pideClip], [anterior]);
+
+      const img = h.find((x) => x.tipo === 'img');
+      const vid = h.find((x) => x.tipo === 'vid');
+      if (!img) fallos.push('La imagen de una toma convertida en clip ya no se ofrece: media reserva perdida.');
+      else if (img.de.clave !== 'p01/t005/img') fallos.push(`Se ofrece ${img.de.clave} como imagen.`);
+      if (!vid) fallos.push('El clip no se ofrece.');
+      else if (vid.de.clave !== 'p01/t005/vid') fallos.push(`Se ofrece ${vid.de.clave} como clip.`);
+
+      // 2 · Una toma con el clip heredado NO paga imagen: no se vería jamás.
+      const conClipHeredado = { i: 2, movimiento: true, heredadoVid: 'p01/t005/vid', video: null, imagen: null, plano };
+      const normal = { i: 3, movimiento: false, imagen: null, plano };
+      // Y una con movimiento pero SIN clip resuelto sí la paga: es su fotograma
+      // de partida, sin él no hay clip que generar.
+      const sinResolver = { i: 4, movimiento: true, video: null, imagen: null, plano };
+      const plan = planificarImagenes([conClipHeredado, normal, sinResolver]).map((t) => t.i);
+      if (plan.includes(2)) {
+        fallos.push('Se paga la imagen de una toma cuyo clip viene heredado: no se ve nunca.');
+      }
+      if (!plan.includes(3)) fallos.push('Se deja sin imagen una toma que la necesita.');
+      if (!plan.includes(4)) {
+        fallos.push('Se deja sin imagen una toma con movimiento y sin clip: no habría fotograma de partida.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: quien lleva clip deja de ofrecer su imagen. Se sabotea
+    // LA FUNCIÓN, no el archivo: esta invariante consulta el banco de verdad, así
+    // que editar el fuente no la alcanzaba y salía «ciega».
+    romper: (ctx) =>
+      conFuncion(ctx, 'heredables', (tomas, anteriores) =>
+        ctx.fn.heredables(
+          tomas,
+          (anteriores || []).map((z) => ({
+            ...z,
+            tomas: (z.tomas || []).map((t) => (t.movimiento ? { ...t, imagen: null, heredado: null } : t)),
+          })),
+        ),
+      ),
+  },
+
+  {
+    nombre: 'cualquier-imagen-se-puede-convertir-en-clip',
+    dice: 'El cupo de movimiento lo reparte el director a ciegas, leyendo descripciones. Pero cuál merece moverse se ve mirando la imagen, y eso solo pasa en la previa. Sin un botón ahí, la única forma de animar una toma que el director no marcó era no tenerla.',
+    comprobar(ctx) {
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      const i = main.indexOf('async function convertirEnClip');
+      if (i < 0) return ['No hay forma de convertir una imagen en clip.'];
+      const cuerpo = main.slice(i, i + 1800);
+
+      if (!/Convertir en clip/.test(main)) fallos.push('No hay botón: la función existe y no la llama nadie.');
+      if (!/\bconvertirEnClip\(t\.i/.test(main)) {
+        fallos.push('El botón no dice de qué toma es: convertiría otra.');
+      }
+      if (!/movimiento\.generarClip\(/.test(cuerpo)) fallos.push('No se genera el clip.');
+      if (!/movimiento = true/.test(cuerpo)) {
+        fallos.push('La toma no queda marcada con movimiento: el montaje seguiría poniendo la imagen fija.');
+      }
+      // Marcarla DESPUÉS de generar pierde la decisión si se cierra la pestaña a
+      // mitad: un clip tarda minutos y al volver la toma no sabría que lo lleva.
+      const marca = cuerpo.indexOf('movimiento = true');
+      const genera = cuerpo.indexOf('movimiento.generarClip(');
+      const guardaAntes = cuerpo.indexOf('await guardar()');
+      if (!(marca < guardaAntes && guardaAntes < genera)) {
+        fallos.push('La decisión no se guarda antes de generar: si se cierra a mitad, se pierde.');
+      }
+      // Cuesta dinero, y es la fase más cara: no puede irse en un toque sin avisar.
+      if (!/confirm\(/.test(cuerpo)) fallos.push('Se gasta en un clip sin preguntar.');
+      return fallos;
+    },
+    // Se rompe como estaba: sin marcar la toma, así que el montaje la dejaba fija.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace('pieza().tomas[k].movimiento = true;', ''),
+      ),
+  },
+
+  {
+    nombre: 'el-guion-se-escribe-con-oficio-y-no-solo-con-prohibiciones',
+    dice: 'Las reglas del guion eran todas negativas —nada de preguntas retóricas, nada de «lo que nadie te contó», frases cortas— y con puras prohibiciones sale exactamente un noticiero: datos correctos, bien atribuidos, uno detrás de otro, y nadie llega al minuto tres. Falta decirle QUÉ HACER.',
+    comprobar(ctx) {
+      const g = fuente(ctx, 'app/fases/guion.js');
+      const i = g.indexOf('const SISTEMA');
+      const sistema = i < 0 ? '' : g.slice(i, g.indexOf('`;', i));
+      const fallos = [];
+      if (!sistema) return ['No se encuentran las reglas del guion.'];
+
+      // Lo que de verdad separa un documental de un noticiero, punto por punto.
+      for (const [qué, re] of [
+        ['contar con detalles concretos en vez de resúmenes', /LO CONCRETO|detalle/i],
+        ['retener el significado y responder después', /ADMINISTRA LO QUE SABES|todav[ií]a no ha dicho/i],
+        ['cerrar cada bloque abriendo el siguiente', /NO CIERRES LA ESCENA RESUMIENDO|empuj/i],
+        ['variar la medida de las frases', /Frase larga, frase larga, frase corta|RITMO/],
+        ['usar las palabras literales de las fuentes', /literal|palabras de los dem[aá]s/i],
+      ]) {
+        if (!re.test(sistema)) fallos.push(`No se le pide ${qué}.`);
+      }
+
+      // Y los adjetivos de opinión, que son lo que convierte un documental en un
+      // canal de contenido: decir que algo es escalofriante es garantizar que no lo sea.
+      if (!/escalofriante/i.test(sistema) || !/impactante/i.test(sistema)) {
+        fallos.push('No se prohíben los adjetivos de opinión: volverían «escalofriante» e «impactante».');
+      }
+
+      // El oficio NO puede haberse llevado por delante el rigor: son dos cosas y
+      // las dos caben. Si aflojar el tono aflojó las fuentes, esto no vale nada.
+      for (const [qué, re] of [
+        ['que cada afirmación salga de una ficha', /sale de una ficha/i],
+        ['que no se inventen datos', /No inventes datos/i],
+        ['que se atribuya según el tipo de fuente', /\[judicial\]|\[testimonio\]/],
+        ['que la tensión no salga de insinuar lo que no consta', /nunca de sugerir lo que no consta|no consta/i],
+      ]) {
+        if (!re.test(sistema)) fallos.push(`Se perdió el rigor: ${qué}.`);
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: solo prohibiciones, sin oficio.
+    romper: (ctx) =>
+      editando(ctx, 'app/fases/guion.js', (t) =>
+        t.replace(/- LO CONCRETO, SIEMPRE\.[\s\S]*?explicando lo mismo\./, '- Frases cortas.'),
+      ),
+  },
 ];

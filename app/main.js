@@ -1256,6 +1256,27 @@ function pintarPorTipo() {
       b.textContent = 'Rehacer';
     };
     d.querySelector('.cuerpo').appendChild(b);
+
+    // Cualquier imagen se puede animar, la marcara el director o no. Mirando la
+    // imagen es cuando se ve si merece moverse; decidirlo antes, a ciegas, era
+    // decidirlo por una descripción.
+    if (t.visual) {
+      const c = document.createElement('button');
+      c.className = 'btn chico fantasma';
+      c.textContent = 'Convertir en clip';
+      c.onclick = async () => {
+        c.disabled = true;
+        c.textContent = '…';
+        try {
+          await convertirEnClip(t.i, (m) => (c.textContent = m));
+        } catch (e) {
+          avisar('previa', e.message, 'malo');
+        }
+        c.disabled = false;
+        c.textContent = 'Convertir en clip';
+      };
+      d.querySelector('.cuerpo').appendChild(c);
+    }
     g.appendChild(d);
   }
 
@@ -1329,6 +1350,52 @@ async function rehacerImagen(i) {
   await refrescar(`${P.id}/t${String(i).padStart(3, '0')}/img`);
   await guardar();
   avisar('previa', 'Imagen rehecha. Vuelve a preparar para verla.', 'bueno');
+}
+
+/**
+ * Convierte en clip la imagen de una toma, la haya marcado el director o no.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * El director decide el cupo de movimiento por presupuesto y a ciegas: reparte
+ * clips por la pieza leyendo descripciones. Pero cuál merece moverse se ve
+ * MIRANDO LA IMAGEN, y eso solo pasa aquí, en la previa, con la imagen delante.
+ *
+ * Así que se puede animar cualquiera. No gasta imagen —ya está pagada, el clip
+ * parte de ella— y la imagen NO se pierde: sigue en el banco, junto al clip, y
+ * las dos quedan disponibles para las demás producciones.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+async function convertirEnClip(i, decir = () => {}) {
+  const k = pieza().tomas.findIndex((t) => t.i === i);
+  if (k < 0) throw new Error('No encuentro esa toma.');
+
+  const segundos = movimiento.duracionMasCercana(
+    pieza().tomas[k].segundos || 6,
+    P.config.videoModelo?.modelo,
+  );
+  if (!confirm(`Se va a generar un clip de ${segundos} s a partir de esta imagen.\n\nEs la fase más cara. ¿Sigo?`)) {
+    return;
+  }
+
+  // Se marca ANTES de generar y se guarda: si el clip tarda diez minutos y se
+  // cierra la pestaña, al volver la toma ya sabe que lleva movimiento y solo falta
+  // el clip. Marcarla después habría perdido la decisión.
+  pieza().tomas[k].movimiento = true;
+  await guardar();
+
+  avisar('previa', `Generando el clip de la toma ${i + 1}…`);
+  const nueva = await movimiento.generarClip({
+    toma: pieza().tomas[k],
+    tomas: pieza().tomas,
+    pieza: P.id,
+    config: P.config,
+    tratamiento: pieza().tratamiento,
+    aviso: (m) => decir(m.length > 24 ? `${m.slice(0, 22)}…` : m),
+  });
+  pieza().tomas[k] = nueva;
+  await refrescar(claveToma(P.id, i, 'vid'));
+  await guardar();
+  avisar('previa', `Clip listo. Vuelve a preparar para verlo montado.`, 'bueno');
 }
 
 async function rehacerMusica(n) {

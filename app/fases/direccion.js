@@ -122,7 +122,23 @@ Reglas de este documental:
     · Solo si de verdad se vería igual. Un motivo repetido con la luz cambiada no
       es el mismo plano: es otro.
 - La descripción es para un generador de imágenes: concreta, visual, sin metáforas
-  ni adjetivos de opinión. Nombra la luz, la hora del día, la textura, el color.`;
+  ni adjetivos de opinión. Nombra la luz, la hora del día, la textura, el color.
+- Y descríbela COMO UN FOTOGRAMA, no como una foto de archivo. Es la diferencia
+  entre que se vea bien y que se vea de banco de imágenes. En cada descripción di:
+  desde dónde se mira (altura de la cámara y qué hay en primer término tapando
+  parte del cuadro: un marco, una ventana, un hombro, unas ramas), de dónde viene
+  la luz y qué se queda a oscuras, y qué hay en el aire (vaho, polvo, llovizna,
+  humo). «Un despacho con papeles» no vale. «El despacho visto desde el pasillo,
+  por el hueco de la puerta entreabierta; solo lo alumbra el flexo de la mesa y el
+  resto de la habitación está en negro; polvo suspendido en el haz» sí.
+- NADA DE TEXTO LEGIBLE. El generador no sabe escribir: donde pidas un titular,
+  una carta o un cartel, salen garabatos, y un garabato en primer plano delata que
+  la imagen es falsa. No describas nunca lo que PONE en un papel, una pantalla, un
+  cartel o una matrícula. Los documentos se ven en escorzo, fuera de foco, cortados
+  por el borde o tapados por una mano: se entiende que es un expediente sin que se
+  lea. Si el texto de una toma habla de un documento, busca el objeto alrededor —la
+  carpeta cerrada, la caja del archivo, la mano que lo sostiene, el sello— antes
+  que la página escrita.`;
 
 /**
  * Dirige todas las tomas, por lotes, y devuelve las tomas con `plano`,

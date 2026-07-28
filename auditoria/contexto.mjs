@@ -146,8 +146,12 @@ async function funcionesPuras() {
   const inv = await import('../app/fases/investigacion.js');
   const aud = await import('../comun/audio.mjs');
   const mus = await import('../app/fases/musica.js');
+  const est2 = await import('../comun/estilos.mjs');
   return {
     atmosferaDe: mus.atmosferaDe,
+    // La lista de estilos entra por aquí para poder recorrerlos todos: una
+    // comprobación que solo mira el estilo por defecto no dice nada del séptimo.
+    ESTILOS: est2.ESTILOS,
     repartirPorTramos: dir.repartirPorTramos,
     actosDe: gui.actosDe,
     heredables: img.heredables,
