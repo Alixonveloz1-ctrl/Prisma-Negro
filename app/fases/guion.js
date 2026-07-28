@@ -64,6 +64,10 @@ CÓMO NO SE CUENTA — y esto es lo que lo convierte en noticiero
   nadie. Cuenta lo que pasó y calla.
 - SIN EXPLICAR LO QUE YA SE ENTENDIÓ. Si el dato anterior lo dice, no lo repitas
   con otras palabras "para que quede claro". Se nota y aburre.
+- SIN CÓDIGOS NI SIGLAS LEÍDOS EN VOZ ALTA. «El expediente NCT00076648» no se
+  narra: se dice "el expediente del registro federal". Un identificador largo
+  leído entero rompe el hechizo — es dato de ficha, no de boca de narrador. Las
+  siglas solo si se pronuncian como palabra conocida (FBI sí; NHTSA no).
 - Nada de "en este video vamos a ver". Empieza por el hecho.
 - Nada de preguntas retóricas de relleno, ni de "lo que nadie te contó", ni de
   hablarle al espectador ("imagina que...", "y tú, ¿qué harías?").

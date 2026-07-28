@@ -658,6 +658,45 @@ export const invariantes = [
   },
 
   {
+    nombre: 'el-texto-de-una-toma-se-edita-donde-se-escucha',
+    dice: 'La toma 1 leía un código de expediente enterito —«NCT00076648»— y arreglar eso exigía irse al guion, encontrar la frase, volver a partir todo y perder el estado de las 83 tomas. El texto de una toma no sostiene nada más que su voz: cambiarlo solo obliga a volver a narrar su bloque, y todo lo demás —imagen, música, estructura— se queda como está.',
+    comprobar(ctx) {
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      const i = main.indexOf('async function editarTextoDeToma');
+      if (i < 0) return ['No hay forma de editar el texto de una toma.'];
+      const cuerpo = main.slice(i, i + 2200);
+
+      // 1 · La fila de voz lo ofrece: se edita donde se escucha.
+      if (!/alEditar: \(nuevo\) => editarTextoDeToma\(x\.i, nuevo\)/.test(main)) {
+        fallos.push('La fila de voz no ofrece editar: la función existe y no la llama nadie.');
+      }
+      // 2 · El guion maestro sigue al cambio cuando la frase se encuentra tal
+      // cual: si no, volver a partir el guion resucitaría el texto viejo.
+      if (!/guion\.includes\(viejo\)/.test(cuerpo) || !/guion\.replace\(viejo, texto\)/.test(cuerpo)) {
+        fallos.push('El guion maestro no sigue al cambio: re-partirlo resucitaría el texto viejo.');
+      }
+      // 3 · La voz vieja no puede hacerse pasar por la nueva: se desmarca ANTES
+      // de narrar, así un fallo deja la toma contada como pendiente.
+      const marca = cuerpo.indexOf('t.audio = null;');
+      const narra = cuerpo.indexOf('await rehacerVoz(');
+      if (marca < 0 || narra < 0 || marca > narra) {
+        fallos.push('La voz vieja no se desmarca antes de narrar: un fallo la dejaría haciéndose pasar por la nueva.');
+      }
+      // 4 · Y NO toca lo que no es suyo: ni imagen, ni plano, ni escena.
+      if (/t\.imagen|t\.plano|t\.video/.test(cuerpo)) {
+        fallos.push('Editar el texto toca material que no depende de él.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: la voz vieja sobrevive al cambio de texto.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace('  t.audio = null;\n  t.corteExacto = false;\n', '')),
+  },
+
+  {
     nombre: 'el-formato-elegido-manda-tambien-en-los-visores',
     dice: 'Se eligió 9:16 y la previa salía «en 16:9». El material estaba bien —las imágenes se piden en 9:16 y la hoja intercambia ancho y alto— pero los visores estaban dibujados a 16:9 FIJO en el CSS, y con object-fit:cover recortaban lo vertical para llenar el marco: un 9:16 amputado se lee como «se está generando mal».',
     async comprobar(ctx) {

@@ -1451,7 +1451,7 @@ function abrirHoja(id) {
  * teléfono no aguanta. Con blob directo (el muestrario, material ya en mano)
  * sigue funcionando igual que siempre.
  */
-function filaAudio({ titulo, texto, blob, cargar, alRehacer, etiqueta = 'Rehacer' }) {
+function filaAudio({ titulo, texto, blob, cargar, alRehacer, alEditar, etiqueta = 'Rehacer' }) {
   const d = document.createElement('div');
   d.className = 'fila-mat';
   d.innerHTML =
@@ -1505,7 +1505,92 @@ function filaAudio({ titulo, texto, blob, cargar, alRehacer, etiqueta = 'Rehacer
     b.textContent = etiqueta;
   };
   acc.appendChild(b);
+
+  // Editar el texto AQUÍ, donde se escucha. Un código de expediente leído en voz
+  // alta se descubre oyendo la toma, y arreglarlo no puede exigir irse al guion,
+  // encontrar la frase y volver a partir todo.
+  if (alEditar) {
+    const e = document.createElement('button');
+    e.className = 'btn chico fantasma';
+    e.textContent = 'Editar';
+    e.onclick = () => {
+      if (d.dataset.editando) return;
+      d.dataset.editando = '1';
+      const caja = document.createElement('div');
+      caja.style.width = '100%';
+      caja.style.marginTop = '8px';
+      const ta = document.createElement('textarea');
+      ta.value = texto || '';
+      ta.style.minHeight = '90px';
+      const ok = document.createElement('button');
+      ok.className = 'btn chico';
+      ok.textContent = 'Guardar y narrar';
+      ok.style.marginRight = '7px';
+      const no = document.createElement('button');
+      no.className = 'btn chico fantasma';
+      no.textContent = 'Cancelar';
+      no.onclick = () => {
+        delete d.dataset.editando;
+        caja.remove();
+      };
+      ok.onclick = async () => {
+        ok.disabled = true;
+        ok.textContent = 'Narrando…';
+        try {
+          await alEditar(ta.value);
+          delete d.dataset.editando;
+          caja.remove();
+        } catch (err) {
+          avisar('previa', err.message, 'malo');
+          ok.disabled = false;
+          ok.textContent = 'Guardar y narrar';
+        }
+      };
+      caja.append(ta, ok, no);
+      d.querySelector('.txt').appendChild(caja);
+    };
+    acc.appendChild(e);
+  }
   return d;
+}
+
+/**
+ * Cambia el texto de UNA toma y vuelve a narrar solo su bloque.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Es seguro porque el texto de la toma no sostiene nada más: la imagen sale de
+ * la ficha de plano, la música de la escena, y la estructura del guion ya está
+ * partida. Lo único que lee ese texto es la voz — así que cambiar el texto solo
+ * obliga a volver a narrar, y la duración nueva se mide y manda en la hoja como
+ * siempre (§4.5). Nada que re-dirigir, nada que re-generar, nada que se corra.
+ *
+ * El guion maestro SE ACTUALIZA TAMBIÉN cuando la frase vieja se encuentra tal
+ * cual: si no, volver a partir el guion algún día resucitaría el texto viejo.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+async function editarTextoDeToma(i, nuevo) {
+  const texto = String(nuevo || '').trim();
+  if (!texto) throw new Error('El texto no puede quedar vacío.');
+  const k = pieza().tomas.findIndex((t) => t.i === i);
+  if (k < 0) throw new Error('No encuentro esa toma.');
+  const t = pieza().tomas[k];
+  const viejo = (t.texto || '').trim();
+  if (texto === viejo) return;
+
+  if (viejo && pieza().guion.includes(viejo)) {
+    pieza().guion = pieza().guion.replace(viejo, texto);
+    const g = $('guion');
+    if (g) g.value = pieza().guion;
+  }
+  t.texto = texto;
+  // La voz de antes lee el texto de antes: ya no vale. Si la narración de abajo
+  // fallara, la toma queda contada como pendiente y el botón de Narración la
+  // repara — nunca queda una voz vieja haciéndose pasar por la nueva.
+  t.audio = null;
+  t.corteExacto = false;
+  await guardar();
+  avisar('previa', `Toma ${i + 1}: texto cambiado. Narrando de nuevo su bloque…`);
+  await rehacerVoz(i);
 }
 
 // ── Las listas por tipo: DE LO GENERADO, no de la previa preparada ────────────
@@ -1553,6 +1638,7 @@ function pintarPorTipo() {
         texto: x.texto,
         cargar: x.audio === 'ok' ? () => materialLocal(claveToma(P.id, x.i, 'audio'), 'audio/wav') : null,
         alRehacer: () => rehacerVoz(x.i),
+        alEditar: (nuevo) => editarTextoDeToma(x.i, nuevo),
       }),
     );
   }
