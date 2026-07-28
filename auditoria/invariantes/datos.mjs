@@ -750,10 +750,13 @@ export const invariantes = [
         lugar: 'la casa', luz: 'noche', sujetos: [], descripcion: 'd',
       };
       // Un motivo animado que vuelve dos veces, y un clip heredado de otra pieza.
+      // La dueña (2) tiene su clip PAGADO —`video: ok`—: desde que el clip es una
+      // propuesta hasta que se paga, la hoja solo abre clips que existen.
       const tomas = Array.from({ length: 24 }, (_, i) => ({
         i, escena: 0, texto: 'x', segundos: 5, medida: true, plano,
         tipoImagen: 'reconstruccion',
         movimiento: [2, 5, 10, 20].includes(i),
+        video: i === 2 ? 'ok' : null,
         reusa: i === 10 ? 2 : i === 20 ? 10 : null,
         heredadoVid: i === 5 ? 'p00/t003/vid' : undefined,
       }));
@@ -1554,6 +1557,67 @@ export const invariantes = [
     romper: (ctx) =>
       editando(ctx, 'app/fases/guion.js', (t) =>
         t.replace('if (alActo) await alActo(partes[partes.length - 1], n, actos.length);', ''),
+      ),
+  },
+
+  {
+    nombre: 'el-clip-es-una-propuesta-y-la-musica-generada-suena',
+    dice: 'Dos averías de la misma hoja. Una: `movimiento: true` es una PROPUESTA del director, pero la hoja exigía el clip en cuanto la toma lo llevara marcado — sin generarlo salía «sin imagen» con la imagen YA PAGADA al lado; gastar en video lo decide quien paga. Y dos: `escena.musica` guarda el ESTADO («ok») y la hoja lo leía como CLAVE de archivo: pedía bajar un archivo llamado «ok» y el lecho salía mudo, en la previa y en el montaje, con la música generada y cobrada.',
+    comprobar(ctx) {
+      const { construirHoja } = ctx.fn;
+      const fallos = [];
+      const plano = { encuadre: 'plano general', movimientoCamara: 'paneo derecha', lugar: 'x', luz: 'y', sujetos: [], descripcion: 'd' };
+      const base = { escena: 0, segundos: 6, medida: true, plano, audio: 'ok', imagen: 'ok' };
+
+      const hoja = construirHoja({
+        pieza: 'p01',
+        tomas: [
+          { ...base, i: 0, movimiento: true, video: 'ok' },
+          { ...base, i: 1, movimiento: true, video: null },
+          { ...base, i: 2, movimiento: true, heredadoVid: 'p09/t004/vid' },
+        ],
+        escenas: [{ n: 0, musica: 'ok' }],
+      });
+      const [pagado, propuesto, heredado] = hoja.tomas;
+
+      // 1 · Clip pagado: se usa. Clip solo propuesto: la imagen, con su cámara.
+      if (pagado.archivo !== 'p01/t000/vid') fallos.push(`El clip pagado no se usa: sale ${pagado.archivo}.`);
+      if (propuesto.archivo !== 'p01/t001/img') {
+        fallos.push(`Un clip solo propuesto exige ${propuesto.archivo}: la previa dice «sin imagen» con la imagen pagada al lado.`);
+      }
+      if (propuesto.movimiento !== false || !propuesto.camara) {
+        fallos.push('La toma sin clip no baja a imagen con recorrido de cámara: saldría congelada o rompería el montaje.');
+      }
+      if (heredado.archivo !== 'p09/t004/vid') fallos.push('Un clip heredado de otra pieza dejó de usarse.');
+
+      // 2 · El estado «ok» de la música no es una clave de archivo.
+      const [esc] = hoja.escenas;
+      if (esc.musica !== 'p01/mus/000') {
+        fallos.push(`La música de la escena apunta a «${esc.musica}»: el lecho sale mudo con la música pagada.`);
+      }
+      const apagada = construirHoja({
+        pieza: 'p01',
+        tomas: [{ ...base, i: 0 }],
+        escenas: [{ n: 0, musica: null }],
+      });
+      if (apagada.escenas[0].musica !== null) fallos.push('Apagar la música de una escena a propósito dejó de funcionar.');
+      const conClave = construirHoja({
+        pieza: 'p01',
+        tomas: [{ ...base, i: 0 }],
+        escenas: [{ n: 0, musica: 'p07/mus/002' }],
+      });
+      if (conClave.escenas[0].musica !== 'p07/mus/002') {
+        fallos.push('Una música heredada de otra pieza, con su clave, dejó de respetarse.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: todo clip marcado se exige aunque nadie lo pagara.
+    romper: (ctx) =>
+      conFuncion(ctx, 'construirHoja', ({ tomas, ...resto }) =>
+        ctx.fn.construirHoja({
+          ...resto,
+          tomas: (tomas || []).map((t) => (t.movimiento ? { ...t, video: 'ok' } : t)),
+        }),
       ),
   },
 ];

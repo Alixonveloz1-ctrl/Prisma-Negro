@@ -9,7 +9,7 @@
 //
 // Cada regla del §5 viene de un defecto AUDIBLE. Las anotaciones dicen cuál.
 
-import { claveFotograma, claveClip, claveToma, nombreLocal } from './claves.mjs';
+import { claveFotograma, claveClip, claveToma, nombreLocal, tomaDelFotograma } from './claves.mjs';
 
 export const PREDETERMINADO = {
   fps: 30,
@@ -79,12 +79,25 @@ export function construirHoja({ pieza, tomas, escenas = [], config = {} }) {
       // `claveToma(pieza, t.i, 'vid')`: cada toma con movimiento pagaba su propio
       // clip aunque fuera el mismo plano que otra. Y el clip es la fase más cara
       // con diferencia, así que era justo donde más dolía.
-      archivo: t.movimiento
-        ? claveClip(pieza, t, tomas)
-        : claveFotograma(pieza, t, tomas),
+      //
+      // Y EL CLIP ES OPCIONAL. `movimiento: true` es una PROPUESTA del director;
+      // gastarlo o no lo decide quien paga. Antes la hoja exigía el clip en
+      // cuanto la toma lo llevara marcado: sin generarlo salía «sin imagen» en la
+      // previa y material ausente en el montaje, con la imagen YA PAGADA ahí al
+      // lado. Ahora el clip se usa si EXISTE, y si no, la imagen con su recorrido
+      // de cámara — que es exactamente lo que pasa con las tomas fijas.
+      ...(function () {
+        const dueña = tomaDelFotograma(t, tomas);
+        const hayClip =
+          !!t.movimiento &&
+          !!(t.heredadoVid || dueña.heredadoVid || dueña.video === 'ok');
+        return {
+          archivo: hayClip ? claveClip(pieza, t, tomas) : claveFotograma(pieza, t, tomas),
+          movimiento: hayClip,
+          camara: hayClip ? null : camaraDe(t),
+        };
+      })(),
       audio: claveToma(pieza, t.i, 'audio'),
-      movimiento: !!t.movimiento,
-      camara: t.movimiento ? null : camaraDe(t),
       // §8.2: cada toma sabe de qué tipo es su imagen, y eso puede salir en
       // pantalla.
       tipoImagen: t.tipoImagen || 'generada',
@@ -105,11 +118,19 @@ export function construirHoja({ pieza, tomas, escenas = [], config = {} }) {
     .sort((a, b) => a.inicio - b.inicio)
     .map((e) => {
       const decl = escenas.find((x) => x.n === e.n) || {};
+      // DOS SIGNIFICADOS SE PISABAN EN EL MISMO CAMPO, y por eso la música
+      // generada no sonaba nunca. `escena.musica` guarda el ESTADO («ok», puesto
+      // por la fase de música) y esta línea lo leía como CLAVE de archivo: la
+      // hoja pedía bajar un archivo llamado literalmente «ok», que no existe, y
+      // el lecho salía mudo — en la previa y en el montaje. Solo cuenta como
+      // clave lo que tiene forma de clave; «null» sigue siendo apagar la música
+      // de la escena a propósito.
+      const propia = typeof decl.musica === 'string' && decl.musica.includes('/') ? decl.musica : null;
       return {
         n: e.n,
         inicio: e.inicio,
         duracion: q(e.fin - e.inicio, c.fps),
-        musica: decl.musica === null ? null : decl.musica || `${pieza}/mus/${String(e.n).padStart(3, '0')}`,
+        musica: decl.musica === null ? null : propia || `${pieza}/mus/${String(e.n).padStart(3, '0')}`,
       };
     });
 

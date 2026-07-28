@@ -78,7 +78,11 @@ export function proyectoDePrueba() {
       movimiento: i === 2 || i === 10,
       audio: 'ok',
       imagen: 'ok',
-      video: 'ok',
+      // La 2 tiene su clip PAGADO; la 10 lo lleva solo PROPUESTO. Las dos formas
+      // existen en un proyecto real y la hoja las trata distinto: la 10 se monta
+      // con su imagen y su recorrido de cámara, no exigiendo un clip que nadie
+      // decidió pagar.
+      video: i === 2 ? 'ok' : null,
       tipoImagen: 'reconstruccion',
     });
   }

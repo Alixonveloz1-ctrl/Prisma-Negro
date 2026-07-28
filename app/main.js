@@ -1353,6 +1353,10 @@ accion(
 
     const faltan = preparada.tomas.filter((t) => t.falta.length);
     const sinMusica = preparada.hoja.escenas.filter((e) => e.musica && !preparada.musica[e.n]);
+    // Voz cortada ADIVINANDO: es de una narración anterior al corte exacto por
+    // marcas. Suena bien pero el texto de cada toma no cuadra con lo que se oye,
+    // y desde fuera parece un fallo del montaje. Se dice aquí, con la salida.
+    const estimadas = pieza().tomas.filter((t) => t.audio === 'ok' && !t.corteExacto);
     avisar(
       'previa',
       [
@@ -1361,10 +1365,15 @@ accion(
           ? `A ${faltan.length} les falta algo: ${faltan.slice(0, 6).map((t) => `#${t.i + 1} (${t.falta.join('+')})`).join(', ')}`
           : 'Todas completas',
         sinMusica.length ? `${sinMusica.length} escenas sin música` : '',
+        estimadas.length
+          ? `${estimadas.length} tomas llevan la voz cortada a ojo, de una narración vieja: si el ` +
+            `texto no cuadra con lo que se oye, marca «Rehacer lo que ya está hecho» y dale a ` +
+            `Narración — el corte exacto lo pone el propio servicio de voz`
+          : '',
       ]
         .filter(Boolean)
         .join(' · '),
-      faltan.length ? 'malo' : 'bueno',
+      faltan.length || estimadas.length ? 'malo' : 'bueno',
     );
   },
   'previa',

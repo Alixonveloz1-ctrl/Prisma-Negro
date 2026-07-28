@@ -142,7 +142,11 @@ function proyectoSintetico() {
       },
       // Reutilización de fotograma: el guion tiene que apuntar al de la toma 1.
       reusa: i === 4 ? 1 : null,
-      movimiento: i === 2,
+      // La 2 con su clip pagado; la 5 con el clip solo PROPUESTO. La 5 tiene que
+      // montarse con su imagen y recorrido de cámara — el clip es opcional, y
+      // este es el único sitio donde ese camino pasa por ffmpeg de verdad.
+      movimiento: i === 2 || i === 5,
+      video: i === 2 ? 'ok' : null,
       // El silencio, que también se monta: la apertura en frío retrasa la voz de
       // la primera toma, y el respiro deja la imagen sola tras la última palabra.
       // Sin esto aquí, el camino de ffmpeg que los ejecuta (`adelay`, el relleno
