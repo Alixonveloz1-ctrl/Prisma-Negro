@@ -15,7 +15,7 @@
 import { llamar, ponerClave, ponerModeloTexto, ponerModelos } from './api.js';
 import * as estado from './estado.js';
 import { Cola } from './cola.js';
-import { etiquetaDe } from '../comun/modelos.mjs';
+import { etiquetaDe, CATALOGO, PREDETERMINADO } from '../comun/modelos.mjs';
 import { segmentarVerificado } from '../comun/segmentar.mjs';
 import { TEMAS, EPOCAS, EPOCA_POR_DEFECTO, temaPorId, epocaPorId } from '../comun/temas.mjs';
 import { ESTILOS, estiloPorId } from '../comun/estilos.mjs';
@@ -217,48 +217,84 @@ async function arrancar() {
  * usuario eligió. Lo que él elige es lo que se usa; la aplicación no lo corrige
  * ni lo sube sola por su cuenta.
  */
+const FAMILIAS_DE_MODELO = [
+  ['texto', 'm-texto', 'texto'],
+  ['imagen', 'm-imagen', 'imagenModelo'],
+  ['video', 'm-video', 'videoModelo'],
+];
+
+/**
+ * Llena los desplegables desde la tabla que el navegador YA TIENE DENTRO.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Ahora salen todas las opciones de los generadores vacías y no puedo
+ *  seleccionar ninguno.»
+ *
+ * Esto se llenaba pidiéndole al servidor `modelos.catalogo`. Y el catálogo es una
+ * TABLA FIJA escrita en `comun/modelos.mjs`, que este mismo archivo importa: se
+ * estaba yendo por la red a buscar algo que ya estaba aquí. Con eso, cualquier
+ * tropiezo —la red del móvil, un despliegue a medias, una respuesta que no llega—
+ * dejaba los tres desplegables vacíos y sin poder elegir nada. Un punto único de
+ * fallo a cambio de nada.
+ *
+ * Ahora se pintan de la tabla local, sin red y sin poder fallar. Al servidor se le
+ * sigue preguntando, pero solo por una cosa que él sí sabe y el navegador no: cuál
+ * es el predeterminado de SU entorno. Y si no contesta, no pasa nada.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+async function pintarModelos(enUso = null) {
+  let cambio = false;
+
+  for (const [familia, selector, guardado] of FAMILIAS_DE_MODELO) {
+    const filas = (CATALOGO[familia] || []).map((f) => ({ id: f.clave, etiqueta: f.etiqueta }));
+    if (!filas.length) continue;
+
+    const cfg = P.config[guardado] || (P.config[guardado] = { modelo: '' });
+    // Sin elección guardada se coge la que el catálogo trae por defecto. Con
+    // elección guardada NO SE TOCA: es lo que se pidió —que la aplicación
+    // obligue el generador elegido— y además evita el §7.2 al revés, que la
+    // pantalla te cambie el modelo por debajo cada vez que abres los ajustes.
+    if (!cfg.modelo || !filas.some((f) => f.id === cfg.modelo)) {
+      cfg.modelo = enUso?.[familia] || PREDETERMINADO[familia] || filas[0].id;
+      cambio = true;
+    }
+
+    const s = $(selector);
+    if (!s) continue;
+    s.innerHTML = '';
+    for (const f of filas) {
+      const o = document.createElement('option');
+      o.value = f.id;
+      o.textContent = f.etiqueta;
+      if (f.id === cfg.modelo) o.selected = true;
+      s.appendChild(o);
+    }
+  }
+
+  $('modelo-en-uso').textContent = etiquetaDe('texto', P.config.texto.modelo);
+  ponerModeloTexto(P.config.texto.modelo);
+  ponerModelos({ imagen: P.config.imagenModelo.modelo, video: P.config.videoModelo.modelo });
+  P.config.imagen.modelo = P.config.imagenModelo.modelo || P.config.imagen.modelo;
+  P.config.movimiento.modelo = P.config.videoModelo.modelo || P.config.movimiento.modelo;
+  if (cambio) await guardar();
+}
+
+/**
+ * Pinta los desplegables de generadores.
+ *
+ * Primero con lo que hay aquí —eso no puede fallar— y luego, si el servidor
+ * contesta, se afina con el predeterminado de su entorno. El orden importa: si se
+ * esperara a la respuesta para pintar, un fallo de red te dejaría sin poder elegir
+ * generador, que es justo lo que pasaba.
+ */
 async function cargarModelos() {
+  await pintarModelos();
   try {
     const r = await llamar('modelos.catalogo');
-    let cambio = false;
-
-    for (const [familia, selector, guardado] of [
-      ['texto', 'm-texto', 'texto'],
-      ['imagen', 'm-imagen', 'imagenModelo'],
-      ['video', 'm-video', 'videoModelo'],
-    ]) {
-      const filas = r.disponibles?.[familia] || [];
-      if (!filas.length) continue;
-
-      const cfg = P.config[guardado];
-      // Sin elección guardada se coge la que el catálogo trae por defecto. Con
-      // elección guardada NO SE TOCA: es lo que se pidió —que la aplicación
-      // obligue el generador elegido— y además evita el §7.2 al revés, que la
-      // pantalla te cambie el modelo por debajo cada vez que abres los ajustes.
-      if (!cfg.modelo || !filas.some((f) => f.id === cfg.modelo)) {
-        cfg.modelo = r.enUso?.[familia] || filas[0].id;
-        cambio = true;
-      }
-
-      const s = $(selector);
-      s.innerHTML = '';
-      for (const f of filas) {
-        const o = document.createElement('option');
-        o.value = f.id;
-        o.textContent = f.etiqueta;
-        if (f.id === cfg.modelo) o.selected = true;
-        s.appendChild(o);
-      }
-    }
-    if (cambio) await guardar();
-
-    $('modelo-en-uso').textContent = etiquetaDe('texto', P.config.texto.modelo);
-    ponerModeloTexto(P.config.texto.modelo);
-    ponerModelos({ imagen: P.config.imagenModelo.modelo, video: P.config.videoModelo.modelo });
-    P.config.imagen.modelo = P.config.imagenModelo.modelo || P.config.imagen.modelo;
-    P.config.movimiento.modelo = P.config.videoModelo.modelo || P.config.movimiento.modelo;
-  } catch (e) {
-    $('modelo-en-uso').textContent = `No se pudo leer el catálogo: ${e.message}`;
+    await pintarModelos(r.enUso);
+  } catch {
+    // El servidor no contestó. Los desplegables ya están llenos y se puede
+    // trabajar: no hay nada que decir aquí.
   }
 }
 

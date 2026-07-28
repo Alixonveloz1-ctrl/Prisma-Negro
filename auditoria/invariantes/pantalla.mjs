@@ -6,6 +6,8 @@
 // y los dos que siguen aparecieron la primera vez que se miró el resultado
 // renderizado en vez de suponerlo.
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { editando } from '../contexto.mjs';
 
 const fuente = (ctx, ruta) => ctx.fuentes.get(ruta) || '';
@@ -375,6 +377,58 @@ export const invariantes = [
     romper: (ctx) =>
       editando(ctx, 'app/fases/imagen.js', (t) =>
         t.replace('estilo: estilo.id', 'estilo: config.imagen.estilo'),
+      ),
+  },
+
+  {
+    nombre: 'la-pantalla-arranca-entera-aunque-la-nube-no-conteste',
+    dice: 'Los tres desplegables de generadores salían VACÍOS y no se podía elegir ninguno. El catálogo estaba bien y el servidor lo devolvía entero: lo que fallaba era el viaje. Se estaba pidiendo por la red una TABLA FIJA que el navegador ya tiene dentro, así que cualquier tropiezo —la red del móvil, un despliegue a medias— dejaba sin poder elegir generador. Y eso no se ve leyendo el código: se ve ARRANCANDO LA APLICACIÓN.',
+    async comprobar(ctx) {
+      const { humoDeLaPantalla } = await import('../pantalla-humo.mjs');
+      // Si la auditoría trae la pantalla saboteada, se arranca ESA. Sin esto la
+      // prueba se haría siempre sobre el archivo bueno y saldría «ciega».
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+
+      const fallos = [];
+      const SELECTORES = [
+        ['m-texto', 'el director'],
+        ['m-imagen', 'el generador de imagen'],
+        ['m-video', 'el generador de clips'],
+      ];
+
+      // Dos arranques: con la nube contestando, y sin ella. Los dos tienen que
+      // dejar la pantalla usable, porque elegir generador no necesita internet.
+      // Dos arranques. En el segundo se cae el catálogo y SOLO el catálogo: si se
+      // cayera todo no se podría ni entrar, que es correcto y no prueba nada. Lo
+      // que hay que probar es que una tabla fija no dependa de un viaje.
+      for (const [qué, opciones] of [
+        ['arrancando con la nube', { parche }],
+        ['arrancando sin catálogo del servidor', { parche, fallan: ['modelos.catalogo'] }],
+      ]) {
+        const r = await humoDeLaPantalla(opciones);
+
+        for (const f of r.fallos) fallos.push(`${qué}: ${f}`);
+        for (const q of r.quejas()) fallos.push(`${qué}, la pantalla dice en rojo — ${q}`);
+        // Un identificador que no está en el HTML es lo que dejó la previa sin su
+        // contador: se pide, sale nulo, y lo que venía detrás no se ejecuta.
+        for (const id of r.inexistentes) {
+          fallos.push(`${qué}: se escribe en «${id}», que no existe en el HTML.`);
+        }
+        for (const [id, nombre] of SELECTORES) {
+          if (r.opcionesDe(id) < 2) {
+            fallos.push(`${qué}: ${nombre} sale con ${r.opcionesDe(id)} opciones. No se puede elegir.`);
+          }
+        }
+        if (!r.texto('modelo-en-uso')) fallos.push(`${qué}: no se dice qué director está puesto.`);
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: los desplegables esperando a que conteste la red.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace('async function cargarModelos() {\n  await pintarModelos();', 'async function cargarModelos() {'),
       ),
   },
 ];

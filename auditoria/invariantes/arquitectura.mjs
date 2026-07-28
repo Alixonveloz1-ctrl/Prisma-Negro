@@ -1094,10 +1094,12 @@ export const invariantes = [
         fallos.push('Una elección guardada como identificador de Vertex deja de respetarse.');
       }
 
-      // Y la pantalla no puede re-elegir por encima de lo guardado.
+      // Y la pantalla no puede re-elegir por encima de lo guardado. Quien pinta los
+      // desplegables es `pintarModelos`: `cargarModelos` solo decide cuándo.
       const main = fuente(ctx, 'app/main.js');
-      const i = main.indexOf('async function cargarModelos');
-      const cuerpo = main.slice(i, main.indexOf('\nfunction ', i));
+      const i = main.indexOf('async function pintarModelos');
+      const fin = main.indexOf('async function cargarModelos', i);
+      const cuerpo = i < 0 ? '' : main.slice(i, fin > i ? fin : i + 3000);
       if (!/!cfg\.modelo \|\| !filas\.some/.test(cuerpo)) {
         fallos.push('La pantalla pisa la elección guardada en vez de respetarla.');
       }
