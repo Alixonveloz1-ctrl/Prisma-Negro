@@ -82,21 +82,30 @@ const dormir = (ms, senal) =>
  */
 const esperar = (intento, senal) => dormir(Math.min(8000, 600 * 2 ** intento), senal);
 
+/** Los códigos con los que la plataforma corta una petición POR TIEMPO. */
+const CORTES_POR_TIEMPO = new Set([502, 504, 524]);
+
 /**
  * Qué decir cuando el servidor contesta algo que no es JSON.
  *
  * Que no sea JSON significa que la respuesta no la escribió la herramienta: la
  * escribió la plataforma, y por eso hay que traducirla. Y hay que traducirla BIEN,
- * porque cada una manda a arreglar una cosa distinta.
+ * porque cada una manda a arreglar una cosa distinta — el consejo depende de QUÉ
+ * se estaba generando: recomendar otro generador de imagen cuando el que se pasó
+ * de tiempo fue el director manda a mirar el sitio equivocado.
  */
-function mensajeDeRespuestaCruda(estado) {
-  if (estado === 504 || estado === 502 || estado === 524) {
+function mensajeDeRespuestaCruda(estado, modo = '') {
+  if (CORTES_POR_TIEMPO.has(estado)) {
+    const consejo =
+      modo === 'texto'
+        ? 'La herramienta parte el trabajo en trozos más pequeños y reintenta sola; ' +
+          'si pasa a menudo, en Ajustes hay directores más rápidos (Gemini 2.5 Flash).'
+        : 'Si pasa a menudo, en Ajustes hay generadores más rápidos — Nano Banana 2 ' +
+          'para imagen tarda menos de la mitad que Nano Banana Pro.';
     return (
       'La generación tardó más de lo que la plataforma permite y la cortó a mitad ' +
-      `(HTTP ${estado}). No es tamaño: es tiempo. Si pasa a menudo, en Ajustes hay ` +
-      'generadores más rápidos — Nano Banana 2 para imagen tarda menos de la mitad ' +
-      'que Nano Banana Pro. Lo que llegara a terminar se guarda igual, así que ' +
-      'volver a darle no lo paga otra vez.'
+      `(HTTP ${estado}). No es tamaño: es tiempo. ${consejo} Lo que llegara a ` +
+      'terminar se guarda igual, así que volver a darle no lo paga otra vez.'
     );
   }
   if (estado === 413) {
@@ -247,7 +256,7 @@ export async function llamar(modo, datos = {}, { reintentos = 2, senal, alEspera
       // error suya, no JSON, y esto contestaba «casi seguro es el tope de 4,5 MB».
       // Mandaba a mirar el sitio equivocado: no había nada que encoger, había que
       // tardar menos. Un mensaje que apunta mal cuesta más que no decir nada.
-      ultimo = new ErrorPuerta(mensajeDeRespuestaCruda(r.status), { estado: r.status });
+      ultimo = new ErrorPuerta(mensajeDeRespuestaCruda(r.status, modo), { estado: r.status });
       if (r.status < 500) throw ultimo;
 
       // Y LO QUE SE HIZO ANTES DE QUE CORTARAN, SE HIZO.
@@ -262,6 +271,12 @@ export async function llamar(modo, datos = {}, { reintentos = 2, senal, alEspera
           aflojar();
           return { ok: true, guardado: ya, recuperado: true };
         }
+      } else if (CORTES_POR_TIEMPO.has(r.status)) {
+        // Un corte por tiempo en una llamada que NO escribe nada no mejora
+        // repitiéndola igual de grande: son otros sesenta segundos contra el
+        // mismo muro. Se devuelve YA, para que la fase parta el trabajo en dos
+        // — que es lo único que sí lo arregla.
+        throw ultimo;
       }
       await esperar(intento, senal);
       continue;

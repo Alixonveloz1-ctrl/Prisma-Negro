@@ -204,7 +204,11 @@ export async function dirigir({ tomas, escenas, tema, config, tratamiento = null
           `índice i exacto tal y como aparece entre paréntesis.`,
         esquema: ESQUEMA,
         temperatura: 0.6,
-        maxTokens: 32768,
+        // Proporcional al lote, no fijo. Un modelo que razona gasta este
+        // presupuesto PENSANDO, y con 32768 fijos un lote de cuatro fichas tenía
+        // licencia para pensar un minuto entero — que es justo lo que la
+        // plataforma no permite. Con dieciocho llega al tope de siempre.
+        maxTokens: Math.min(32768, 4000 + 1600 * grupo.length),
       },
       { senal },
     );
@@ -212,6 +216,9 @@ export async function dirigir({ tomas, escenas, tema, config, tratamiento = null
       if (grupo.some((t) => t.i === p.i)) planos.set(p.i, p);
     }
   };
+
+  /** ¿La plataforma cortó la llamada por tiempo? Entonces el lote no cabía. */
+  const cortePorTiempo = (e) => [502, 504, 524].includes(e?.estado);
 
   /**
    * Pide un grupo y, si vuelve incompleto, LO PARTE EN DOS Y REINTENTA.
@@ -226,7 +233,20 @@ export async function dirigir({ tomas, escenas, tema, config, tratamiento = null
    */
   const completar = async (grupo, particiones = 0) => {
     if (!grupo.length) return;
-    await pedir(grupo);
+    try {
+      await pedir(grupo);
+    } catch (e) {
+      // UN CORTE POR TIEMPO NO ES UN «NO»: ES «NO CABE EN UN MINUTO». La
+      // respuesta correcta es exactamente la misma que cuando la respuesta
+      // vuelve incompleta: pedir menos. Antes esto tumbaba la dirección entera
+      // con el 504 pelado en pantalla, lote tras lote, y un lote de dieciocho
+      // fichas con un modelo que razona sencillamente no cabe siempre.
+      if (!cortePorTiempo(e) || particiones >= 3 || grupo.length <= 2) throw e;
+      const mitad = Math.ceil(grupo.length / 2);
+      await completar(grupo.slice(0, mitad), particiones + 1);
+      await completar(grupo.slice(mitad), particiones + 1);
+      return;
+    }
     const faltan = grupo.filter((t) => !planos.has(t.i));
     if (!faltan.length || particiones >= 2) return;
     const mitad = Math.ceil(faltan.length / 2);

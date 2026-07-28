@@ -141,6 +141,18 @@ const CAMINOS = [
     dice: /4,5 MB/,
   },
   {
+    // Un corte por tiempo en una llamada que NO escribe nada (texto, dirección):
+    // repetirla igual de grande son otros sesenta segundos contra el mismo muro.
+    // Tiene que volver YA, para que la fase parta el lote en dos.
+    // Ojo con el nombre: la comprobación de reintentos se activa por las palabras
+    // «vuelve» y «se abre», así que aquí no pueden aparecer.
+    nombre: 'un corte por tiempo sin escritura corta en seco, sin reintentar',
+    respuestas: [{ tipo: 'crudo', estado: 504, texto: '<html>Gateway Timeout</html>' }],
+    esperado: 'falla',
+    dice: /tiempo/i,
+    sinRepetir: true,
+  },
+  {
     nombre: 'se pulsa detener',
     respuestas: [{ tipo: 'revienta' }],
     abortar: true,

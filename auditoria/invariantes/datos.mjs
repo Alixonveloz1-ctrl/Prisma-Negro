@@ -1451,6 +1451,54 @@ export const invariantes = [
   },
 
   {
+    nombre: 'un-corte-por-tiempo-parte-el-lote-en-dos',
+    dice: 'Un lote de dieciocho fichas con un modelo que razona no cabe siempre en el minuto de la plataforma: HTTP 504, lote tras lote, y la dirección nunca terminaba. Reintentar el MISMO lote igual de grande son otros sesenta segundos contra el mismo muro. La respuesta correcta ya existía para la respuesta incompleta —partir en dos— y el corte por tiempo no la usaba.',
+    comprobar(ctx) {
+      const dir = fuente(ctx, 'app/fases/direccion.js');
+      const api = fuente(ctx, 'app/api.js');
+      const fallos = [];
+
+      // 1 · La dirección parte el lote al recibir un corte por tiempo.
+      if (!/cortePorTiempo/.test(dir)) {
+        fallos.push('La dirección no distingue un corte por tiempo: el 504 la tumba entera.');
+      }
+      const i = dir.indexOf('const completar');
+      const cuerpo = i < 0 ? '' : dir.slice(i, i + 1200);
+      if (!/catch \(e\)/.test(cuerpo) || !/cortePorTiempo\(e\)/.test(cuerpo)) {
+        fallos.push('El corte por tiempo no se atrapa donde se puede partir el lote.');
+      }
+      if (!/grupo\.slice\(0, mitad\)/.test(cuerpo)) {
+        fallos.push('Atrapado el corte, no se parte el lote: se reintentaría igual de grande.');
+      }
+
+      // 2 · El presupuesto de pensar es proporcional al lote. Con 32768 fijos, un
+      // lote de cuatro fichas tenía licencia para pensar el minuto entero.
+      if (!/4000 \+ 1600 \* grupo\.length/.test(dir)) {
+        fallos.push('El presupuesto de salida no acompaña al tamaño del lote: partir no acorta nada.');
+      }
+
+      // 3 · Y la puerta devuelve el corte YA cuando la llamada no escribe nada:
+      // sin esto, cada mitad esperaría tres muros de sesenta segundos antes de
+      // llegar a partirse. (Que de verdad corta en seco lo ejecuta api-humo.)
+      if (!/CORTES_POR_TIEMPO\.has\(r\.status\)/.test(api)) {
+        fallos.push('La puerta reintenta el corte por tiempo aunque no haya nada que recuperar.');
+      }
+      // Y el consejo del mensaje depende de QUÉ se estaba generando: recomendar
+      // otro generador de imagen cuando el que se pasó fue el director manda a
+      // mirar el sitio equivocado.
+      if (!/modo === 'texto'/.test(api)) {
+        fallos.push('El mensaje del corte aconseja lo mismo para el director que para la imagen.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: el corte por tiempo tumba la dirección sin partir.
+    romper: (ctx) =>
+      editando(ctx, 'app/fases/direccion.js', (t) =>
+        t.replace('if (!cortePorTiempo(e) || particiones >= 3 || grupo.length <= 2) throw e;', 'throw e;'),
+      ),
+  },
+
+  {
     nombre: 'un-fallo-a-mitad-no-tira-los-actos-ni-los-lotes-ya-pagados',
     dice: 'El guion se escribía acto a acto y la dirección lote a lote, pero TODO vivía en memoria hasta el final: si el acto tres fallaba, los dos ya pagados se tiraban; si el sexto lote fallaba, los cinco pagados también. La voz y las imágenes ya cumplían la regla de §4 —cada unidad terminada se escribe antes de pasar a la siguiente— y las dos fases de texto no.',
     comprobar(ctx) {
