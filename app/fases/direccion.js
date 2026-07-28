@@ -169,14 +169,9 @@ Reglas de este documental:
  * `alAvanzar(hechas, total)` permite que la pantalla diga por dónde va: son
  * varias llamadas y algunas tardan.
  */
-export async function dirigir({ tomas, escenas, tema, config, tratamiento = null, senal, alAvanzar }) {
+export async function dirigir({ tomas, escenas, tema, config, tratamiento = null, senal, alAvanzar, alLote }) {
   if (!tomas?.length) throw new Error('No hay tomas que dirigir. Segmenta el guion primero.');
 
-  const proporcion = config?.movimiento?.proporcion ?? 0.15;
-  const cupo = Math.max(0, Math.round(tomas.length * proporcion));
-
-  // Lo que ya está dirigido se conserva. Volver a dirigir después de que un lote
-  // fallara no puede cobrar los lotes que sí salieron (§4): se saltan enteros.
   // Lo que ya está dirigido se conserva. Volver a dirigir después de que un lote
   // fallara no puede cobrar los lotes que sí salieron (§4): se saltan enteros.
   const planos = new Map();
@@ -247,7 +242,30 @@ export async function dirigir({ tomas, escenas, tema, config, tratamiento = null
 
     ultimo = planos.get(lote[lote.length - 1].i) || ultimo;
     alAvanzar?.(Math.min(desde + POR_LOTE, tomas.length), tomas.length);
+
+    // EL LOTE PAGADO SE GUARDA ANTES DE PEDIR EL SIGUIENTE (§4).
+    //
+    // Antes las fichas vivían solo en memoria hasta terminar los ocho lotes: si el
+    // sexto fallaba —o se cerraba la pestaña—, los cinco ya pagados se tiraban. Es
+    // la misma regla que ya cumplían la voz y las imágenes, y la dirección no la
+    // cumplía. Se entrega un estado COHERENTE, no las fichas a medias: `resolver`
+    // es determinista sobre lo acumulado, así que reanudar da lo mismo que no
+    // haberse caído.
+    if (alLote) await alLote(resolver(tomas, planos, config));
   }
+
+  return resolver(tomas, planos, config);
+}
+
+/**
+ * Convierte las fichas acumuladas en tomas terminadas: cupo de movimiento,
+ * motivos, respiros y desfase. Determinista sobre `(tomas, planos, config)`; las
+ * tomas sin ficha salen con `plano: null`, que es lo que hace que volver a
+ * dirigir pida solo esas.
+ */
+function resolver(tomas, planos, config) {
+  const proporcion = config?.movimiento?.proporcion ?? 0.15;
+  const cupo = Math.max(0, Math.round(tomas.length * proporcion));
 
   // El modelo propuso; aquí se decide. El cupo de movimiento es del presupuesto, no
   // suyo (§4.7).

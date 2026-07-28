@@ -1438,4 +1438,63 @@ export const invariantes = [
         }),
       ),
   },
+
+  {
+    nombre: 'un-fallo-a-mitad-no-tira-los-actos-ni-los-lotes-ya-pagados',
+    dice: 'El guion se escribía acto a acto y la dirección lote a lote, pero TODO vivía en memoria hasta el final: si el acto tres fallaba, los dos ya pagados se tiraban; si el sexto lote fallaba, los cinco pagados también. La voz y las imágenes ya cumplían la regla de §4 —cada unidad terminada se escribe antes de pasar a la siguiente— y las dos fases de texto no.',
+    comprobar(ctx) {
+      const gui = fuente(ctx, 'app/fases/guion.js');
+      const dir = fuente(ctx, 'app/fases/direccion.js');
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      // 1 · El guion recoge lo escrito y avisa de cada acto nuevo.
+      if (!/yaEscritos/.test(gui)) fallos.push('El guion no puede recibir los actos ya escritos: reanudar reescribe.');
+      if (!/n < yaEscritos\.length/.test(gui)) {
+        fallos.push('Los actos ya escritos no se saltan: se volverían a pagar.');
+      }
+      if (!/await alActo\(/.test(gui)) {
+        fallos.push('Un acto terminado no se entrega al llegar: un fallo después lo tira.');
+      }
+
+      // 2 · La dirección entrega cada lote, y entrega un estado COHERENTE (el
+      // resuelto), no las fichas a medias.
+      if (!/await alLote\(resolver\(/.test(dir)) {
+        fallos.push('La dirección no entrega el lote al terminarlo, o entrega fichas sin resolver.');
+      }
+      if (!/return resolver\(tomas, planos, config\);/.test(dir)) {
+        fallos.push('El final de dirigir no sale del mismo resolutor que los parciales: reanudar daría otra cosa.');
+      }
+
+      // 3 · Y la pantalla GUARDA en los cuatro sitios. Recibir sin guardar es lo
+      // mismo que no recibir.
+      const vecesGuion = (main.match(/alActo: async \(parte, n\) => \{/g) || []).length;
+      if (vecesGuion < 2) fallos.push(`Solo ${vecesGuion} de las 2 escrituras de guion guardan cada acto.`);
+      const vecesLote = (main.match(/alLote: async \(parciales\) => \{/g) || []).length;
+      if (vecesLote < 2) fallos.push(`Solo ${vecesLote} de las 2 direcciones guardan cada lote.`);
+      // El parcial de guion caduca con la estructura: reanudar sobre actos de otra
+      // estructura pegaría dos documentales distintos.
+      if (!/parcial\?\.huella === huella/.test(main)) {
+        fallos.push('El guion parcial se reanudaría aunque la estructura hubiera cambiado.');
+      }
+
+      // 4 · La huella distingue estructuras de verdad (comportamiento, no texto).
+      const { huellaDeActos } = ctx.fn;
+      const tr = { estructura: [{ acto: 1, titulo: 'Uno', funcion: 'f', contenido: '', minutos: 4 }, { acto: 2, titulo: 'Dos', funcion: 'f', contenido: '', minutos: 6 }] };
+      const otra = { estructura: [{ acto: 1, titulo: 'Otro arranque', funcion: 'f', contenido: '', minutos: 4 }, { acto: 2, titulo: 'Dos', funcion: 'f', contenido: '', minutos: 6 }] };
+      if (huellaDeActos(tr, 10) !== huellaDeActos(tr, 10)) fallos.push('La huella de actos no es estable.');
+      if (huellaDeActos(tr, 10) === huellaDeActos(otra, 10)) {
+        fallos.push('Dos estructuras distintas dan la misma huella: se pegarían dos documentales.');
+      }
+      if (huellaDeActos(tr, 10) === huellaDeActos(tr, 14)) {
+        fallos.push('Cambiar los minutos no cambia la huella, y los actos se reescalan con ellos.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: el acto terminado no se entrega a nadie.
+    romper: (ctx) =>
+      editando(ctx, 'app/fases/guion.js', (t) =>
+        t.replace('if (alActo) await alActo(partes[partes.length - 1], n, actos.length);', ''),
+      ),
+  },
 ];

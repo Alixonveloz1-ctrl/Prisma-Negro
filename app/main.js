@@ -742,14 +742,31 @@ accion(
       );
     }
     avisar('paso3', `${pieza().fichas.length} fichas. Escribiendo el guion…`);
+    const minutos = Number($('minutos').value) || 10;
+
+    // CADA ACTO PAGADO SE GUARDA AL LLEGAR, y si el intento anterior se cayó a
+    // mitad, sus actos se recogen en vez de reescribirse — solo si la estructura
+    // no cambió desde entonces: reanudar sobre actos de otra estructura pegaría
+    // dos documentales distintos.
+    const huella = guionFase.huellaDeActos(pieza().tratamiento, minutos);
+    const parcial = pieza().actosEscritos;
     const texto = await guionFase.escribirGuion({
       tema: pieza().tema,
       fichas: pieza().fichas,
-      minutos: Number($('minutos').value) || 10,
+      minutos,
       tratamiento: pieza().tratamiento,
       anteriores: loYaContado(),
+      yaEscritos: parcial?.huella === huella && Array.isArray(parcial.partes) ? parcial.partes : [],
+      alActo: async (parte, n) => {
+        const p = pieza();
+        if (p.actosEscritos?.huella !== huella) p.actosEscritos = { huella, partes: [] };
+        p.actosEscritos.partes[n] = parte;
+        await guardar();
+      },
       alAvanzar: (n, total) => avisar('paso3', `Escribiendo el acto ${n} de ${total}…`),
     });
+    // El guion completo manda; el parcial ya hizo su trabajo.
+    pieza().actosEscritos = null;
     pieza().guion = texto;
     $('guion').value = texto;
 
@@ -777,14 +794,27 @@ accion(
 accion(
   'b-escribir',
   async () => {
+    const minutos = Number($('minutos').value) || 10;
+    // El mismo cuaderno de actos que en el paso 3: un intento caído a mitad se
+    // reanuda desde el acto que faltaba, se escriba desde donde se escriba.
+    const huella = guionFase.huellaDeActos(pieza().tratamiento, minutos);
+    const parcial = pieza().actosEscritos;
     const texto = await guionFase.escribirGuion({
       tema: pieza().tema,
       fichas: pieza().fichas,
-      minutos: Number($('minutos').value) || 10,
+      minutos,
       tratamiento: pieza().tratamiento,
       anteriores: loYaContado(),
+      yaEscritos: parcial?.huella === huella && Array.isArray(parcial.partes) ? parcial.partes : [],
+      alActo: async (parte, n) => {
+        const p = pieza();
+        if (p.actosEscritos?.huella !== huella) p.actosEscritos = { huella, partes: [] };
+        p.actosEscritos.partes[n] = parte;
+        await guardar();
+      },
       alAvanzar: (n, total) => avisar('guion', `Escribiendo el acto ${n} de ${total}…`),
     });
+    pieza().actosEscritos = null;
     pieza().guion = texto;
     $('guion').value = texto;
     await guardar();
@@ -924,6 +954,12 @@ accion(
       // Son varias llamadas y algunas tardan: sin esto parece que se ha colgado.
       alAvanzar: (hechas, total) =>
         avisar('tomas', `Dirigiendo… ${hechas} de ${total} tomas.`),
+      // Cada lote pagado se guarda al llegar: un fallo en el sexto ya no tira los
+      // cinco anteriores, y volver a dirigir pide solo lo que falta.
+      alLote: async (parciales) => {
+        pieza().tomas = parciales;
+        await guardar();
+      },
     });
     pieza().tomas = tomas;
     await guardar();
@@ -961,6 +997,10 @@ async function asegurarDireccion() {
     config: P.config,
     tratamiento: pieza().tratamiento,
     alAvanzar: (hechas, total) => avisar('paso4', `Dirigiendo… ${hechas} de ${total} tomas.`),
+    alLote: async (parciales) => {
+      pieza().tomas = parciales;
+      await guardar();
+    },
   });
   await guardar();
   pintarTomas();

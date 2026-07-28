@@ -143,6 +143,12 @@ function proyectoSintetico() {
       // Reutilización de fotograma: el guion tiene que apuntar al de la toma 1.
       reusa: i === 4 ? 1 : null,
       movimiento: i === 2,
+      // El silencio, que también se monta: la apertura en frío retrasa la voz de
+      // la primera toma, y el respiro deja la imagen sola tras la última palabra.
+      // Sin esto aquí, el camino de ffmpeg que los ejecuta (`adelay`, el relleno
+      // largo de `apad`) no se habría ejecutado NUNCA antes de un montaje real.
+      entrada: i === 0 ? 1.4 : 0,
+      respiro: i === 3 ? 2.5 : i === 6 ? 4 : 0,
     });
   }
   return { id: 'p01', tomas, escenas: [{ n: 0 }, { n: 1 }, { n: 2 }] };

@@ -120,6 +120,12 @@ export async function escribirGuion({
   minutos = 10,
   tratamiento = null,
   anteriores = [],
+  // Los actos que YA SE ESCRIBIERON en un intento anterior que se cayó a mitad, y
+  // el aviso de que un acto nuevo acaba de salir. Juntos son lo que hace que un
+  // fallo en el acto tres no tire los dos ya pagados: el que llama guarda cada
+  // acto al recibirlo, y al reintentar los pasa de vuelta para no reescribirlos.
+  yaEscritos = [],
+  alActo = null,
   senal,
   alAvanzar,
 }) {
@@ -151,6 +157,13 @@ export async function escribirGuion({
   const partes = [];
   for (const [n, acto] of actos.entries()) {
     if (senal?.aborted) throw new Error('Detenido.');
+
+    // Un acto ya escrito no se vuelve a pedir ni a pagar: se recoge y se sigue.
+    if (n < yaEscritos.length && String(yaEscritos[n] || '').trim()) {
+      partes.push(yaEscritos[n]);
+      alAvanzar?.(n + 1, actos.length);
+      continue;
+    }
     const objetivo = Math.round(acto.minutos * 145);
 
     const r = await llamar(
@@ -195,6 +208,9 @@ export async function escribirGuion({
     );
 
     partes.push(limpiar(r.texto));
+    // El acto pagado se guarda ANTES de pedir el siguiente (§4), igual que una
+    // toma de voz o una imagen: si el siguiente falla, este ya no se pierde.
+    if (alActo) await alActo(partes[partes.length - 1], n, actos.length);
     alAvanzar?.(n + 1, actos.length);
   }
 
@@ -215,6 +231,18 @@ export async function escribirGuion({
 }
 
 export const contarPalabras = (t) => (String(t).trim().match(/\S+/g) || []).length;
+
+/**
+ * La huella de la estructura de actos: con qué actos se escribió un guion parcial.
+ *
+ * Sirve para saber si unos actos guardados a medias siguen valiendo: si el
+ * director cambió la estructura —otros títulos, otros minutos—, reanudar sobre
+ * los viejos pegaría dos documentales distintos, y eso es peor que reescribir.
+ */
+export const huellaDeActos = (tratamiento, minutos) =>
+  actosDe(tratamiento, minutos)
+    .map((a) => `${a.titulo}·${a.minutos}`)
+    .join(' | ');
 
 /**
  * Los actos en los que se parte el guion.
