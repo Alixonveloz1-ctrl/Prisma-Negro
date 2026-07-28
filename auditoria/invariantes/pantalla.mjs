@@ -478,12 +478,16 @@ export const invariantes = [
       const html = ctx.fuentes.get('index.html') || '';
       const fallos = [];
 
-      // 1 · Las cuatro cuentas existen en el HTML, DENTRO de su botón.
+      // 1 · Las cinco cuentas existen en el HTML, DENTRO de su botón. La quinta
+      // es la dirección de arte: hay dos cosas con nombre parecido —el DIRECTOR
+      // (tratamiento) y la DIRECCIÓN DE ARTE (fichas de plano)— y la primera
+      // salía como lista mientras la segunda faltaba entera sin decirlo nadie.
       for (const [id, boton] of [
         ['cf-voz', 'b-narrar'],
         ['cf-imagenes', 'b-imagenes'],
         ['cf-clips', 'b-movimiento'],
         ['cf-musica', 'b-musica'],
+        ['cf-direccion', 'b-dirigir'],
       ]) {
         const b = html.indexOf(`id="${boton}"`);
         const c = html.indexOf(`id="${id}"`);
@@ -518,14 +522,27 @@ export const invariantes = [
 
       // 4 · Y EN EJECUCIÓN: arrancada la aplicación con un proyecto a medias, las
       // cuentas están llenas y con la forma hecho/total.
-      const { humoDeLaPantalla } = await import('../pantalla-humo.mjs');
+      const { humoDeLaPantalla, proyectoYaEmpezado } = await import('../pantalla-humo.mjs');
       const enContexto = ctx.fuentes.get('app/main.js');
       const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
-      const r = await humoDeLaPantalla({ parche: enContexto !== enDisco ? () => enContexto : null });
-      for (const id of ['cf-voz', 'cf-imagenes', 'cf-musica']) {
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+      const r = await humoDeLaPantalla({ parche });
+      for (const id of ['cf-voz', 'cf-imagenes', 'cf-musica', 'cf-direccion']) {
         if (!/^\d+\/\d+$/.test(r.texto(id))) {
           fallos.push(`Arrancada la aplicación, «${id}» dice «${r.texto(id)}» en vez de hecho/total.`);
         }
+      }
+
+      // 5 · Y el caso que dolió: la dirección PERDIDA se dice en el paso 4, con
+      // su cuenta, sin tener que apretar Imágenes para descubrirla.
+      const perdido = proyectoYaEmpezado();
+      for (const t of perdido.piezas[0].tomas) t.plano = null;
+      const sin = await humoDeLaPantalla({ parche, proyecto: perdido });
+      if (sin.texto('cf-direccion') !== '0/12') {
+        fallos.push(`Con la dirección perdida, su cuenta dice «${sin.texto('cf-direccion')}» en vez de 0/12.`);
+      }
+      if (!/Dirección de arte 0\/12/.test(sin.html('estado-direccion'))) {
+        fallos.push('Con la dirección perdida, el paso 4 no lo dice: se descubre al darle a Imágenes, como antes.');
       }
       return fallos;
     },

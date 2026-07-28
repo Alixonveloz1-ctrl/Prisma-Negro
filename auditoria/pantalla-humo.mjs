@@ -474,6 +474,7 @@ export async function humoDeLaPantalla({
     /** Cuántas opciones tiene un desplegable después de arrancar. */
     opcionesDe: (id) => elementos.get(id)?.children.length || 0,
     texto: (id) => elementos.get(id)?.textContent || '',
+    html: (id) => elementos.get(id)?.innerHTML || '',
     /**
      * Lo que la pantalla ESTÁ DICIENDO en rojo después de arrancar.
      *

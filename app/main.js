@@ -453,6 +453,31 @@ function pintarCuentasFase() {
     el.classList.toggle('lista', total > 0 && hechas === total);
     el.classList.toggle('a-medias', total > 0 && hechas > 0 && hechas < total);
   }
+
+  // LA DIRECCIÓN DE ARTE, DICHA POR SU NOMBRE Y CON SU CUENTA.
+  //
+  // Hay dos cosas con nombre parecido y eso confundió a quien más importa: el
+  // DIRECTOR (el tratamiento: una llamada que decide el documental) y la
+  // DIRECCIÓN DE ARTE (la ficha de plano de cada toma, por lotes). La primera
+  // salía como lista y la segunda podía faltar entera sin que ninguna parte de
+  // la pantalla lo dijera: solo se descubría al darle a Imágenes.
+  const t = pieza().tomas;
+  const dirigidas = t.filter((x) => x.plano).length;
+  const cf = $('cf-direccion');
+  if (cf) {
+    cf.textContent = t.length ? `${dirigidas}/${t.length}` : '';
+    cf.classList.toggle('lista', t.length > 0 && dirigidas === t.length);
+    cf.classList.toggle('a-medias', dirigidas > 0 && dirigidas < t.length);
+  }
+  const linea = $('estado-direccion');
+  if (linea) {
+    linea.innerHTML = !t.length
+      ? ''
+      : dirigidas === t.length
+        ? `<p class="nota chica" style="margin:10px 0 0;color:var(--verde)">Dirección de arte ${dirigidas}/${t.length} ✓</p>`
+        : `<p class="nota chica" style="margin:10px 0 0;color:#E8B54B">Dirección de arte ${dirigidas}/${t.length} — ` +
+          `las imágenes y los clips salen de ella. Se completa sola al darle a Imágenes, o en Tomas → Dirección de arte.</p>`;
+  }
 }
 
 function pintarPasos() {
@@ -1049,8 +1074,11 @@ $('b-detener').addEventListener('click', () => {
 
 /** Dirige si hace falta: sin ficha de plano no hay ni imagen ni clip. */
 async function asegurarDireccion() {
-  if (pieza().tomas.every((t) => t.plano)) return;
-  avisar('paso4', 'Falta la dirección de arte. Se hace sola…');
+  const sin = pieza().tomas.filter((t) => !t.plano).length;
+  if (!sin) return;
+  // Con la cuenta: «falta la dirección» a secas no dice si es una toma o todas,
+  // y quien mira acaba de ver el tratamiento del director como listo.
+  avisar('paso4', `Dirección de arte: faltan las fichas de plano de ${sin} de ${pieza().tomas.length} tomas. Se hacen solas…`);
   pieza().tomas = await direccion.dirigir({
     tomas: pieza().tomas,
     escenas: pieza().escenas,
