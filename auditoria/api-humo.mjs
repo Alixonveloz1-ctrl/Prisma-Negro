@@ -168,6 +168,11 @@ export async function humoDeLaPuerta({ parche = null } = {}) {
   let ficha = { existe: false, bytes: 0, actualizado: null };
 
   globalThis.indexedDB = indexedDbDeMentira();
+  // Y la conexión cacheada de `local.js` se suelta A LA IDA Y A LA VUELTA: si se
+  // queda pegada a esta base de mentira, el siguiente arnés del proceso arranca
+  // con ella —vacía— en vez de con la suya.
+  const local = await import('../app/local.js');
+  local.olvidarBase();
   // El reloj en falso: las esperas de cuota son de minutos y aquí no pueden costar
   // ni un segundo. Se conserva el aviso —`alEsperar`— para poder comprobarlo.
   globalThis.setTimeout = (fn) => {
@@ -288,6 +293,7 @@ export async function humoDeLaPuerta({ parche = null } = {}) {
     globalThis.fetch = antes.fetch;
     globalThis.indexedDB = antes.indexedDB;
     globalThis.setTimeout = antes.setTimeout;
+    local.olvidarBase();
   }
 
   return { fallos, caminos: CAMINOS.length };

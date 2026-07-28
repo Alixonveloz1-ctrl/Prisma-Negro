@@ -380,6 +380,10 @@ export async function humoDeLaPantalla({
   };
   // `navigator` en Node es de solo lectura y ya existe: no hay que tocarlo.
   globalThis.indexedDB = indexedDbDeMentira(proyecto);
+  // La conexión cacheada de `local.js` es del arnés ANTERIOR: si otro arnés tocó
+  // la base en este proceso, sin esto el arranque leería aquella —vacía— y el
+  // proyecto sembrado no aparecería. Costó una tarde encontrarlo.
+  (await import('../app/local.js')).olvidarBase();
   globalThis.sessionStorage = comoAlmacen(almacenSesion);
   globalThis.localStorage = comoAlmacen(new Map());
   globalThis.confirm = () => true;
@@ -449,6 +453,8 @@ export async function humoDeLaPantalla({
     globalThis.sessionStorage = antes.sessionStorage;
     globalThis.localStorage = antes.localStorage;
     URL.createObjectURL = antes.URL_createObjectURL;
+    // Y no se le deja al siguiente arnés la conexión a ESTA base de mentira.
+    (await import('../app/local.js')).olvidarBase();
   }
 
   return {

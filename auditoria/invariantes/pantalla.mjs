@@ -469,4 +469,68 @@ export const invariantes = [
     },
     romper: (ctx) => editando(ctx, 'app/main.js', (t) => t.replace(/\bquitadas\b/g, 'puestas')),
   },
+
+  {
+    nombre: 'el-estado-de-cada-fase-se-ve-en-su-boton',
+    dice: '«¿Cómo se supone que yo voy a entender eso?» — y tenía razón: el estado de cada fase existía pero solo salía en un texto después de apretar algo, y el inventario contestaba «88 materiales en el almacén», que no dice si se puede montar. Cada botón lleva ahora su cuenta —hecho/total, verde completa, ámbar a medias— y el inventario contesta por fases.',
+    async comprobar(ctx) {
+      const main = fuente(ctx, 'app/main.js');
+      const html = ctx.fuentes.get('index.html') || '';
+      const fallos = [];
+
+      // 1 · Las cuatro cuentas existen en el HTML, DENTRO de su botón.
+      for (const [id, boton] of [
+        ['cf-voz', 'b-narrar'],
+        ['cf-imagenes', 'b-imagenes'],
+        ['cf-clips', 'b-movimiento'],
+        ['cf-musica', 'b-musica'],
+      ]) {
+        const b = html.indexOf(`id="${boton}"`);
+        const c = html.indexOf(`id="${id}"`);
+        if (c < 0) fallos.push(`Falta la cuenta «${id}» en el HTML.`);
+        else if (b < 0 || c < b || html.indexOf('</button>', b) < c) {
+          fallos.push(`La cuenta «${id}» no está dentro de su botón: se vería suelta por ahí.`);
+        }
+      }
+
+      // 2 · Los totales salen de los MISMOS planificar que usan los botones, con
+      // «todas» puesto. Contar tomas a pelo volvería a contar como pendiente lo
+      // heredado y lo repetido, que no hay que generar nunca.
+      const i = main.indexOf('function cuentasDeFases');
+      if (i < 0) return [...fallos, 'No hay quien calcule las cuentas por fase.'];
+      const cuerpo = main.slice(i, main.indexOf('\nfunction pintarPasos', i));
+      for (const p of ['imagenFase.planificar', 'movimiento.planificar', 'musica.planificar']) {
+        if (!cuerpo.includes(p)) fallos.push(`Las cuentas no salen de ${p}: contarían lo que no hay que generar.`);
+      }
+      if (!/soloLasQueFaltan: false/.test(cuerpo)) {
+        fallos.push('Las cuentas usan «solo las que faltan»: el total saldría mal en cuanto hubiera algo hecho.');
+      }
+      // Y se pintan donde se pintan los pasos, que corre tras cada fase y al cargar.
+      if (!/pintarCuentasFase\(\);/.test(main.slice(main.indexOf('function pintarPasos')))) {
+        fallos.push('Las cuentas no se refrescan con los pasos: se quedarían viejas.');
+      }
+
+      // 3 · El inventario contesta POR FASES, no en archivos.
+      const j = main.indexOf("accion('b-inventario'");
+      if (j >= 0 && !/cuentasDeFases\(\)/.test(main.slice(j, j + 3500))) {
+        fallos.push('El inventario no contesta por fases: vuelve «88 materiales en el almacén».');
+      }
+
+      // 4 · Y EN EJECUCIÓN: arrancada la aplicación con un proyecto a medias, las
+      // cuentas están llenas y con la forma hecho/total.
+      const { humoDeLaPantalla } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const r = await humoDeLaPantalla({ parche: enContexto !== enDisco ? () => enContexto : null });
+      for (const id of ['cf-voz', 'cf-imagenes', 'cf-musica']) {
+        if (!/^\d+\/\d+$/.test(r.texto(id))) {
+          fallos.push(`Arrancada la aplicación, «${id}» dice «${r.texto(id)}» en vez de hecho/total.`);
+        }
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: el estado existe pero nadie lo pinta.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) => t.replace('  pintarCuentasFase();\n', '')),
+  },
 ];

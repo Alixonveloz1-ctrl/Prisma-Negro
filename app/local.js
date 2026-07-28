@@ -18,6 +18,17 @@ const MATERIALES = 'materiales';
 
 let db = null;
 
+/**
+ * Suelta la conexión cacheada. En el navegador no lo llama nadie: hay una sola
+ * base. Lo usan las pruebas: con dos arneses en el mismo proceso, el segundo
+ * heredaba la base del primero y arrancaba con un proyecto vacío — el mismo
+ * achaque que ya tuvieron la cuenta y el token del servidor, con el mismo
+ * remedio.
+ */
+export function olvidarBase() {
+  db = null;
+}
+
 function abrir() {
   if (db) return Promise.resolve(db);
   return new Promise((res, rej) => {

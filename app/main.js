@@ -395,7 +395,46 @@ function pintarTodo() {
  * que acordarse de en qué orden va todo, y el orden es justamente lo que la
  * herramienta debería saber por ti.
  */
+/**
+ * Cuánto hay de cada fase, calculado sobre lo que DE VERDAD hay que generar.
+ *
+ * Los totales salen de los mismos `planificar` que usan los botones, con «todas»
+ * puesto: así lo heredado, lo que repite un plano y lo que no lleva clip no
+ * cuentan como pendiente — no hay que generarlos nunca.
+ */
+function cuentasDeFases() {
+  const t = pieza().tomas;
+  const img = imagenFase.planificar(t, { soloLasQueFaltan: false });
+  const clips = movimiento.planificar(t, { soloLasQueFaltan: false });
+  const mus = musica.planificar(pieza().escenas, t, P.config, { soloLasQueFaltan: false });
+  return [
+    ['cf-voz', 'Voz', t.filter((x) => x.audio === 'ok').length, t.length],
+    ['cf-imagenes', 'Imágenes', img.filter((x) => x.imagen === 'ok').length, img.length],
+    ['cf-clips', 'Clips', clips.filter((x) => x.video === 'ok').length, clips.length],
+    ['cf-musica', 'Música', mus.filter((e) => e.estado === 'ok').length, mus.length],
+  ];
+}
+
+/**
+ * El estado de cada fase, EN SU PROPIO BOTÓN.
+ *
+ * «No sé qué está generado y qué no» — y era verdad: el estado existía pero solo
+ * salía en un texto después de apretar algo. Ahora cada botón lleva su cuenta,
+ * en verde cuando está completa y en ámbar a medias: se ve de un vistazo, antes
+ * de gastar, sin apretar nada.
+ */
+function pintarCuentasFase() {
+  for (const [id, , hechas, total] of cuentasDeFases()) {
+    const el = $(id);
+    if (!el) continue;
+    el.textContent = total ? `${hechas}/${total}` : '';
+    el.classList.toggle('lista', total > 0 && hechas === total);
+    el.classList.toggle('a-medias', total > 0 && hechas > 0 && hechas < total);
+  }
+}
+
 function pintarPasos() {
+  pintarCuentasFase();
   const t = pieza().tomas;
   const hay = {
     caso: !!pieza().caso,
@@ -1179,6 +1218,16 @@ accion('b-inventario', async () => {
   await guardar();
   pintarTodo();
 
+  // LA RESPUESTA ES POR FASES, no un número de archivos. «88 materiales en el
+  // almacén» no le dice a nadie si puede montar ya: «Voz 34/34 ✓ · Imágenes
+  // 28/34 — faltan 6» sí. Es la misma cuenta que llevan los botones de arriba.
+  const resumen = cuentasDeFases()
+    .filter(([, , , total]) => total > 0)
+    .map(([, nombre, hechas, total]) =>
+      hechas === total ? `${nombre} ${hechas}/${total} ✓` : `${nombre} ${hechas}/${total} — faltan ${total - hechas}`,
+    )
+    .join(' · ');
+
   const partes = [];
   if (cambios.puestas.length) {
     partes.push(`${cambios.puestas.length} estaban generadas y no constaban (${cambios.puestas.slice(0, 6).join(', ')}${cambios.puestas.length > 6 ? '…' : ''})`);
@@ -1188,10 +1237,9 @@ accion('b-inventario', async () => {
   }
   avisar(
     'paso4',
-    partes.length
-      ? `${hay.size} materiales en el almacén. ${partes.join('. ')}.`
-      : `${hay.size} materiales en el almacén, y el proyecto ya decía exactamente eso.`,
-    partes.length ? 'bueno' : '',
+    `${resumen || 'Todavía no hay nada que generar: parte el guion en tomas primero.'}` +
+      (partes.length ? ` · Corregido contra el almacén: ${partes.join('; ')}.` : ''),
+    'bueno',
   );
 });
 

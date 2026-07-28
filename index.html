@@ -276,6 +276,11 @@ nav.pestanas button.on{background:var(--violeta);border-color:var(--violeta);col
 }
 .pastilla.p-ok{color:var(--verde);border-color:rgba(61,214,140,.3);background:var(--verde-suave)}
 .pastilla.p-falta{color:var(--rojo);border-color:rgba(240,85,92,.3);background:var(--rojo-suave)}
+/* La cuenta de cada fase, en su propio botón: verde completa, ámbar a medias. */
+.cuenta-fase{font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;border:1px solid var(--linea-2);color:var(--tinta-2);background:var(--carta)}
+.cuenta-fase:empty{display:none}
+.cuenta-fase.lista{color:var(--verde);border-color:rgba(61,214,140,.3);background:var(--verde-suave)}
+.cuenta-fase.a-medias{color:#E8B54B;border-color:rgba(232,181,75,.3);background:rgba(232,181,75,.1)}
 .pastilla.p-aviso{color:var(--oro);border-color:rgba(229,168,59,.3);background:var(--oro-suave)}
 .pastilla.p-tipo{color:var(--violeta-2);border-color:rgba(139,123,255,.3);background:var(--violeta-suave)}
 
@@ -512,10 +517,10 @@ nav.abajo button svg{width:22px;height:22px}
             </div>
           </div>
           <div class="fila-btn" style="margin-top:13px">
-            <button class="btn" id="b-narrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 013 3v7a3 3 0 01-6 0V5a3 3 0 013-3z"/><path d="M19 11a7 7 0 01-14 0M12 18v4"/></svg>Narración</button>
-            <button class="btn" id="b-imagenes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-6 6"/></svg>Imágenes</button>
-            <button class="btn" id="b-movimiento"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M10 9l5 3-5 3z"/></svg>Clips</button>
-            <button class="btn" id="b-musica"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>Música</button>
+            <button class="btn" id="b-narrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 013 3v7a3 3 0 01-6 0V5a3 3 0 013-3z"/><path d="M19 11a7 7 0 01-14 0M12 18v4"/></svg>Narración<span class="cuenta-fase" id="cf-voz"></span></button>
+            <button class="btn" id="b-imagenes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-6 6"/></svg>Imágenes<span class="cuenta-fase" id="cf-imagenes"></span></button>
+            <button class="btn" id="b-movimiento"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M10 9l5 3-5 3z"/></svg>Clips<span class="cuenta-fase" id="cf-clips"></span></button>
+            <button class="btn" id="b-musica"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>Música<span class="cuenta-fase" id="cf-musica"></span></button>
           </div>
           <div class="fila-btn" style="margin-top:9px">
             <button class="btn fantasma" id="b-inventario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-3-6.7"/><path d="M21 3v6h-6"/></svg>Revisar qué hay generado</button>
