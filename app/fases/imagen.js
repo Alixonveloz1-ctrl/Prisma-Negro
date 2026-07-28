@@ -18,7 +18,7 @@
 // pantalla.
 
 import { llamar } from '../api.js';
-import { claveToma, tomaDelFotograma } from '../../comun/claves.mjs';
+import { claveToma, tomaDelFotograma, claveClip, claveFotograma } from '../../comun/claves.mjs';
 import { reducirReferencias, deBase64 } from '../imagenes.js';
 import {
   estiloPorId,
@@ -151,6 +151,62 @@ const huellaDePlano = (t) =>
     .map((x) => String(x || '').trim().toLowerCase())
     .filter(Boolean)
     .join(' · ');
+
+/**
+ * Empareja los planos gemelos DENTRO del mismo caso.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «La toma 18 y la 50 usan la misma imagen; el video de la 50 se generó, pero
+ *  la 18 no lo agarró automático.»
+ *
+ * El emparejamiento por plano existía ENTRE casos (el banco) y no dentro del
+ * mismo caso: ahí solo compartían material las tomas que el director enlazó con
+ * `igualQue` al dirigir. Dos tomas con el mismo lugar, encuadre y luz que no
+ * quedaron enlazadas —porque el enlace se cayó por la clase, porque se
+ * re-dirigió, porque el clip llegó después a mano— pagaban cada una lo suyo y
+ * ni se enteraban de que su gemela ya tenía el material.
+ *
+ * Esto los busca por la misma huella que el banco y devuelve los CAMBIOS: quién
+ * debe heredar qué clave. No genera nada, no borra nada, no toca al que ya
+ * tiene material propio. Quien llama los aplica y guarda.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export function emparejarDentroDelCaso(idPieza, tomas) {
+  const clips = new Map();
+  const imagenes = new Map();
+  for (const t of tomas) {
+    if (!t.plano) continue;
+    const k = huellaDePlano(t);
+    if (!k) continue;
+    const dueña = t.reusa !== null && t.reusa !== undefined ? tomas.find((y) => y.i === t.reusa) || t : t;
+    if (!clips.has(k) && (t.heredadoVid || dueña.heredadoVid || dueña.video === 'ok')) {
+      clips.set(k, claveClip(idPieza, t, tomas));
+    }
+    if (!imagenes.has(k) && (t.heredado || dueña.heredado || dueña.imagen === 'ok')) {
+      imagenes.set(k, claveFotograma(idPieza, t, tomas));
+    }
+  }
+
+  const cambios = [];
+  for (const t of tomas) {
+    if (!t.plano || t.reusa !== null) continue;
+    const k = huellaDePlano(t);
+
+    const clip = clips.get(k);
+    const sinClip = !t.heredadoVid && t.video !== 'ok';
+    if (clip && sinClip && clip !== claveToma(idPieza, t.i, 'vid')) {
+      // Hereda el clip Y pasa a ser toma con movimiento: el montaje lo usa ya.
+      cambios.push({ i: t.i, heredadoVid: clip, movimiento: true, dice: `la toma ${t.i + 1} usa el clip de su plano gemelo` });
+    }
+
+    const img = imagenes.get(k);
+    const sinImagen = !t.heredado && t.imagen !== 'ok';
+    if (img && sinImagen && img !== claveToma(idPieza, t.i, 'img')) {
+      cambios.push({ i: t.i, heredado: img, dice: `la toma ${t.i + 1} usa la imagen de su plano gemelo` });
+    }
+  }
+  return cambios;
+}
 
 /**
  * Elige las referencias de una toma (§4.6).

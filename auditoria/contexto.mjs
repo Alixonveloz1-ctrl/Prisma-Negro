@@ -164,6 +164,7 @@ async function funcionesPuras() {
     escribirGuion: gui.escribirGuion,
     dirigir: dir.dirigir,
     heredables: img.heredables,
+    emparejarDentroDelCaso: img.emparejarDentroDelCaso,
     componerInstruccion: img.componerInstruccion,
     planificarImagenes: img.planificar,
     planificarClips: mov.planificar,

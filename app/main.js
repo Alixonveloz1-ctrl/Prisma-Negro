@@ -1197,6 +1197,8 @@ accion('b-movimiento', async () => {
     { alTerminarUno: guardaToma },
   );
   informar(r, 'movimiento');
+  // Un clip recién pagado puede servirle a su plano gemelo, ahora mismo.
+  await emparejarGemelos('paso4');
 });
 
 accion('b-musica', async () => {
@@ -1279,6 +1281,8 @@ accion('b-inventario', async () => {
   }
 
   await guardar();
+  // Y con la verdad del almacén puesta, los planos gemelos se emparejan.
+  const emparejados = await emparejarGemelos();
   pintarTodo();
 
   // LA RESPUESTA ES POR FASES, no un número de archivos. «88 materiales en el
@@ -1301,10 +1305,38 @@ accion('b-inventario', async () => {
   avisar(
     'paso4',
     `${resumen || 'Todavía no hay nada que generar: parte el guion en tomas primero.'}` +
-      (partes.length ? ` · Corregido contra el almacén: ${partes.join('; ')}.` : ''),
+      (partes.length ? ` · Corregido contra el almacén: ${partes.join('; ')}.` : '') +
+      (emparejados ? ` · ${emparejados} planos gemelos emparejados.` : ''),
     'bueno',
   );
 });
+
+/**
+ * Aplica los emparejamientos de planos gemelos del caso y guarda.
+ *
+ * Corre tras generar clips, tras convertir una imagen y al revisar el almacén:
+ * los tres momentos en que aparece material nuevo que una gemela puede usar.
+ */
+async function emparejarGemelos(avisarDonde = null) {
+  const cambios = imagenFase.emparejarDentroDelCaso(P.id, pieza().tomas);
+  for (const c of cambios) {
+    const k = pieza().tomas.findIndex((t) => t.i === c.i);
+    if (k < 0) continue;
+    if (c.heredadoVid) {
+      pieza().tomas[k].heredadoVid = c.heredadoVid;
+      pieza().tomas[k].movimiento = true;
+    }
+    if (c.heredado) pieza().tomas[k].heredado = c.heredado;
+  }
+  if (cambios.length) {
+    await guardar();
+    pintarTodo();
+    if (avisarDonde) {
+      avisar(avisarDonde, `Planos gemelos emparejados: ${cambios.map((c) => c.dice).join('; ')}.`, 'bueno');
+    }
+  }
+  return cambios.length;
+}
 
 function informar(r, que) {
   pintarPasos();
@@ -1644,7 +1676,12 @@ function pintarPorTipo() {
   }
 
   // ── Imágenes: toda toma con imagen propia o heredada, cargada sola ──
-  const conImagen = t.filter((x) => x.plano && x.reusa == null && !(x.movimiento && x.heredadoVid));
+  // Emparejada con clip heredado pero CON imagen propia: se sigue enseñando —su
+  // imagen existe y se puede rehacer—. Solo se esconde la que ni tiene ni
+  // necesita imagen propia.
+  const conImagen = t.filter(
+    (x) => x.plano && x.reusa == null && !(x.movimiento && x.heredadoVid && x.imagen !== 'ok' && !x.heredado),
+  );
   $('cuenta-imagenes').textContent = conImagen.length
     ? `${conImagen.filter((x) => x.imagen === 'ok' || x.heredado).length}/${conImagen.length}`
     : '';
@@ -1665,7 +1702,7 @@ function pintarPorTipo() {
     cuerpo.className = 'cuerpo';
     // El estado del clip, AQUÍ MISMO: con 83 imágenes, saber cuál tiene ya su
     // video no puede exigir cruzar a la otra pestaña llevando la cuenta de cabeza.
-    const clipListo = x.video === 'ok';
+    const clipListo = x.video === 'ok' || !!x.heredadoVid;
     cuerpo.innerHTML =
       `<p>#${x.i + 1}${x.heredado ? ' · heredada' : ''} · ${escapar((x.texto || '').slice(0, 70))}…</p>` +
       (clipListo
@@ -1880,6 +1917,8 @@ async function convertirEnClip(i, decir = () => {}) {
   pieza().tomas[k] = nueva;
   await refrescar(claveToma(P.id, i, 'vid'));
   await guardar();
+  await emparejarGemelos();
+  pintarPorTipo();
   avisar('previa', `Clip listo. Vuelve a preparar para verlo montado.`, 'bueno');
 }
 

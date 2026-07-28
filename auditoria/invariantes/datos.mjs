@@ -1351,9 +1351,12 @@ export const invariantes = [
       return fallos;
     },
     // Se rompe como estaba: sin marcar la toma, así que el montaje la dejaba fija.
+    // Anclado con el `guardar` que le sigue: la misma línea existe también en el
+    // emparejador de gemelos, y sin ancla el sabotaje borraba AQUELLA y esta
+    // invariante salía ciega.
     romper: (ctx) =>
       editando(ctx, 'app/main.js', (t) =>
-        t.replace('pieza().tomas[k].movimiento = true;', ''),
+        t.replace('pieza().tomas[k].movimiento = true;\n  await guardar();', 'await guardar();'),
       ),
   },
 
@@ -1609,6 +1612,52 @@ export const invariantes = [
       editando(ctx, 'app/fases/guion.js', (t) =>
         t.replace('if (alActo) await alActo(partes[partes.length - 1], n, actos.length);', ''),
       ),
+  },
+
+  {
+    nombre: 'los-planos-gemelos-comparten-material-dentro-del-caso',
+    dice: '«La toma 18 y la 50 usan la misma imagen; el video de la 50 se generó, pero la 18 no lo agarró automático.» El emparejamiento por plano existía ENTRE casos (el banco) y no dentro del mismo caso: dos tomas gemelas del mismo documental pagaban cada una lo suyo sin enterarse de que su material ya existía.',
+    comprobar(ctx) {
+      const { emparejarDentroDelCaso } = ctx.fn;
+      const fallos = [];
+      const plano = { lugar: 'la comisaría', encuadre: 'plano general', luz: 'noche', descripcion: 'd', sujetos: [] };
+      const otra = { ...plano, luz: 'día' };
+
+      const tomas = [
+        { i: 18, plano, reusa: null, movimiento: false, imagen: 'ok', video: null },
+        { i: 30, plano: otra, reusa: null, movimiento: false, imagen: null, video: null },
+        { i: 44, plano, reusa: null, movimiento: false, imagen: null, video: null },
+        { i: 50, plano, reusa: null, movimiento: true, imagen: 'ok', video: 'ok' },
+      ];
+      const cambios = emparejarDentroDelCaso('p01', tomas);
+
+      // 1 · La 18 agarra el clip de la 50, automática.
+      const c18 = cambios.find((c) => c.i === 18);
+      if (!c18 || c18.heredadoVid !== 'p01/t050/vid' || c18.movimiento !== true) {
+        fallos.push('La toma 18 no agarra el clip de su gemela 50: se pagaría otro clip del mismo plano.');
+      }
+      // 2 · La 44, sin imagen, agarra la imagen del plano gemelo.
+      const c44 = cambios.find((c) => c.i === 44 && c.heredado);
+      if (!c44 || !/img$/.test(c44.heredado)) {
+        fallos.push('Una toma sin imagen no agarra la de su gemela: la pagaría otra vez.');
+      }
+      // 3 · Y NADIE agarra lo que no es gemelo: la luz distinta es OTRO plano.
+      if (cambios.some((c) => c.i === 30)) {
+        fallos.push('Se emparejó un plano con la luz distinta: la misma fachada de noche y de día es otro plano.');
+      }
+      // 4 · El que ya tiene material propio no se toca.
+      if (cambios.some((c) => c.i === 50)) fallos.push('Se tocó a la dueña del material.');
+
+      // 5 · Y la pantalla lo aplica en los tres momentos en que aparece material.
+      const main = ctx.fuentes.get('app/main.js') || '';
+      const veces = (main.match(/await emparejarGemelos\(/g) || []).length;
+      if (veces < 3) {
+        fallos.push(`El emparejador se aplica en ${veces} sitios y son 3: tras los clips, tras convertir y al revisar.`);
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: nadie empareja nada.
+    romper: (ctx) => conFuncion(ctx, 'emparejarDentroDelCaso', () => []),
   },
 
   {
