@@ -1287,7 +1287,7 @@ export const invariantes = [
       const cuerpo = main.slice(i, i + 1800);
 
       if (!/Convertir en clip/.test(main)) fallos.push('No hay botón: la función existe y no la llama nadie.');
-      if (!/\bconvertirEnClip\(t\.i/.test(main)) {
+      if (!/\bconvertirEnClip\([tx]\.i/.test(main)) {
         fallos.push('El botón no dice de qué toma es: convertiría otra.');
       }
       if (!/movimiento\.generarClip\(/.test(cuerpo)) fallos.push('No se genera el clip.');

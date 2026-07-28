@@ -32,7 +32,8 @@ import * as metadatos from './fases/metadatos.js';
 import * as montajeFase from './fases/montaje.js';
 import * as previa from './previa.js';
 import * as local from './local.js';
-import { claveToma } from '../comun/claves.mjs';
+import { material } from './material.js';
+import { claveToma, claveMusica, claveFotograma, claveClip } from '../comun/claves.mjs';
 
 const $ = (id) => document.getElementById(id);
 
@@ -405,9 +406,12 @@ function pintarTodo() {
   // vale, y dejarla puesta enseñaría el documental anterior como si fuera este.
   if (preparada && preparada.hoja?.pieza !== pieza().id) {
     preparada = null;
-    pintarPorTipo();
     pintarTiras();
   }
+  // Las listas por tipo salen del proyecto, no de la previa: se pintan SIEMPRE.
+  // Cuando dependían de `preparada`, cada recarga las dejaba en «prepara primero»
+  // con todo el material ya pagado y guardado ahí debajo.
+  pintarPorTipo();
 }
 
 /**
@@ -1430,8 +1434,15 @@ function abrirHoja(id) {
   if (id !== 'montado') reproductor?.parar();
 }
 
-/** Una fila con reproductor y botón de rehacer. */
-function filaAudio({ titulo, texto, blob, alRehacer, etiqueta = 'Rehacer' }) {
+/**
+ * Una fila con reproductor y botón de rehacer.
+ *
+ * El audio se carga AL PEDIRLO (`cargar`), no al pintar la lista: ochenta y tres
+ * tomas de voz bajadas de golpe por abrir una pestaña es exactamente lo que un
+ * teléfono no aguanta. Con blob directo (el muestrario, material ya en mano)
+ * sigue funcionando igual que siempre.
+ */
+function filaAudio({ titulo, texto, blob, cargar, alRehacer, etiqueta = 'Rehacer' }) {
   const d = document.createElement('div');
   d.className = 'fila-mat';
   d.innerHTML =
@@ -1439,12 +1450,33 @@ function filaAudio({ titulo, texto, blob, alRehacer, etiqueta = 'Rehacer' }) {
     `<div class="acc"></div>`;
   const acc = d.querySelector('.acc');
 
-  if (blob) {
+  const poner = (b) => {
     const a = document.createElement('audio');
     a.controls = true;
     a.preload = 'none';
-    a.src = URL.createObjectURL(blob);
+    a.src = URL.createObjectURL(b);
     d.querySelector('.txt').appendChild(a);
+  };
+
+  if (blob) {
+    poner(blob);
+  } else if (cargar) {
+    const e = document.createElement('button');
+    e.className = 'btn chico fantasma';
+    e.textContent = 'Escuchar';
+    e.onclick = async () => {
+      e.disabled = true;
+      e.textContent = '…';
+      const b = await cargar();
+      if (b) {
+        poner(b);
+        d.querySelector('.txt audio').play().catch(() => {});
+        e.remove();
+      } else {
+        e.textContent = 'no se pudo cargar';
+      }
+    };
+    acc.appendChild(e);
   } else {
     d.querySelector('.txt').insertAdjacentHTML('beforeend', '<span class="pastilla p-falta">falta</span>');
   }
@@ -1467,56 +1499,110 @@ function filaAudio({ titulo, texto, blob, alRehacer, etiqueta = 'Rehacer' }) {
   return d;
 }
 
+// ── Las listas por tipo: DE LO GENERADO, no de la previa preparada ────────────
+//
+// «Debería poder revisar cada cosa individualmente sin necesidad de preparar.»
+// Y tenía razón dos veces. Las listas se llenaban de `preparada`, que vive en
+// memoria: cada recarga las vaciaba y tocaba volver a Preparar solo para OÍR lo
+// ya pagado. Ahora salen del proyecto y de la caché local directamente, así que
+// están al abrir. Preparar queda para lo único que de verdad prepara: el montado.
+//
+// El material pesado no se baja en masa: la imagen se carga sola (es la revisión
+// visual), y la voz, la música y los clips llevan su botón — un clip son ~35 MB,
+// bajarlos todos por abrir una pestaña castigaría justo al teléfono.
+
+let versionMateriales = 0;
+
+/** Local primero; si no está, del almacén por trozos (y queda en caché). */
+async function materialLocal(clave, tipo) {
+  const ya = await local.leerMaterial(clave);
+  if (ya) return ya;
+  try {
+    return await material(clave, tipo);
+  } catch {
+    return null;
+  }
+}
+
 function pintarPorTipo() {
-  const tomas = preparada?.tomas || [];
+  const mia = ++versionMateriales;
+  const t = pieza().tomas;
 
   // ── Voz, toma a toma ──
-  $('cuenta-voz').textContent = tomas.length ? `${tomas.filter((t) => t.voz).length}/${tomas.length}` : '';
+  const conTexto = t.filter((x) => (x.texto || '').trim());
+  $('cuenta-voz').textContent = conTexto.length ? `${conTexto.filter((x) => x.audio === 'ok').length}/${conTexto.length}` : '';
   const cajaVoz = $('lista-voz');
-  cajaVoz.innerHTML = '';
-  if (!tomas.length) cajaVoz.innerHTML = '<p class="nota">Prepara la previa primero.</p>';
-  for (const t of tomas) {
+  cajaVoz.innerHTML = conTexto.length ? '' : '<p class="nota">Todavía no hay tomas: genera el guion primero.</p>';
+  for (const x of conTexto) {
     cajaVoz.appendChild(
       filaAudio({
-        titulo: `Toma ${t.i + 1} · ${t.duracion.toFixed(1)}s`,
-        texto: t.texto,
-        blob: t.voz,
-        alRehacer: () => rehacerVoz(t.i),
+        titulo:
+          `Toma ${x.i + 1} · ${(x.segundos || 0).toFixed(1)}s` +
+          (x.audio === 'ok' && !x.corteExacto ? ' · corte viejo' : ''),
+        texto: x.texto,
+        cargar: x.audio === 'ok' ? () => materialLocal(claveToma(P.id, x.i, 'audio'), 'audio/wav') : null,
+        alRehacer: () => rehacerVoz(x.i),
       }),
     );
   }
 
-  // ── Imágenes ──
-  const conImagen = tomas.filter((t) => !t.movimiento);
-  $('cuenta-imagenes').textContent = conImagen.length ? `${conImagen.filter((t) => t.visual).length}/${conImagen.length}` : '';
+  // ── Imágenes: toda toma con imagen propia o heredada, cargada sola ──
+  const conImagen = t.filter((x) => x.plano && x.reusa == null && !(x.movimiento && x.heredadoVid));
+  $('cuenta-imagenes').textContent = conImagen.length
+    ? `${conImagen.filter((x) => x.imagen === 'ok' || x.heredado).length}/${conImagen.length}`
+    : '';
   const g = $('galeria');
-  g.innerHTML = conImagen.length ? '' : '<p class="nota">Prepara la previa primero.</p>';
-  for (const t of conImagen) {
+  g.innerHTML = conImagen.length ? '' : '<p class="nota">Dirige las tomas primero: la imagen sale de la ficha de plano.</p>';
+  for (const x of conImagen) {
     const d = document.createElement('div');
     d.className = 'pieza-mat';
-    d.innerHTML =
-      (t.visual ? `<img src="${URL.createObjectURL(t.visual)}" alt="">` : '<div class="sin">sin imagen</div>') +
-      `<div class="cuerpo"><p>#${t.i + 1} · ${escapar((t.texto || '').slice(0, 70))}…</p></div>`;
+    const hay = x.imagen === 'ok' || !!x.heredado;
+
+    // Con nodos, no con innerHTML: el hueco del visual se sustituye cuando llega
+    // el blob, y eso pide una referencia de verdad, no una posición.
+    const visual = document.createElement('div');
+    visual.className = 'sin';
+    visual.textContent = hay ? 'cargando…' : 'sin imagen';
+    d.appendChild(visual);
+    const cuerpo = document.createElement('div');
+    cuerpo.className = 'cuerpo';
+    cuerpo.innerHTML = `<p>#${x.i + 1}${x.heredado ? ' · heredada' : ''} · ${escapar((x.texto || '').slice(0, 70))}…</p>`;
+    d.appendChild(cuerpo);
+
+    if (hay) {
+      materialLocal(claveFotograma(P.id, x, t), 'image/png').then((blob) => {
+        if (mia !== versionMateriales) return;
+        if (!blob) {
+          visual.textContent = 'no se pudo cargar';
+          return;
+        }
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(blob);
+        img.alt = '';
+        img.loading = 'lazy';
+        d.replaceChild(img, visual);
+      });
+    }
     const b = document.createElement('button');
     b.className = 'btn chico fantasma';
-    b.textContent = 'Rehacer';
+    b.textContent = hay ? 'Rehacer' : 'Generar';
     b.onclick = async () => {
       b.disabled = true;
       b.textContent = '…';
       try {
-        await rehacerImagen(t.i);
+        await rehacerImagen(x.i);
       } catch (e) {
         avisar('previa', e.message, 'malo');
       }
       b.disabled = false;
       b.textContent = 'Rehacer';
     };
-    d.querySelector('.cuerpo').appendChild(b);
+    cuerpo.appendChild(b);
 
     // Cualquier imagen se puede animar, la marcara el director o no. Mirando la
     // imagen es cuando se ve si merece moverse; decidirlo antes, a ciegas, era
     // decidirlo por una descripción.
-    if (t.visual) {
+    if (hay) {
       const c = document.createElement('button');
       c.className = 'btn chico fantasma';
       c.textContent = 'Convertir en clip';
@@ -1524,47 +1610,79 @@ function pintarPorTipo() {
         c.disabled = true;
         c.textContent = '…';
         try {
-          await convertirEnClip(t.i, (m) => (c.textContent = m));
+          await convertirEnClip(x.i, (m) => (c.textContent = m));
         } catch (e) {
           avisar('previa', e.message, 'malo');
         }
         c.disabled = false;
         c.textContent = 'Convertir en clip';
       };
-      d.querySelector('.cuerpo').appendChild(c);
+      cuerpo.appendChild(c);
     }
     g.appendChild(d);
   }
 
   // ── Música, escena a escena ──
-  const escenas = preparada?.hoja.escenas || [];
-  $('cuenta-musica').textContent = escenas.length ? `${Object.values(preparada.musica).filter(Boolean).length}/${escenas.length}` : '';
+  const escenas = pieza().escenas;
+  $('cuenta-musica').textContent = escenas.length ? `${escenas.filter((e) => e.musica === 'ok').length}/${escenas.length}` : '';
   const cajaMus = $('lista-musica');
-  cajaMus.innerHTML = escenas.length ? '' : '<p class="nota">Prepara la previa primero.</p>';
+  cajaMus.innerHTML = escenas.length ? '' : '<p class="nota">Todavía no hay escenas.</p>';
   for (const e of escenas) {
+    const segundos = t.filter((x) => x.escena === e.n).reduce((s, x) => s + (x.segundos || 0), 0);
     cajaMus.appendChild(
       filaAudio({
-        titulo: `Escena ${e.n} · ${reloj(e.duracion)}`,
-        texto: pieza().escenas.find((x) => x.n === e.n)?.titulo || '',
-        blob: preparada.musica[e.n],
+        titulo: `Escena ${e.n} · ${reloj(segundos)}`,
+        texto: e.titulo || '',
+        cargar: e.musica === 'ok' ? () => materialLocal(claveMusica(P.id, e.n), 'audio/wav') : null,
         alRehacer: () => rehacerMusica(e.n),
       }),
     );
   }
 
   // ── Clips ──
-  const clips = tomas.filter((t) => t.movimiento);
-  $('cuenta-clips').textContent = clips.length ? `${clips.filter((t) => t.visual).length}/${clips.length}` : '';
+  const clips = t.filter((x) => x.movimiento);
+  $('cuenta-clips').textContent = clips.length
+    ? `${clips.filter((x) => x.video === 'ok' || x.heredadoVid || x.reusa != null).length}/${clips.length}`
+    : '';
   const cajaClips = $('lista-clips');
   cajaClips.innerHTML = clips.length ? '' : '<p class="nota">Ninguna toma lleva clip de video.</p>';
-  for (const t of clips) {
+  for (const x of clips) {
     const d = document.createElement('div');
     d.className = 'pieza-mat';
-    d.innerHTML =
-      (t.visual
-        ? `<video src="${URL.createObjectURL(t.visual)}" controls playsinline preload="metadata"></video>`
-        : '<div class="sin">sin clip</div>') +
-      `<div class="cuerpo"><p>#${t.i + 1} · ${t.duracion.toFixed(1)}s</p></div>`;
+    const dueña = t.find((y) => y.i === x.reusa) || x;
+    const hay = !!(x.heredadoVid || dueña.heredadoVid || dueña.video === 'ok');
+
+    const visual = document.createElement('div');
+    visual.className = 'sin';
+    visual.textContent = hay ? 'toca «Ver» para cargarlo' : 'sin clip · se montará su imagen con cámara';
+    d.appendChild(visual);
+    const cuerpo = document.createElement('div');
+    cuerpo.className = 'cuerpo';
+    cuerpo.innerHTML = `<p>#${x.i + 1} · ${(x.segundos || 0).toFixed(1)}s${x.reusa != null ? ` · repite la ${x.reusa + 1}` : ''}</p>`;
+    d.appendChild(cuerpo);
+
+    if (hay) {
+      const v = document.createElement('button');
+      v.className = 'btn chico fantasma';
+      v.textContent = 'Ver';
+      v.onclick = async () => {
+        v.disabled = true;
+        v.textContent = '…';
+        const blob = await materialLocal(claveClip(P.id, x, t), 'video/mp4');
+        if (blob) {
+          const video = document.createElement('video');
+          video.src = URL.createObjectURL(blob);
+          video.controls = true;
+          video.playsInline = true;
+          video.preload = 'metadata';
+          d.replaceChild(video, visual);
+          v.remove();
+        } else {
+          v.textContent = 'no se pudo cargar';
+        }
+      };
+      cuerpo.appendChild(v);
+    }
     cajaClips.appendChild(d);
   }
 }
@@ -1588,7 +1706,8 @@ async function rehacerVoz(i) {
     await refrescar(`${P.id}/t${String(t.i).padStart(3, '0')}/audio`);
   }
   await guardar();
-  avisar('previa', `Voz rehecha. Vuelve a preparar para oírla.`, 'bueno');
+  pintarPorTipo();
+  avisar('previa', 'Voz rehecha: escúchala en su fila. El montado se actualiza al preparar.', 'bueno');
 }
 
 async function rehacerImagen(i) {
@@ -1605,7 +1724,8 @@ async function rehacerImagen(i) {
   pieza().tomas[k] = nueva;
   await refrescar(`${P.id}/t${String(i).padStart(3, '0')}/img`);
   await guardar();
-  avisar('previa', 'Imagen rehecha. Vuelve a preparar para verla.', 'bueno');
+  pintarPorTipo();
+  avisar('previa', 'Imagen rehecha: ya está en la galería. El montado se actualiza al preparar.', 'bueno');
 }
 
 /**
@@ -1655,7 +1775,10 @@ async function convertirEnClip(i, decir = () => {}) {
 }
 
 async function rehacerMusica(n) {
-  const escena = { n, segundos: preparada.hoja.escenas.find((e) => e.n === n)?.duracion || 30 };
+  // Los segundos salen de las tomas de la escena, no de la previa preparada:
+  // rehacer música tiene que funcionar sin haber preparado nada.
+  const segundos = pieza().tomas.filter((t) => t.escena === n).reduce((s, t) => s + (t.segundos || 0), 0);
+  const escena = { n, segundos: segundos || 30 };
   avisar('previa', `Rehaciendo la música de la escena ${n}…`);
   await musica.generarMusicaDeEscena({
     escena,
@@ -1664,7 +1787,8 @@ async function rehacerMusica(n) {
     tratamiento: pieza().tratamiento,
   });
   await refrescar(`${P.id}/mus/${String(n).padStart(3, '0')}`);
-  avisar('previa', 'Música rehecha. Vuelve a preparar para oírla.', 'bueno');
+  pintarPorTipo();
+  avisar('previa', 'Música rehecha: escúchala en su fila. El montado se actualiza al preparar.', 'bueno');
 }
 
 /**

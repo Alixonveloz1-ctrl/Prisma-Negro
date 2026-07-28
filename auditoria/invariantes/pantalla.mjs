@@ -602,4 +602,58 @@ export const invariantes = [
         t.replace('const ids = await estado.listarRemotos();', 'const ids = [];'),
       ),
   },
+
+  {
+    nombre: 'la-revision-individual-no-necesita-preparar',
+    dice: '«Cada vez que refresco tengo que darle a Preparar para volver a escuchar lo que generé.» Las listas por tipo —voz, imágenes, música, clips— se llenaban de `preparada`, que vive en memoria: cada recarga las vaciaba, con todo el material pagado y guardado ahí debajo. Revisar y rehacer una pieza no puede depender de armar el montado entero.',
+    async comprobar(ctx) {
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      // 1 · Las listas salen del proyecto, no de la previa preparada.
+      const i = main.indexOf('function pintarPorTipo');
+      // El final del cuerpo es el siguiente bloque de nivel superior, sea función
+      // o acción: cortar en el primero que aparezca, no en uno fijo.
+      const cortes = ['\nfunction ', '\nasync function ', '\naccion(', '\n// ── ']
+        .map((m) => main.indexOf(m, i + 10))
+        .filter((k) => k > 0);
+      const cuerpo = i < 0 ? '' : main.slice(i, cortes.length ? Math.min(...cortes) : undefined);
+      if (!cuerpo) return ['No se encuentra quien pinta las listas por tipo.'];
+      if (/preparada/.test(cuerpo)) {
+        fallos.push('Las listas por tipo siguen leyendo la previa preparada: al recargar quedan vacías.');
+      }
+      // Y lo pesado se carga AL PEDIRLO: ochenta clips de 35 MB por abrir una
+      // pestaña es justo lo que un teléfono no aguanta.
+      if (!/cargar: /.test(cuerpo)) fallos.push('La voz y la música se bajarían en masa al pintar la lista.');
+      if (!/materialLocal\(/.test(cuerpo)) {
+        fallos.push('Las listas no pasan por la caché local: cada visita volvería a bajar todo.');
+      }
+
+      // 2 · Y EN EJECUCIÓN: arrancada la aplicación SIN preparar nada, las listas
+      // están llenas y con sus cuentas.
+      const { humoDeLaPantalla } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const r = await humoDeLaPantalla({ parche: enContexto !== enDisco ? () => enContexto : null });
+      for (const [id, espera] of [
+        ['cuenta-voz', '8/12'],
+        ['cuenta-imagenes', '6/11'],
+        ['cuenta-musica', '1/2'],
+        ['cuenta-clips', '1/1'],
+      ]) {
+        if (r.texto(id) !== espera) {
+          fallos.push(`Sin preparar, «${id}» dice «${r.texto(id)}» y el proyecto sembrado tiene ${espera}.`);
+        }
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: las listas leyendo una previa que no existe aún.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace(
+          'const mia = ++versionMateriales;\n  const t = pieza().tomas;',
+          'const mia = ++versionMateriales;\n  const t = [];',
+        ),
+      ),
+  },
 ];

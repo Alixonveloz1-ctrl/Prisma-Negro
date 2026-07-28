@@ -92,6 +92,12 @@ class Elemento {
     this.children = this.children.filter((x) => x !== c);
     return c;
   }
+  replaceChild(nuevo, viejo) {
+    const k = this.children.indexOf(viejo);
+    if (k >= 0) this.children[k] = nuevo;
+    else this.children.push(nuevo);
+    return viejo;
+  }
   remove() {}
   insertAdjacentHTML() {}
   setAttribute(k, v) {
