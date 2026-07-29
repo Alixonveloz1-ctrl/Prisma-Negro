@@ -420,6 +420,96 @@ export const invariantes = [
   },
 
   {
+    nombre: 'las-tomas-se-igualan-al-mismo-tono',
+    dice: '«Parece hasta diferentes voces.» Las voces que interpretan cada llamada por su cuenta salen con un tono distinto en cada una: con veinte llamadas para 83 tomas, el documental cambia de narrador veinte veces. Ni la temperatura a cero ni los bloques largos lo arreglan —solo lo espacian—. Se mide el tono de cada toma y se llevan TODAS al mismo, con el mismo par asetrate/atempo que la gravedad: sin mover el reloj.',
+    comprobar(ctx) {
+      const { construirHoja, guionFfmpeg, correccionDeTono, sanear } = ctx.fn;
+      const fallos = [];
+      const plano = { encuadre: 'plano medio', movimientoCamara: 'fijo', lugar: 'x', luz: 'y', sujetos: [], descripcion: 'd' };
+      const toma = (i, hz) => ({ i, escena: 0, segundos: 4, medida: true, plano, audio: 'ok', corteExacto: true, hz });
+
+      // 1 · La corrección lleva cada toma a la referencia, y en la dirección buena.
+      // Una toma grave respecto a la referencia hay que SUBIRLA (positivo).
+      if (!(correccionDeTono(100, 112) > 0)) fallos.push('Una toma más grave que la referencia no se sube: la corrección va al revés.');
+      if (!(correccionDeTono(125, 112) < 0)) fallos.push('Una toma más aguda que la referencia no se baja.');
+      if (Math.abs(correccionDeTono(110, 110)) > 0.001) fallos.push('Una toma que ya está en la referencia se toca igualmente.');
+      // Un error de octava —el clásico de la autocorrelación— no se «corrige»:
+      // eso convertiría la toma en otra voz en vez de igualarla.
+      if (correccionDeTono(55, 110) !== 0) fallos.push('Un error de octava se corrige como si fuera desafinación: haría otra voz.');
+      if (Math.abs(correccionDeTono(90, 118)) > 4.001) fallos.push('La corrección no tiene tope.');
+      if (correccionDeTono(0, 110) !== 0 || correccionDeTono(110, 0) !== 0) {
+        fallos.push('Sin medida se inventa una corrección.');
+      }
+
+      // 2 · La referencia de la pieza es la MEDIANA de lo medido.
+      const hoja = construirHoja({
+        pieza: 'p01',
+        tomas: [toma(0, 100), toma(1, 110), toma(2, 120)],
+        escenas: [{ n: 0 }],
+      });
+      const ajustes = hoja.tomas.map((t) => t.ajusteTono);
+      if (Math.abs(ajustes[1]) > 0.001) fallos.push('La toma que está en la mediana se desafina.');
+      if (!(ajustes[0] > 0) || !(ajustes[2] < 0)) fallos.push('Las tomas no convergen hacia la referencia.');
+      // Y una medida absurda se queda fuera en vez de arrastrar a las demás, que
+      // es lo que haría una media.
+      const conRara = construirHoja({
+        pieza: 'p01',
+        tomas: [toma(0, 100), toma(1, 110), toma(2, 120), toma(3, 700)],
+        escenas: [{ n: 0 }],
+      });
+      if (conRara.tomas[3].ajusteTono !== 0) fallos.push('Una medida absurda se «corrige» en vez de dejarse fuera.');
+      if (Math.abs(conRara.tomas[0].ajusteTono - ajustes[0]) > 1) {
+        fallos.push('Una medida absurda mueve la referencia de las demás: la mediana no está haciendo su trabajo.');
+      }
+
+      // 3 · Y llega al guion como una cadena POR TOMA, sumada a la gravedad.
+      const g = guionFfmpeg(
+        construirHoja({
+          pieza: 'p01',
+          tomas: [toma(0, 100), toma(1, 110), toma(2, 120)],
+          escenas: [{ n: 0 }],
+          config: { gravedadVoz: -2, muestreo: 48000 },
+        }),
+      );
+      const pares = [...g.matchAll(/asetrate=(\d+),aresample=(\d+),atempo=([\d.]+)/g)];
+      if (pares.length !== 3) {
+        fallos.push(`Salen ${pares.length} cadenas de tono para 3 tomas: no se iguala toma a toma.`);
+      }
+      const factores = pares.map((m) => Number(m[1]) / Number(m[2]));
+      if (new Set(factores.map((f) => f.toFixed(4))).size < 3) {
+        fallos.push('Las tres tomas salen con el mismo tono: la corrección por toma no llega al guion.');
+      }
+      // Y CADA PAR SIGUE SIENDO RECÍPROCO: igualar el tono no puede mover el reloj.
+      for (const m of pares) {
+        const producto = (Number(m[1]) / Number(m[2])) * Number(m[3]);
+        if (Math.abs(producto - 1) > 0.001) {
+          fallos.push(`Una toma igualada cambia de duración (producto ${producto.toFixed(4)}): el documental se correría.`);
+        }
+      }
+
+      // 4 · Se mide donde hay muestras, se guarda, y la previa lo aplica.
+      const nar = fuente(ctx, 'app/fases/narracion.js');
+      const pre = fuente(ctx, 'app/previa.js');
+      if (!/periodoDeVoz/.test(nar)) fallos.push('La narración no mide el tono: el material nuevo no se podría igualar.');
+      if (!/periodoDeVoz/.test(pre)) fallos.push('Preparar no mide el tono: el material YA pagado nunca se igualaría.');
+      if (!/gravedad \+ \(Number\(t\.ajusteTono\) \|\| 0\)/.test(pre)) {
+        fallos.push('La previa no suma el ajuste de tono: se elegiría oyendo algo distinto de lo que se exporta.');
+      }
+      // Y sobrevive a la recarga: medirlo exige bajar los 83 audios otra vez.
+      const p = sanear({ id: 'p01', piezas: [{ id: 'p01', tomas: [{ i: 0, hz: 123.45 }] }] });
+      if (p.piezas[0].tomas[0].hz !== 123.45) fallos.push('El tono medido se pierde al recargar: habría que volver a medirlo.');
+      return fallos;
+    },
+    // Se rompe como estaba: un solo tono para toda la pieza, el que eligió el
+    // usuario, sin igualar nada.
+    romper: (ctx) =>
+      conFuncion(ctx, 'construirHoja', (a) => {
+        const h = ctx.fn.construirHoja(a);
+        return { ...h, tomas: h.tomas.map((t) => ({ ...t, ajusteTono: 0 })) };
+      }),
+  },
+
+  {
     nombre: 'el-volumen-de-la-musica-se-elige-y-se-exporta',
     dice: '«La música ni se escucha, apenas se medio escucha a lo lejos.» El nivel estaba escrito a mano —0,55— en el guion de ffmpeg Y otra vez en la previa, y `config.musica.volumen` existía en el modelo sin que lo leyera NADIE: un ajuste muerto. Y el agachado era de más de veinte decibelios con un umbral que salta con una respiración, así que subir el nivel tampoco habría servido.',
     async comprobar(ctx) {

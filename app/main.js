@@ -33,6 +33,7 @@ import * as montajeFase from './fases/montaje.js';
 import * as previa from './previa.js';
 import * as local from './local.js';
 import { material } from './material.js';
+import { deBase64 } from './imagenes.js';
 import { claveToma, claveMusica, claveFotograma, claveClip } from '../comun/claves.mjs';
 
 const $ = (id) => document.getElementById(id);
@@ -1442,6 +1443,10 @@ accion(
       alAvanzar: (n, de) => avisar('previa', `Bajando material… ${n} de ${de} tomas`),
     });
 
+    // El tono medido de cada toma se guarda: es lo que iguala las voces, y el
+    // montaje lo necesita sin volver a bajar los 83 audios.
+    if (preparada.medidas) await guardar();
+
     asegurarReproductor().cargar(preparada);
     pintarTiras();
     pintarPorTipo();
@@ -1460,6 +1465,7 @@ accion(
           ? `A ${faltan.length} les falta algo: ${faltan.slice(0, 6).map((t) => `#${t.i + 1} (${t.falta.join('+')})`).join(', ')}`
           : 'Todas completas',
         sinMusica.length ? `${sinMusica.length} escenas sin música` : '',
+        preparada.medidas ? `Tono igualado en ${preparada.medidas} tomas` : '',
         estimadas.length
           ? `${estimadas.length} tomas llevan un corte forzado (sin silencio cerca, puede partir ` +
             `palabra): dale a Narración y se reparan solas`
@@ -2793,10 +2799,20 @@ accion(
       // entrara aquí, lo que se oye al probar no sería lo que se va a generar.
       estilo: $('estilo').value.trim(),
     });
+    // POR BLOB, NO POR data:. Safari de iPhone no reproduce medios servidos en un
+    // `data:` URI —quiere poder pedir rangos de bytes—, así que el reproductor
+    // aparecía y no sonaba nunca: «ni siquiera me deja escuchar las voces para
+    // seleccionar una voz nueva». Con un blob del navegador sí, y además se libera
+    // el anterior en vez de dejar una muestra colgada por cada prueba.
     const a = $('muestra-voz');
-    a.src = `data:audio/wav;base64,${r.datos}`;
+    if (a.dataset.url) URL.revokeObjectURL(a.dataset.url);
+    const url = URL.createObjectURL(deBase64(r.datos, r.tipo || 'audio/wav'));
+    a.dataset.url = url;
+    a.src = url;
     a.style.display = 'block';
-    a.play().catch(() => {});
+    // Y si el navegador se niega a sonar solo —tras un `await` ya no cuenta como
+    // gesto del usuario—, ahí están los controles: se dice, en vez de callarlo.
+    a.play().catch(() => avisar('proyecto', 'Muestra lista: dale al play del reproductor.', 'bueno'));
   },
   'proyecto',
 );

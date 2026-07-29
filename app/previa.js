@@ -18,8 +18,8 @@
 // No cuesta nada: el material ya está pagado y en el almacén.
 
 import { material, tipoDeClave } from './material.js';
-import { construirHoja } from '../comun/hoja.mjs';
-import { agravarMuestras } from '../comun/audio.mjs';
+import { construirHoja, correccionDeTono } from '../comun/hoja.mjs';
+import { agravarMuestras, periodoDeVoz, leerWav } from '../comun/audio.mjs';
 import { nombreLocal } from '../comun/claves.mjs';
 
 /**
@@ -57,17 +57,61 @@ export async function preparar({ pieza, config, senal, alAvanzar }) {
   };
 
   const tomas = [];
+  // Cuántas tomas estrenan medida de tono. Se devuelve para poder decirlo en
+  // pantalla y para que quien llame sepa que hay que guardar el proyecto.
+  let medidas = 0;
   for (const [n, fila] of hoja.tomas.entries()) {
     if (senal?.aborted) break;
     const [visual, voz] = await Promise.all([cargar(fila.archivo), cargar(fila.audio)]);
+
+    // EL TONO DE ESTA TOMA, medido sobre el audio que ya está pagado.
+    //
+    // Se mide AQUÍ y no solo al narrar porque así también se iguala el material
+    // que ya existe: quien tiene 83 tomas generadas no tiene que volver a pagarlas
+    // para que dejen de sonar a veinte narradores distintos. Queda guardado en la
+    // toma, así que el montaje lo encuentra sin volver a bajar el audio.
+    const dueña = pieza.tomas.find((t) => t.i === fila.i);
+    if (voz && dueña && !(Number(dueña.hz) > 0)) {
+      try {
+        const wav = leerWav(await voz.arrayBuffer());
+        const periodo = periodoDeVoz(wav.muestras, wav.frecuencia);
+        if (periodo > 0) {
+          dueña.hz = +(wav.frecuencia / periodo).toFixed(2);
+          medidas++;
+        }
+      } catch {
+        /* un audio que no se puede leer no impide preparar la previa */
+      }
+    }
+
     tomas.push({
       ...fila,
-      texto: pieza.tomas.find((t) => t.i === fila.i)?.texto || '',
+      texto: dueña?.texto || '',
       visual,
       voz,
       falta: [!visual && (fila.movimiento ? 'clip' : 'imagen'), !voz && 'voz'].filter(Boolean),
     });
     alAvanzar?.(n + 1, hoja.tomas.length);
+  }
+
+  // Con los tonos ya medidos se recalcula la corrección de cada toma: la
+  // referencia es la MEDIANA de la pieza, así que no se puede saber hasta
+  // haberlas visto todas. La hoja se construyó antes de medir.
+  if (medidas) {
+    const orden = pieza.tomas
+      .map((t) => Number(t.hz))
+      .filter((h) => h > 0)
+      .sort((a, b) => a - b);
+    const referencia = !orden.length
+      ? 0
+      : orden.length % 2
+        ? orden[(orden.length - 1) / 2]
+        : (orden[orden.length / 2 - 1] + orden[orden.length / 2]) / 2;
+    for (const lista of [tomas, hoja.tomas]) {
+      for (const f of lista) {
+        f.ajusteTono = correccionDeTono(pieza.tomas.find((t) => t.i === f.i)?.hz, referencia);
+      }
+    }
   }
 
   const musica = {};
@@ -76,7 +120,7 @@ export async function preparar({ pieza, config, senal, alAvanzar }) {
   }
   const firma = hoja.firma ? await cargar(hoja.firma) : null;
 
-  return { hoja, tomas, musica, firma };
+  return { hoja, tomas, musica, firma, medidas };
 }
 
 // ── El reproductor ────────────────────────────────────────────────────────────
@@ -241,11 +285,15 @@ export function reproductor({ lienzo, marca, alCambiar, alTerminar }) {
 
       // LA GRAVEDAD SE OYE AQUÍ, ANTES DE PAGAR NADA, y en TODAS las tomas por
       // igual. Con la duración intacta: nada que recortar, nada que pise a nadie.
-      const semitonos = Number(material.hoja.ajustes?.gravedadVoz) || 0;
+      const gravedad = Number(material.hoja.ajustes?.gravedadVoz) || 0;
 
       inicioContexto = ctx.currentTime + 0.08;
       for (const [t, buf] of vozDe) {
         const f = ctx.createBufferSource();
+        // La gravedad de la pieza MÁS lo que le falte a esta toma para sonar como
+        // las demás. Sumados en un solo paso: dos pasadas de agravador serían dos
+        // veces el artefacto.
+        const semitonos = +(gravedad + (Number(t.ajusteTono) || 0)).toFixed(3);
         f.buffer = semitonos ? agravar(ctx, buf, semitonos) : buf;
         f.connect(vozGanancia);
         // La voz arranca DESPUÉS de la entrada en frío, igual que en el montaje. Si

@@ -289,6 +289,12 @@ function sanearToma(bruto, i, proyecto) {
     // cada sílaba final y no hay suspense posible.
     respiro: Math.max(0, Math.min(8, Number(t.respiro) || 0)),
     entrada: Math.max(0, Math.min(8, Number(t.entrada) || 0)),
+    // El tono medido de esta toma, en hercios. Con él se igualan todas al mismo,
+    // que es lo que arregla el «parece hasta diferentes voces» de las voces que
+    // interpretan cada llamada por su cuenta. Se guarda porque medirlo exige
+    // bajar el audio: sin esto, cada recarga lo perdería y habría que preparar
+    // otra vez para que el montaje pudiera igualar.
+    hz: Number(t.hz) > 0 && Number(t.hz) < 1000 ? +Number(t.hz).toFixed(2) : 0,
     // §8.2: cada toma sabe de qué tipo es su imagen, y eso puede salir en pantalla.
     tipoImagen: ['generada', 'archivo', 'reconstruccion'].includes(t.tipoImagen)
       ? t.tipoImagen

@@ -190,6 +190,8 @@ async function funcionesPuras() {
     claveFotograma: cla.claveFotograma,
     claveClip: cla.claveClip,
     construirHoja: hoj.construirHoja,
+    correccionDeTono: hoj.correccionDeTono,
+    silencios: aud.silencios,
     componerManifiesto: hoj.componerManifiesto,
     guionFfmpeg: hoj.guionFfmpeg,
     repartirRespiros: dir.repartirRespiros,

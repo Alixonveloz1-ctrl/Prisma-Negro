@@ -895,6 +895,35 @@ export const invariantes = [
   },
 
   {
+    nombre: 'los-medios-se-sirven-por-blob-no-por-data',
+    dice: '«Ni siquiera me deja escuchar las voces para seleccionar una voz nueva.» La muestra de voz se servía como `data:audio/wav;base64,…`, y Safari de iPhone NO reproduce medios en un data: URI —quiere poder pedir rangos de bytes—. El reproductor aparecía y no sonaba nunca. Con un blob del navegador sí; y hay que soltar el anterior, o cada prueba deja una muestra colgada en memoria.',
+    comprobar(ctx) {
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      // Ni un solo medio servido por data: en toda la pantalla.
+      for (const m of main.matchAll(/data:(audio|video|image)\/[^`'"]*/g)) {
+        fallos.push(`Se sirve un medio por data: URI (${m[0].slice(0, 40)}…): en iPhone no suena.`);
+      }
+      // La muestra de voz, por blob y con su URL liberada.
+      const i = main.indexOf("'b-probar-voz'");
+      const cuerpo = i < 0 ? '' : main.slice(i, i + 1800);
+      if (!/createObjectURL/.test(cuerpo)) fallos.push('La muestra de voz no se sirve por blob.');
+      if (!/revokeObjectURL/.test(cuerpo)) fallos.push('La muestra de voz no libera la anterior: una fuga por cada prueba.');
+      // Y si el navegador se niega a sonar solo tras el `await`, se dice en vez de
+      // callarlo: un catch vacío es indistinguible de que no funcione.
+      if (/a\.play\(\)\.catch\(\(\) => \{\}\)/.test(cuerpo)) {
+        fallos.push('El fallo de reproducción se traga en silencio: parece que el botón no hace nada.');
+      }
+      return fallos;
+    },
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace('const url = URL.createObjectURL(deBase64(r.datos, r.tipo || ', 'const url = (`data:audio/wav;base64,${r.datos}`, ('),
+      ),
+  },
+
+  {
     nombre: 'el-formato-elegido-manda-tambien-en-los-visores',
     dice: 'Se eligió 9:16 y la previa salía «en 16:9». El material estaba bien —las imágenes se piden en 9:16 y la hoja intercambia ancho y alto— pero los visores estaban dibujados a 16:9 FIJO en el CSS, y con object-fit:cover recortaban lo vertical para llenar el marco: un 9:16 amputado se lee como «se está generando mal».',
     async comprobar(ctx) {

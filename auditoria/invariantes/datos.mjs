@@ -1020,6 +1020,93 @@ export const invariantes = [
   },
 
   {
+    nombre: 'una-palabra-floja-no-cuenta-como-silencio',
+    dice: '«Dice ospi, silencio, tal.» La palabra partida en dos con un silencio dentro. El umbral de silencio era el 6 % DEL PICO del bloque: en una narración con una frase enfática y otra floja, la floja entera cae por debajo de ese 6 % y se clasifica como silencio. Medido: en un bloque de seis segundos con dos y medio a plena voz y tres de palabra floja, el detector daba UN silencio de 2,50 a 6,00 — tres segundos y medio de habla dados por callados—. Y como el corte cae en «silencio de verdad», no se marca forzado y el montaje le pone el RESPIRO encima: de ahí el silencio largo dentro de la palabra.',
+    comprobar(ctx) {
+      const { silencios, repartir } = ctx.fn;
+      const fallos = [];
+      const f = 24000;
+      const bloque = (tramos) => {
+        const total = tramos.reduce((s, [d]) => s + d, 0);
+        const m = new Int16Array(Math.round(total * f));
+        let i = 0;
+        for (const [dur, amp] of tramos) {
+          for (let k = 0; k < Math.round(dur * f); k++, i++) {
+            const t = i / f;
+            m[i] = Math.round(Math.sin(t * 900) * amp * (0.6 + 0.4 * Math.sin(t * 40)));
+          }
+        }
+        return { muestras: m, frecuencia: f, canales: 1 };
+      };
+
+      // 1 · Frase enfática, pausa de verdad, palabra floja. Solo la pausa cuenta.
+      const duro = bloque([[2.5, 26000], [0.4, 60], [3.1, 1400]]);
+      const h = silencios(duro);
+      const dentroDeLaFloja = h.filter((x) => x.fin / f > 3.1);
+      if (dentroDeLaFloja.length) {
+        fallos.push(
+          `La palabra floja cuenta como silencio (hasta ${(dentroDeLaFloja[0].fin / f).toFixed(2)} s): ` +
+            'el corte cae dentro de la palabra Y se le pone el respiro encima.',
+        );
+      }
+      if (!h.some((x) => x.inicio / f > 2.3 && x.inicio / f < 2.7)) {
+        fallos.push('La pausa de verdad ya no se encuentra: todos los cortes saldrían forzados.');
+      }
+
+      // 2 · Y una narración normal sigue encontrando sus pausas: el arreglo no
+      // puede ser «no detectar nada», que dejaría la pieza sin respiros.
+      const normal = bloque([[2, 9000], [0.3, 40], [2, 9000], [0.25, 40], [2, 9000]]);
+      if (silencios(normal).length !== 2) {
+        fallos.push(`En una narración normal con dos pausas se encuentran ${silencios(normal).length}.`);
+      }
+      // Ni un bloque casi callado, donde el nivel «normal» ES el silencio.
+      if (!silencios(bloque([[0.5, 9000], [5, 40]])).length) {
+        fallos.push('Un bloque casi callado se queda sin ningún silencio.');
+      }
+
+      // 3 · Y el reparto del bloque duro corta en la pausa, no en la palabra.
+      const trozos = repartir(duro, [3, 3]);
+      const corte = trozos[0].fin / f;
+      if (corte > 3.0) fallos.push(`El corte cae en ${corte.toFixed(2)} s, dentro de la palabra floja.`);
+      return fallos;
+    },
+    // Se rompe volviendo al umbral de antes: el 6 % del pico, a secas.
+    romper: (ctx) =>
+      conFuncion(ctx, 'silencios', ({ muestras, frecuencia, canales = 1 }, opciones = {}) => {
+        const { ventanaMs = 10, minimoMs = 130, relativo = 0.06 } = opciones;
+        const porVentana = Math.max(1, Math.round((ventanaMs / 1000) * frecuencia)) * canales;
+        let pico = 1;
+        for (let i = 0; i < muestras.length; i++) if (Math.abs(muestras[i]) > pico) pico = Math.abs(muestras[i]);
+        const umbral = pico * relativo;
+        const energia = [];
+        for (let i = 0; i < muestras.length; i += porVentana) {
+          let suma = 0;
+          const fin = Math.min(i + porVentana, muestras.length);
+          for (let j = i; j < fin; j++) suma += muestras[j] * muestras[j];
+          energia.push(Math.sqrt(suma / Math.max(1, fin - i)));
+        }
+        const minimoVentanas = Math.max(1, Math.round(minimoMs / ventanaMs));
+        const salida = [];
+        let ini = -1;
+        for (let v = 0; v <= energia.length; v++) {
+          const callado = v < energia.length && energia[v] < umbral;
+          if (callado && ini < 0) ini = v;
+          if (!callado && ini >= 0) {
+            if (v - ini >= minimoVentanas) {
+              salida.push({
+                inicio: ini * porVentana,
+                fin: Math.min(v * porVentana, muestras.length),
+                centro: Math.min(Math.round(((ini + v) / 2) * porVentana), muestras.length),
+              });
+            }
+            ini = -1;
+          }
+        }
+        return salida;
+      }),
+  },
+
+  {
     nombre: 'el-reparto-sin-silencios-no-tira-la-narracion-entera',
     dice: 'En pantalla: «Unidad 3 de 26: undefined is not an object (evaluating \'previo.eleccion[previo.eleccion.length - 1].marco\')». Dos tomas muy cortas seguidas —sin un silencio real cerca— dejaban a la programación dinámica sin ningún camino compatible; ese candidato se guardaba con `eleccion: []`, y el siguiente paso lo leía como si tuviera uno. El bloque entero de 26 tomas se caía por dos que decían «No.».',
     comprobar(ctx) {

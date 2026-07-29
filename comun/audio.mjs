@@ -197,9 +197,28 @@ export function silencioDe(ms, frecuencia, canales = 1) {
 /**
  * Localiza los silencios.
  *
- * El umbral es RELATIVO al pico del bloque, no absoluto: una locución susurrada y
- * otra a plena voz tienen suelos de ruido distintos, y un umbral fijo o parte por
- * la mitad una palabra floja o no encuentra ningún silencio.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * EL UMBRAL NO PUEDE SALIR SOLO DEL PICO
+ *
+ * «Dice ospi, silencio, tal.» La palabra partida en dos con un silencio dentro.
+ *
+ * El umbral era el 6 % DEL PICO del bloque. En un bloque con una frase enfática
+ * y otra floja —o sea, en cualquier narración con intención— el pico lo pone la
+ * frase fuerte, y la floja entera queda por debajo del 6 % de ese pico: se
+ * clasifica como SILENCIO. Medido con un bloque sintético de seis segundos: dos
+ * y medio a plena voz, una pausa real, y tres segundos de palabra floja. El
+ * detector devolvía UN silencio de 2,50 a 6,00 — tres segundos y medio de habla
+ * dados por callados—.
+ *
+ * Y lo que hace eso audible no es solo el corte: un corte dentro de un silencio
+ * «de verdad» NO se marca como forzado, así que el montaje le pone encima el
+ * RESPIRO. De ahí el silencio largo en mitad de la palabra.
+ *
+ * Ahora el umbral es el menor de dos: el 6 % del pico, y una fracción del nivel
+ * NORMAL de habla del bloque (el percentil 60 de las ventanas, que es un nivel
+ * de voz corriente y no se lo lleva un grito). Con suelo, para que un bloque
+ * casi todo callado siga encontrando sus pausas.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 export function silencios({ muestras, frecuencia, canales = 1 }, opciones = {}) {
   const { ventanaMs = 10, minimoMs = 130, relativo = 0.06 } = opciones;
@@ -210,7 +229,6 @@ export function silencios({ muestras, frecuencia, canales = 1 }, opciones = {}) 
     const v = Math.abs(muestras[i]);
     if (v > pico) pico = v;
   }
-  const umbral = pico * relativo;
 
   const energia = [];
   for (let i = 0; i < muestras.length; i += porVentana) {
@@ -219,6 +237,10 @@ export function silencios({ muestras, frecuencia, canales = 1 }, opciones = {}) 
     for (let j = i; j < fin; j++) suma += muestras[j] * muestras[j];
     energia.push(Math.sqrt(suma / Math.max(1, fin - i)));
   }
+
+  const orden = [...energia].sort((x, y) => x - y);
+  const habla = orden[Math.min(orden.length - 1, Math.floor(orden.length * 0.6))] || 0;
+  const umbral = Math.max(pico * 0.008, Math.min(pico * relativo, habla * 0.12));
 
   const minimoVentanas = Math.max(1, Math.round(minimoMs / ventanaMs));
   const salida = [];
