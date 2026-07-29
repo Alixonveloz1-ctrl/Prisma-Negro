@@ -171,6 +171,7 @@ async function funcionesPuras() {
     ANGULOS_DE_INVESTIGACION: inv.ANGULOS_DE_INVESTIGACION,
     repartirPorTiempos: aud.repartirPorTiempos,
     repartirBloque: aud.repartirBloque,
+    repartir: aud.repartir,
     contarPalabras: gui.contarPalabras,
     normalizar: cfg.normalizar,
     sanear: est.sanear,

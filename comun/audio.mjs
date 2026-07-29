@@ -207,6 +207,12 @@ export function repartir(audio, objetivos, opciones = {}) {
     camino = candidatos[k].map((c) => {
       let mejor = null;
       for (const previo of camino) {
+        // Una eleccion vacía es un camino que YA se quedó sin sitio en el paso
+        // anterior (el `{ eleccion: [] }` de más abajo): no puede servir de
+        // arranque para el siguiente, o `.marco` revienta sobre `undefined`.
+        // Sin esto, un bloque con dos tomas muy cortas seguidas —un «No.» detrás
+        // de otro— tiraba la narración entera con «undefined is not an object».
+        if (!previo.eleccion.length) continue;
         const ultimo = previo.eleccion[previo.eleccion.length - 1].marco;
         if (c.marco < ultimo + minimoMarcos) continue;
         if (!mejor || previo.costo < mejor.costo) mejor = previo;

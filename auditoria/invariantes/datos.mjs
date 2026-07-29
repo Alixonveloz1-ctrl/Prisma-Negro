@@ -1020,6 +1020,79 @@ export const invariantes = [
   },
 
   {
+    nombre: 'el-reparto-sin-silencios-no-tira-la-narracion-entera',
+    dice: 'En pantalla: «Unidad 3 de 26: undefined is not an object (evaluating \'previo.eleccion[previo.eleccion.length - 1].marco\')». Dos tomas muy cortas seguidas —sin un silencio real cerca— dejaban a la programación dinámica sin ningún camino compatible; ese candidato se guardaba con `eleccion: []`, y el siguiente paso lo leía como si tuviera uno. El bloque entero de 26 tomas se caía por dos que decían «No.».',
+    comprobar(ctx) {
+      const { repartir } = ctx.fn;
+      const fallos = [];
+
+      // Un tono continuo, sin ningún hueco de silencio: cada frontera solo tiene
+      // el candidato FORZADO. Y dos objetivos de 0,05 s seguidos —«No.», «No.»—
+      // caen a menos de los 0,15 s mínimos entre cortes: sin silencio que los
+      // separe, la frontera de después se queda sin ningún camino compatible.
+      const f = 24000;
+      const m = new Int16Array(Math.round(3.15 * f));
+      for (let i = 0; i < m.length; i++) m[i] = Math.round(Math.sin((i / f) * 900) * 8000);
+      const audio = { muestras: m, frecuencia: f, canales: 1 };
+
+      let trozos;
+      try {
+        trozos = repartir(audio, [1, 1, 0.05, 0.05, 1]);
+      } catch (e) {
+        fallos.push(`El reparto revienta con dos tomas cortas seguidas: ${e.message}`);
+        return fallos;
+      }
+
+      if (trozos.length !== 5) fallos.push(`Salen ${trozos.length} trozos para 5 objetivos.`);
+      if (trozos[0]?.inicio !== 0) fallos.push('El primer trozo no empieza en cero.');
+      if (trozos[trozos.length - 1]?.fin !== m.length) {
+        fallos.push('El último trozo no llega al final: se perderían las últimas sílabas.');
+      }
+      if (trozos.some((t, k) => k > 0 && t.inicio !== trozos[k - 1].fin)) {
+        fallos.push('El reparto deja huecos o solapes cuando no encuentra camino.');
+      }
+      // Sin un camino compatible no se inventa un corte limpio: se fuerza, y se
+      // dice — igual que cuando falta un silencio cerca de una sola frontera.
+      if (!trozos.slice(0, 4).every((t) => t.forzado)) {
+        fallos.push('Sin ningún silencio real, algún corte no sale marcado como forzado.');
+      }
+      return fallos;
+    },
+    // La misma máquina, con la guardia quitada: cada camino que se quedó sin
+    // sitio (`eleccion: []`) se sigue ofreciendo como arranque del siguiente,
+    // que es justo el fallo que apareció en producción.
+    romper: (ctx) =>
+      conFuncion(ctx, 'repartir', (audio, objetivos) => {
+        const { muestras, frecuencia, canales = 1 } = audio;
+        const marcosTotales = muestras.length / canales;
+        const factor = marcosTotales / frecuencia / (objetivos.reduce((a, b) => a + b, 0) || 1);
+        const minimoMarcos = Math.round(0.15 * frecuencia);
+        const ideales = [];
+        let acumulado = 0;
+        for (let k = 0; k < objetivos.length - 1; k++) {
+          acumulado += objetivos[k] * factor;
+          ideales.push(Math.round(acumulado * frecuencia));
+        }
+        // Sin silencios detectados: cada frontera trae un único candidato, el
+        // forzado en su ideal — de sobra para este caso, que se construyó sin
+        // ninguno de verdad.
+        const candidatos = ideales.map((marco) => [{ marco, forzado: true }]);
+        let camino = candidatos[0].map((c) => ({ eleccion: [c] }));
+        for (let k = 1; k < candidatos.length; k++) {
+          camino = candidatos[k].map((c) => {
+            let mejor = null;
+            for (const previo of camino) {
+              const ultimo = previo.eleccion[previo.eleccion.length - 1].marco;
+              if (c.marco >= ultimo + minimoMarcos) mejor = previo;
+            }
+            return mejor ? { eleccion: [...mejor.eleccion, c] } : { eleccion: [] };
+          });
+        }
+        return camino; // No llega tan lejos: revienta antes, dentro del bucle.
+      }),
+  },
+
+  {
     nombre: 'al-redirigir-la-imagen-vieja-no-pasa-por-buena',
     dice: 'Al volver a dirigir, la ficha de plano se sustituye pero `imagen: ok` sobrevivía. Quedaba una toma que dice tener imagen y cuya imagen es de otro plano: el documental sale con la foto equivocada y nada lo avisa.',
     comprobar(ctx) {
