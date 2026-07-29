@@ -772,6 +772,20 @@ export const invariantes = [
         fallos.push('El deslizador de gravedad no guarda: se ajusta y no pasa nada.');
       }
 
+      // 3b · Y SE OYE ANTES DE PAGAR: la previa del montado pasa la voz por el
+      // agravador en vivo cuando la hoja trae semitonos. Sin esto, elegir la
+      // gravedad era a ciegas — descargar el video para saber cómo suena.
+      const previa = fuente(ctx, 'app/previa.js');
+      if (!/function agravador\(/.test(previa)) {
+        fallos.push('La previa no tiene agravador: la gravedad se elegiría a ciegas, descargando para oír.');
+      }
+      if (!/gravedadVoz/.test(previa) || !/g\.salida\.connect\(salida\)/.test(previa)) {
+        fallos.push('El agravador existe pero la voz no pasa por él.');
+      }
+      if (!/fuentes\.push\(fuenteRampa, fuenteVentana\)/.test(previa)) {
+        fallos.push('Las fuentes del agravador no se registran: parar la previa las dejaría sonando.');
+      }
+
       // 4 · Y la otra mitad de la continuidad: la voz de Gemini con temperatura
       // CERO. Sin fijarla, cada una de las 83 llamadas interpreta distinto — «no
       // lo narra como una historia, narra cada clip por su cuenta».

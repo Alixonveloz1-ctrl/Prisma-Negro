@@ -93,6 +93,71 @@ const CAMARA = {
  * encadenando «cuando acabe este, el siguiente»: encadenar acumula el retraso de
  * cada arranque y al final del documental la imagen va por delante de la voz.
  */
+/**
+ * El agravador en vivo: cambia el tono de la voz SIN tocar la duración.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «¿Cómo voy a saber cuán grave puedo poner la voz si no puedo escuchar el
+ *  resultado antes de descargar el video?»
+ *
+ * Es el clásico de los dos retardos modulados con fundido cruzado: dos líneas de
+ * retardo cuyo tiempo crece en rampa —leer cada vez muestras más viejas baja el
+ * tono— y que se relevan con ventanas en contrafase para que el salto de la
+ * rampa no se oiga. Todo con nodos estándar de WebAudio, que es lo que hay en un
+ * iPhone: sin worklets, sin bibliotecas.
+ *
+ * No es el mismo algoritmo que usa el montaje (ffmpeg hace asetrate+atempo, más
+ * limpio), pero el TONO resultante es el mismo: sirve exactamente para lo que
+ * existe — elegir cuántos semitonos ANTES de montar. Y como no toca la duración,
+ * la sincronía de la previa queda intacta.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+function agravador(ctx, semitonos, fuentes) {
+  const r = Math.pow(2, semitonos / 12);
+  const GRANO = 0.1;
+  const entrada = ctx.createGain();
+  const salida = ctx.createGain();
+
+  // La rampa que mueve el retardo y la ventana que funde: un ciclo por grano.
+  const n = Math.max(1, Math.round(ctx.sampleRate * GRANO));
+  const rampa = ctx.createBuffer(1, n, ctx.sampleRate);
+  const ventana = ctx.createBuffer(1, n, ctx.sampleRate);
+  for (let i = 0; i < n; i++) {
+    rampa.getChannelData(0)[i] = i / n;
+    ventana.getChannelData(0)[i] = Math.sin((Math.PI * i) / n);
+  }
+
+  // Para agravar (r < 1) el retardo CRECE desde cero; para agudizar (r > 1)
+  // DECRECE desde su base. La base es lo que hace que nunca sea negativo.
+  const profundidad = GRANO * (1 - r);
+  const base = Math.max(0, GRANO * (r - 1)) + 0.002;
+
+  for (const desfase of [0, GRANO / 2]) {
+    const retardo = ctx.createDelay(1);
+    retardo.delayTime.value = base;
+    const escala = ctx.createGain();
+    escala.gain.value = profundidad;
+    const fuenteRampa = ctx.createBufferSource();
+    fuenteRampa.buffer = rampa;
+    fuenteRampa.loop = true;
+    fuenteRampa.connect(escala).connect(retardo.delayTime);
+
+    const fundido = ctx.createGain();
+    fundido.gain.value = 0;
+    const fuenteVentana = ctx.createBufferSource();
+    fuenteVentana.buffer = ventana;
+    fuenteVentana.loop = true;
+    fuenteVentana.connect(fundido.gain);
+
+    entrada.connect(retardo).connect(fundido).connect(salida);
+    fuenteRampa.start(ctx.currentTime + desfase);
+    fuenteVentana.start(ctx.currentTime + desfase);
+    // A la lista de fuentes del reproductor: parar la previa también las para.
+    fuentes.push(fuenteRampa, fuenteVentana);
+  }
+  return { entrada, salida };
+}
+
 export function reproductor({ lienzo, marca, alCambiar, alTerminar }) {
   let ctx = null;
   let material = null;
@@ -168,7 +233,19 @@ export function reproductor({ lienzo, marca, alCambiar, alTerminar }) {
       // Un nodo por toma, programado en su `inicio` de la hoja. Sample-exacto y sin
       // deriva acumulada.
       const vozGanancia = ctx.createGain();
-      vozGanancia.connect(salida);
+
+      // LA GRAVEDAD SE OYE AQUÍ, ANTES DE PAGAR NADA. Si la hoja trae semitonos,
+      // la voz entera pasa por el agravador en vivo: mismo tono que va a aplicar
+      // el montaje, misma duración (la sincronía no se toca). Suena un pelín
+      // ondulado —es el precio del directo—; el video final lo hace limpio ffmpeg.
+      const semitonos = Number(material.hoja.ajustes?.gravedadVoz) || 0;
+      if (semitonos) {
+        const g = agravador(ctx, semitonos, fuentes);
+        vozGanancia.connect(g.entrada);
+        g.salida.connect(salida);
+      } else {
+        vozGanancia.connect(salida);
+      }
 
       // El seguidor de envolvente: mide el nivel de la voz para agachar la música.
       const medidor = ctx.createAnalyser();
