@@ -8,7 +8,7 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { editando } from '../contexto.mjs';
+import { editando, conFuncion } from '../contexto.mjs';
 
 const fuente = (ctx, ruta) => ctx.fuentes.get(ruta) || '';
 
@@ -694,6 +694,97 @@ export const invariantes = [
     romper: (ctx) =>
       editando(ctx, 'app/main.js', (t) =>
         t.replace('  t.audio = null;\n  t.corteExacto = false;\n', '')),
+  },
+
+  {
+    nombre: 'el-reproductor-se-queda-quieto-y-tiene-modo-cine',
+    dice: 'En cada cambio de toma, el reproductor seguía a la tira activa con scrollIntoView y BAJABA LA PÁGINA entera: el visor se iba de pantalla una vez por toma y había que subir a mano, ochenta y tres veces. Y no había pantalla completa — en el teléfono la nativa solo existe para <video>, y esto es un lienzo con WebAudio.',
+    comprobar(ctx) {
+      const main = fuente(ctx, 'app/main.js');
+      const html = ctx.fuentes.get('index.html') || '';
+      const css = hoja(ctx);
+      const fallos = [];
+
+      // La LLAMADA, no la palabra: el comentario que explica por qué se quitó
+      // también dice «scrollIntoView» y no es un fallo.
+      if (/\.scrollIntoView\(/.test(main)) {
+        fallos.push('El reproductor sigue moviendo la página con scrollIntoView: se va de pantalla en cada toma.');
+      }
+      const v = html.indexOf('id="visor-montado"');
+      const botonCine = html.indexOf('id="b-cine"');
+      if (v < 0) fallos.push('El visor del montado no tiene identidad: no hay a qué ponerle el modo cine.');
+      else if (botonCine < v || botonCine - v > 600) {
+        fallos.push('El botón de cine no está dentro del visor.');
+      }
+      const regla = css.indexOf('.visor.cine{');
+      if (regla < 0 || !/position:fixed/.test(css.slice(regla, css.indexOf('}', regla)))) {
+        fallos.push('El modo cine no fija el visor a la pantalla: seguiría dentro del flujo, saltando.');
+      }
+      // Misma especificidad que la regla vertical: gana la última. La de cine va
+      // DESPUÉS o el 9:16 la pisa y el cine sale a media pantalla.
+      if (regla >= 0 && css.indexOf('.formato-vertical .visor{') > regla) {
+        fallos.push('La regla del cine está antes que la del formato vertical: con 9:16 puesto, el cine no llena.');
+      }
+      if (!/\$\('b-cine'\)\?\.addEventListener\('click'/.test(main) || !/classList\.toggle\('cine'\)/.test(main)) {
+        fallos.push('El botón de cine no hace nada.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: el botón existe y nadie lo escucha.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace("$('b-cine')?.addEventListener('click', () => {", "void (() => {"),
+      ),
+  },
+
+  {
+    nombre: 'la-voz-se-agrava-al-montar-sin-mover-el-reloj',
+    dice: '«Poder poner la voz más grave sin tener que regenerar todo otra vez.» La gravedad se aplica AL MONTAR, sobre el audio ya generado: bajar el tono con asetrate también frena el audio, y sin el atempo recíproco cada toma saldría más larga, la sincronía se correría toma a toma y el documental entero quedaría desfasado.',
+    comprobar(ctx) {
+      const { construirHoja, guionFfmpeg, normalizar } = ctx.fn;
+      const fallos = [];
+      const plano = { encuadre: 'plano medio', movimientoCamara: 'fijo', lugar: 'x', luz: 'y', sujetos: [], descripcion: 'd' };
+      const tomas = [{ i: 0, escena: 0, segundos: 6, medida: true, plano, audio: 'ok', corteExacto: true }];
+
+      // 1 · Con gravedad: el par asetrate/atempo, y EXACTAMENTE recíproco.
+      const conGrave = guionFfmpeg(construirHoja({ pieza: 'p01', tomas, escenas: [{ n: 0 }], config: { gravedadVoz: -3, muestreo: 48000 } }));
+      const rate = /asetrate=(\d+)/.exec(conGrave);
+      const tempo = /atempo=([\d.]+)/.exec(conGrave);
+      if (!rate || !tempo) {
+        fallos.push('Con gravedad puesta no aparece el par asetrate/atempo: la voz no se agrava.');
+      } else {
+        const producto = (Number(rate[1]) / 48000) * Number(tempo[1]);
+        if (Math.abs(producto - 1) > 0.001) {
+          fallos.push(`El par no es recíproco (producto ${producto.toFixed(4)}): cada toma cambiaría de duración y el documental se correría.`);
+        }
+      }
+
+      // 2 · Sin gravedad, ni rastro: cero es «tal cual salió».
+      const sinGrave = guionFfmpeg(construirHoja({ pieza: 'p01', tomas, escenas: [{ n: 0 }] }));
+      if (/asetrate=/.test(sinGrave)) fallos.push('Con gravedad cero se recodifica el tono igualmente.');
+
+      // 3 · El mando tiene tope y está cableado en Ajustes.
+      if (normalizar({ montaje: { gravedadVoz: -99 } }).montaje.gravedadVoz !== -6) {
+        fallos.push('La gravedad no tiene tope: un valor loco haría la voz un monstruo.');
+      }
+      const main = fuente(ctx, 'app/main.js');
+      if (!/P\.config\.montaje\.gravedadVoz = Number\(\$\('gravedad'\)\.value\)/.test(main)) {
+        fallos.push('El deslizador de gravedad no guarda: se ajusta y no pasa nada.');
+      }
+
+      // 4 · Y la otra mitad de la continuidad: la voz de Gemini con temperatura
+      // CERO. Sin fijarla, cada una de las 83 llamadas interpreta distinto — «no
+      // lo narra como una historia, narra cada clip por su cuenta».
+      const prov = fuente(ctx, 'api/_lib/proveedor.js');
+      const g = prov.indexOf('export async function vozGemini');
+      if (g < 0 || !/temperature: 0/.test(prov.slice(g, g + 1600))) {
+        fallos.push('La voz de Gemini va sin temperatura fija: cada llamada con un tono distinto.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba a punto de romperse: el asetrate sin su atempo.
+    romper: (ctx) =>
+      conFuncion(ctx, 'guionFfmpeg', (hoja) => ctx.fn.guionFfmpeg(hoja).replace(/,atempo=[\d.]+/g, '')),
   },
 
   {

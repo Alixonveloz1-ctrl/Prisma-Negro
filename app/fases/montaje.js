@@ -28,6 +28,7 @@ export function hojaDe(pieza, config) {
       ancho: config.formato.ancho,
       alto: config.formato.alto,
       fundidoMusica: config.musica.fundido,
+      gravedadVoz: config.montaje?.gravedadVoz ?? 0,
       firma: config.marca.activa && config.marca.texto ? undefined : null,
     },
   });

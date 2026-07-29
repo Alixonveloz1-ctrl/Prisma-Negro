@@ -1420,7 +1420,9 @@ function asegurarReproductor() {
         (t.falta.length ? ` · FALTA ${t.falta.join(' y ')}` : '') +
         `\n${t.texto}`;
       document.querySelectorAll('.tira').forEach((e, n) => e.classList.toggle('activa', n === k));
-      document.querySelectorAll('.tira')[k]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      // Sin scrollIntoView: seguía a la tira activa BAJANDO LA PÁGINA en cada
+      // cambio de toma — el reproductor se iba de pantalla una vez por toma. La
+      // tira activa se ilumina; quien quiera verla, baja cuando quiera.
     },
     alTerminar: () => avisar('previa', 'Fin de la pieza.', 'bueno'),
   });
@@ -2608,6 +2610,8 @@ function pintarAjustes() {
   pon('objetivo', P.config.segmentacion.segundosObjetivo, 'v-objetivo');
   pon('velocidad', Math.round(P.config.narracion.velocidad * 100));
   $('v-velocidad').textContent = P.config.narracion.velocidad.toFixed(2);
+  pon('gravedad', P.config.montaje.gravedadVoz);
+  $('v-gravedad').textContent = String(P.config.montaje.gravedadVoz);
   $('expresivas').checked = !!P.config.narracion.vocesExpresivas;
   $('estilo').value = P.config.narracion.estilo || '';
   $('marca-texto').value = P.config.marca.texto;
@@ -2617,6 +2621,7 @@ function pintarAjustes() {
 $('proporcion').addEventListener('input', (e) => ($('v-proporcion').textContent = `${e.target.value}%`));
 $('objetivo').addEventListener('input', (e) => ($('v-objetivo').textContent = e.target.value));
 $('velocidad').addEventListener('input', (e) => ($('v-velocidad').textContent = (e.target.value / 100).toFixed(2)));
+$('gravedad').addEventListener('input', (e) => ($('v-gravedad').textContent = String(e.target.value)));
 // Recargar el catálogo al momento: si hubiera que guardar ajustes primero, parecería
 // que el interruptor no hace nada.
 $('expresivas').addEventListener('change', async (e) => {
@@ -2639,6 +2644,7 @@ accion(
     P.config.movimiento.proporcion = Number($('proporcion').value) / 100;
     P.config.segmentacion.segundosObjetivo = Number($('objetivo').value);
     P.config.narracion.velocidad = Number($('velocidad').value) / 100;
+    P.config.montaje.gravedadVoz = Number($('gravedad').value);
     P.config.imagen.estilo = $('estilo-imagen').value;
     P.config.marca.texto = $('marca-texto').value.trim();
     P.config.formato.vertical = $('vertical').value === '1';
@@ -2754,6 +2760,16 @@ async function cargarVoces() {
 }
 
 // Reentrada rápida: la contraseña vive en la sesión, no en el disco.
+// El modo cine: el visor fijo a toda pantalla, sin salir de la página — en el
+// teléfono el pantalla-completa nativo solo existe para <video>, y esto es un
+// lienzo con WebAudio. De paso, con el visor fijo la página no tiene ya nada
+// que saltar.
+$('b-cine')?.addEventListener('click', () => {
+  const v = $('visor-montado');
+  const dentro = v.classList.toggle('cine');
+  $('b-cine').textContent = dentro ? '✕' : '⛶';
+});
+
 const guardada = sessionStorage.getItem('clave');
 if (guardada) {
   $('clave').value = guardada;

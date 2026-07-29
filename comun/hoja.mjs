@@ -17,6 +17,8 @@ export const PREDETERMINADO = {
   alto: 1080,
   // §5.4: con fundidos cortos el relevo de la música se oye como un tajo.
   fundidoMusica: 2.5,
+  // Semitonos de gravedad de la voz, aplicados al montar. Cero = tal cual.
+  gravedadVoz: 0,
   // §4.7: se amplía la imagen antes de recorrerla para que no pixele.
   ampliacionCamara: 2,
   crf: 18,
@@ -151,6 +153,7 @@ export function construirHoja({ pieza, tomas, escenas = [], config = {} }) {
     firma: config.firma === null ? null : `${pieza}/firma`,
     ajustes: {
       fundidoMusica: c.fundidoMusica,
+      gravedadVoz: c.gravedadVoz,
       ampliacionCamara: c.ampliacionCamara,
       crf: c.crf,
       bitrateAudio: c.bitrateAudio,
@@ -328,6 +331,21 @@ export function guionFfmpeg(hoja) {
     // sola con la música. No hace falta nada más aquí —el silencio del respiro y
     // el relleno de cuadre son el mismo mecanismo—.
     const filtros = [`aresample=${a.muestreo}`];
+    // LA GRAVEDAD, SIN TOCAR EL RELOJ. Bajar el tono con `asetrate` también
+    // frena el audio; el `atempo` recíproco le devuelve la velocidad exacta.
+    // El producto de los dos factores es 1: la duración no se mueve NI UN
+    // FOTOGRAMA, y el banco lo demuestra montando con gravedad puesta y
+    // exigiendo el mismo largo al milisegundo. Así la voz se agrava sobre lo ya
+    // generado —sin regenerar ni una toma— y la sincronía queda intacta.
+    const g = Number(a.gravedadVoz) || 0;
+    if (g) {
+      const factor = Math.pow(2, g / 12);
+      filtros.push(
+        `asetrate=${Math.round(a.muestreo * factor)}`,
+        `aresample=${a.muestreo}`,
+        `atempo=${(1 / factor).toFixed(6)}`,
+      );
+    }
     // La apertura en frío: la imagen entra antes que la voz. Solo la primera toma
     // la lleva, y desplaza SU audio dentro de SU hueco, no el de las demás: cada
     // trozo se rellena a su duración exacta antes de pegarse.

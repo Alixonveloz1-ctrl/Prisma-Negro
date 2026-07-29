@@ -268,6 +268,20 @@ nav.pestanas button.on{background:var(--violeta);border-color:var(--violeta);col
    que se lee como «se está generando mal». La clase la pone la aplicación al
    cargar y al guardar Ajustes. */
 .formato-vertical .visor{aspect-ratio:9/16;max-width:min(100%,340px);margin-inline:auto}
+
+/* ── Modo cine ──────────────────────────────────────────────────────────────
+   El reproductor a pantalla completa, sin salir de la página: en el teléfono el
+   pantalla-completa nativo solo existe para <video>, y esto es un lienzo con
+   WebAudio. Va DESPUÉS de las reglas de formato para ganarles a especificidad
+   igual. La página, quieta: el visor fijo tapa todo y no hay nada que saltar. */
+.visor.cine{position:fixed;inset:0;z-index:1000;aspect-ratio:auto;max-width:none;margin:0;border-radius:0;border:none;background:#000}
+.visor.cine img#previa-imagen{object-fit:contain}
+.btn-cine{
+  position:absolute;right:10px;top:10px;z-index:5;appearance:none;cursor:pointer;
+  width:38px;height:38px;border-radius:10px;border:1px solid rgba(255,255,255,.25);
+  background:rgba(10,11,16,.55);color:#fff;font-size:17px;line-height:1;
+}
+.visor.cine .btn-cine{position:fixed;top:calc(10px + env(safe-area-inset-top))}
 .formato-vertical .pieza-mat img,.formato-vertical .pieza-mat video{aspect-ratio:9/16;object-fit:cover}
 .formato-vertical .tira img,.formato-vertical .tira .sin{aspect-ratio:9/16}
 .formato-vertical .tiras{grid-template-columns:repeat(auto-fill,minmax(84px,1fr))}
@@ -653,10 +667,11 @@ nav.abajo button svg{width:22px;height:22px}
         <!-- Montado -->
         <div class="panel hoja-previa" data-hoja="montado">
           <h2>Montado <span class="cuenta" id="cuenta-previa"></span></h2>
-          <div class="visor">
+          <div class="visor" id="visor-montado">
             <img id="previa-imagen" alt="">
             <img id="previa-marca" class="marca-visor" alt="">
             <div id="previa-vacio" class="visor-vacio">Prepara la previa para ver el documental.</div>
+            <button id="b-cine" class="btn-cine" title="Pantalla completa">⛶</button>
           </div>
           <p class="nota chica" id="previa-pie" style="margin-top:10px;min-height:2.6em"></p>
           <div class="fila-btn" style="margin-top:12px">
@@ -716,6 +731,10 @@ nav.abajo button svg{width:22px;height:22px}
 
           <label for="velocidad">Velocidad · <b id="v-velocidad">0.96</b></label>
           <input id="velocidad" type="range" min="70" max="130" value="96">
+
+          <label for="gravedad">Gravedad de la voz · <b id="v-gravedad">0</b> semitonos</label>
+          <input id="gravedad" type="range" min="-6" max="3" value="0">
+          <p class="nota chica">Se aplica al montar, sobre la voz ya generada: más grave sin regenerar nada. La previa suena con la voz original.</p>
         </div>
         <div class="panel">
           <h2>Modelo de texto · el director</h2>

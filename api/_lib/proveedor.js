@@ -696,6 +696,12 @@ export async function vozGemini({ texto: t, nombreVoz, estilo = '', modelo: pedi
       generationConfig: {
         responseModalities: ['AUDIO'],
         speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voz } } },
+        // CERO, y es la mitad de la continuidad. Sin fijarla, cada llamada
+        // interpreta con la variación por defecto: ochenta y tres llamadas,
+        // ochenta y tres entregas distintas — «no lo narra como una historia,
+        // narra cada clip por su cuenta». Con cero, la misma voz, el mismo
+        // brief y el mismo tono en la llamada 1 y en la 83.
+        temperature: 0,
       },
     }),
   );

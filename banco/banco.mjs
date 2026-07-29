@@ -155,7 +155,15 @@ function proyectoSintetico() {
       respiro: i === 3 ? 2.5 : i === 6 ? 4 : 0,
     });
   }
-  return { id: 'p01', tomas, escenas: [{ n: 0 }, { n: 1 }, { n: 2 }] };
+  return {
+    id: 'p01',
+    tomas,
+    escenas: [{ n: 0 }, { n: 1 }, { n: 2 }],
+    // La voz se agrava tres semitonos AL MONTAR: si el par asetrate/atempo no
+    // fuera exactamente recíproco, el video saldría más largo o más corto y la
+    // comprobación del largo al milisegundo lo cazaría aquí, en un minuto.
+    config: { gravedadVoz: -3 },
+  };
 }
 
 // ── El banco ──────────────────────────────────────────────────────────────────
@@ -171,7 +179,7 @@ rmSync(TALLER, { recursive: true, force: true });
 mkdirSync(TALLER, { recursive: true });
 
 const p = proyectoSintetico();
-const hoja = construirHoja({ pieza: p.id, tomas: p.tomas, escenas: p.escenas });
+const hoja = construirHoja({ pieza: p.id, tomas: p.tomas, escenas: p.escenas, config: p.config });
 const guion = guionFfmpeg(hoja);
 const claves = clavesDeLaHoja(hoja);
 // El nombre del almacén se escribe en mayúsculas y diciendo lo que es: la invariante
