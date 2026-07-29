@@ -776,14 +776,24 @@ export const invariantes = [
       // agravador en vivo cuando la hoja trae semitonos. Sin esto, elegir la
       // gravedad era a ciegas — descargar el video para saber cómo suena.
       const previa = fuente(ctx, 'app/previa.js');
-      if (!/function agravador\(/.test(previa)) {
+      if (!/function agravarBuffer\(/.test(previa)) {
         fallos.push('La previa no tiene agravador: la gravedad se elegiría a ciegas, descargando para oír.');
       }
-      if (!/gravedadVoz/.test(previa) || !/g\.salida\.connect\(salida\)/.test(previa)) {
-        fallos.push('El agravador existe pero la voz no pasa por él.');
+      // PRECALCULADO Y A CADA TOMA: el agravador en vivo —retardos modulados—
+      // solo agravó el primer audio en el teléfono. El precalculado procesa el
+      // buffer de cada toma por igual, determinista.
+      if (!/if \(semitonos\) buf = agravarBuffer\(ctx, buf, semitonos\);/.test(previa)) {
+        fallos.push('El agravador no procesa cada toma: solo la primera sonaría grave, como pasó.');
       }
-      if (!/fuentes\.push\(fuenteRampa, fuenteVentana\)/.test(previa)) {
-        fallos.push('Las fuentes del agravador no se registran: parar la previa las dejaría sonando.');
+      // Y la hoja DE LA PREVIA lleva la gravedad: la previa construye la suya, y
+      // sin este campo el agravador nunca se enteraba del ajuste.
+      if (!/gravedadVoz: config\.montaje\?\.gravedadVoz \?\? 0/.test(previa)) {
+        fallos.push('La hoja de la previa no lleva la gravedad: se elige un tono que la previa no suena.');
+      }
+      // Y el ajuste recién guardado llega a la previa YA preparada.
+      const main2 = fuente(ctx, 'app/main.js');
+      if (!/preparada\.hoja\.ajustes\.gravedadVoz = P\.config\.montaje\.gravedadVoz/.test(main2)) {
+        fallos.push('Cambiar la gravedad exige volver a preparar para oírla: el deslizador parece roto.');
       }
 
       // 4 · Y la otra mitad de la continuidad: la voz de Gemini con temperatura

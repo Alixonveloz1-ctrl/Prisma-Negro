@@ -68,7 +68,10 @@ export function construirHoja({ pieza, tomas, escenas = [], config = {} }) {
     // corte malo en una «pausa dramática» a mitad de palabra. Sin corte fiable no
     // hay respiro; al rehacer la narración, todos los cortes salen exactos y los
     // respiros vuelven solos.
-    const corteFiable = t.audio !== 'ok' || t.corteExacto !== false;
+    // Fiable = exacto (lo dijo el servicio) o anclado a un silencio real (el
+    // reparto lo puso en una pausa de verdad: alargarla suena natural). Solo el
+    // corte FORZADO —sin silencio cerca, puede partir palabra— pierde su respiro.
+    const corteFiable = t.audio !== 'ok' || t.corteExacto === true || t.corteForzado === false;
     const respiro = corteFiable ? Math.max(0, Math.min(8, Number(t.respiro) || 0)) : 0;
     const entrada = n === 0 ? Math.max(0, Math.min(8, Number(t.entrada) || 0)) : 0;
     const dur = Math.ceil((Math.max(t.segundos || 0, 0.2) + respiro + entrada) * c.fps) / c.fps;

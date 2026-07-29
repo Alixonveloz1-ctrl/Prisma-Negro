@@ -164,42 +164,74 @@ export function repartir(audio, objetivos, opciones = {}) {
   const factor = marcosTotales / frecuencia / sumaObjetivos;
 
   const huecos = silencios(audio, opciones);
-  const cortes = [0];
   // Un trozo nunca baja de esto: sin un mínimo, dos fronteras muy juntas pueden
   // producir un trozo de cero muestras y el montaje se queda sin audio en esa toma.
   const minimoMarcos = Math.round(0.15 * frecuencia);
-  let acumulado = 0;
 
+  // Los puntos ideales de corte y su tolerancia, todos de una vez.
+  const ideales = [];
+  let acumulado = 0;
   for (let k = 0; k < objetivos.length - 1; k++) {
     acumulado += objetivos[k] * factor;
-    const idealMarco = Math.round(acumulado * frecuencia);
-    const tolerancia = Math.round(
-      Math.max(objetivos[k] * factor * toleranciaRelativa, toleranciaMinimaS) * frecuencia,
-    );
+    ideales.push({
+      marco: Math.round(acumulado * frecuencia),
+      tolerancia: Math.round(
+        Math.max(objetivos[k] * factor * toleranciaRelativa, toleranciaMinimaS) * frecuencia,
+      ),
+    });
+  }
 
-    // Deja sitio para los trozos que quedan por delante y para el que se cierra.
-    const minimo = cortes[cortes.length - 1] / canales + minimoMarcos;
-    const maximo = marcosTotales - minimoMarcos * (objetivos.length - 1 - k);
+  // ASIGNACIÓN GLOBAL, no voraz. El reparto voraz elegía para cada frontera su
+  // silencio más cercano SIN mirar a las demás: dos fronteras se peleaban el
+  // mismo silencio, la perdedora salía forzada en mitad de una palabra, y en un
+  // bloque largo —que es donde una voz sin marcas mantiene el tono, y por eso
+  // conviene alargarlo— los errores se encadenaban. Aquí se eligen TODOS los
+  // cortes a la vez: la combinación creciente de silencios que menos se desvía
+  // del conjunto de ideales, con el corte forzado como candidato de castigo (su
+  // costo es la tolerancia: un silencio dentro de tolerancia siempre le gana).
+  const centros = huecos
+    .map((h) => Math.floor(h.centro / canales))
+    .filter((c) => c > minimoMarcos && c < marcosTotales - minimoMarcos)
+    .sort((x, y) => x - y);
 
-    let mejor = null;
-    let mejorDistancia = Infinity;
-    for (const h of huecos) {
-      const centroMarco = Math.floor(h.centro / canales);
-      if (centroMarco <= minimo || centroMarco >= maximo) continue;
-      const d = Math.abs(centroMarco - idealMarco);
-      if (d <= tolerancia && d < mejorDistancia) {
-        mejorDistancia = d;
-        mejor = centroMarco;
+  // Candidatos por frontera: cada silencio utilizable, más el forzado en su ideal.
+  const candidatos = ideales.map(({ marco, tolerancia }) => {
+    const lista = centros.map((c) => ({ marco: c, costo: Math.abs(c - marco), forzado: false }));
+    lista.push({ marco, costo: tolerancia, forzado: true });
+    return lista;
+  });
+
+  // Programación dinámica sobre fronteras crecientes con separación mínima.
+  let camino = candidatos[0].map((c) => ({ costo: c.costo, eleccion: [c] }));
+  for (let k = 1; k < candidatos.length; k++) {
+    camino = candidatos[k].map((c) => {
+      let mejor = null;
+      for (const previo of camino) {
+        const ultimo = previo.eleccion[previo.eleccion.length - 1].marco;
+        if (c.marco < ultimo + minimoMarcos) continue;
+        if (!mejor || previo.costo < mejor.costo) mejor = previo;
       }
-    }
+      // Sin camino compatible, el corte se fuerza justo después del anterior.
+      if (!mejor) return { costo: Infinity, eleccion: [] };
+      return { costo: mejor.costo + c.costo, eleccion: [...mejor.eleccion, c] };
+    });
+  }
+  let ganador = camino[0];
+  for (const c of camino) if (c.costo < ganador.costo) ganador = c;
 
-    const marco = mejor ?? Math.min(Math.max(idealMarco, minimo), Math.max(minimo, maximo));
-    cortes.push(Math.round(marco) * canales);
-    // Se anota AQUÍ, donde de verdad se sabe: si no hubo ningún silencio dentro de
-    // la tolerancia, este corte cae en mitad de lo que sea. El usuario tiene que
-    // poder verlo en pantalla, así que viaja con el trozo.
-    cortes.forzado = cortes.forzado || [];
-    cortes.forzado[k] = mejor === null;
+  const cortes = [0];
+  cortes.forzado = [];
+  let previo = 0;
+  for (let k = 0; k < ideales.length; k++) {
+    const e = ganador?.eleccion[k];
+    // Si ni la programación encontró sitio, se fuerza en el ideal acotado.
+    const marco = e
+      ? e.marco
+      : Math.min(Math.max(ideales[k].marco, previo + minimoMarcos), marcosTotales - minimoMarcos);
+    const acotado = Math.max(marco, previo + minimoMarcos);
+    cortes.push(acotado * canales);
+    cortes.forzado[k] = e ? e.forzado : true;
+    previo = acotado;
   }
   cortes.push(muestras.length);
 

@@ -38,6 +38,9 @@ export async function preparar({ pieza, config, senal, alAvanzar }) {
       ancho: config.formato.ancho,
       alto: config.formato.alto,
       fundidoMusica: config.musica.fundido,
+      // Sin esto, la previa construía SU hoja sin la gravedad y el agravador
+      // nunca se enteraba: se elegía un tono que la previa no sonaba.
+      gravedadVoz: config.montaje?.gravedadVoz ?? 0,
       firma: config.marca.activa && config.marca.texto ? undefined : null,
     },
   });
@@ -94,68 +97,44 @@ const CAMARA = {
  * cada arranque y al final del documental la imagen va por delante de la voz.
  */
 /**
- * El agravador en vivo: cambia el tono de la voz SIN tocar la duración.
+ * Agrava un AudioBuffer, PRECALCULADO: granos con ventana y medio solape.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * «¿Cómo voy a saber cuán grave puedo poner la voz si no puedo escuchar el
- *  resultado antes de descargar el video?»
+ * La primera versión era un agravador EN VIVO —dos retardos modulados por
+ * fuentes en bucle—, y solo el primer audio salía grave: la modulación de los
+ * AudioParam se quedaba muda después de la primera fuente en el navegador del
+ * teléfono. En vez de pelear con eso, el tono se calcula ANTES de sonar, sobre
+ * las muestras: determinista, igual en todos los navegadores, y a todas las
+ * tomas por igual — que es exactamente lo que el en-vivo no cumplió.
  *
- * Es el clásico de los dos retardos modulados con fundido cruzado: dos líneas de
- * retardo cuyo tiempo crece en rampa —leer cada vez muestras más viejas baja el
- * tono— y que se relevan con ventanas en contrafase para que el salto de la
- * rampa no se oiga. Todo con nodos estándar de WebAudio, que es lo que hay en un
- * iPhone: sin worklets, sin bibliotecas.
- *
- * No es el mismo algoritmo que usa el montaje (ffmpeg hace asetrate+atempo, más
- * limpio), pero el TONO resultante es el mismo: sirve exactamente para lo que
- * existe — elegir cuántos semitonos ANTES de montar. Y como no toca la duración,
- * la sincronía de la previa queda intacta.
+ * Mismo tono que aplicará ffmpeg al montar, misma duración (la sincronía no se
+ * toca). El directo del montaje suena más limpio; esto es para ELEGIR cuántos
+ * semitonos oyéndolo, no para publicarlo.
  * ─────────────────────────────────────────────────────────────────────────────
  */
-function agravador(ctx, semitonos, fuentes) {
+function agravarBuffer(ctx, buf, semitonos) {
   const r = Math.pow(2, semitonos / 12);
-  const GRANO = 0.1;
-  const entrada = ctx.createGain();
-  const salida = ctx.createGain();
-
-  // La rampa que mueve el retardo y la ventana que funde: un ciclo por grano.
-  const n = Math.max(1, Math.round(ctx.sampleRate * GRANO));
-  const rampa = ctx.createBuffer(1, n, ctx.sampleRate);
-  const ventana = ctx.createBuffer(1, n, ctx.sampleRate);
-  for (let i = 0; i < n; i++) {
-    rampa.getChannelData(0)[i] = i / n;
-    ventana.getChannelData(0)[i] = Math.sin((Math.PI * i) / n);
+  const GRANO = Math.max(2, Math.round(buf.sampleRate * 0.08));
+  const SALTO = Math.floor(GRANO / 2);
+  const salida = ctx.createBuffer(buf.numberOfChannels, buf.length, buf.sampleRate);
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    const x = buf.getChannelData(c);
+    const y = salida.getChannelData(c);
+    for (let ini = 0; ini < x.length; ini += SALTO) {
+      for (let j = 0; j < GRANO; j++) {
+        const o = ini + j;
+        if (o >= x.length) break;
+        const pos = ini + j * r;
+        const p0 = Math.floor(pos);
+        if (p0 >= x.length) break;
+        const fr = pos - p0;
+        const v = p0 + 1 < x.length ? x[p0] * (1 - fr) + x[p0 + 1] * fr : x[p0];
+        // Ventana de Hann con medio solape: las dos capas suman uno exacto.
+        y[o] += v * (0.5 - 0.5 * Math.cos((2 * Math.PI * j) / GRANO));
+      }
+    }
   }
-
-  // Para agravar (r < 1) el retardo CRECE desde cero; para agudizar (r > 1)
-  // DECRECE desde su base. La base es lo que hace que nunca sea negativo.
-  const profundidad = GRANO * (1 - r);
-  const base = Math.max(0, GRANO * (r - 1)) + 0.002;
-
-  for (const desfase of [0, GRANO / 2]) {
-    const retardo = ctx.createDelay(1);
-    retardo.delayTime.value = base;
-    const escala = ctx.createGain();
-    escala.gain.value = profundidad;
-    const fuenteRampa = ctx.createBufferSource();
-    fuenteRampa.buffer = rampa;
-    fuenteRampa.loop = true;
-    fuenteRampa.connect(escala).connect(retardo.delayTime);
-
-    const fundido = ctx.createGain();
-    fundido.gain.value = 0;
-    const fuenteVentana = ctx.createBufferSource();
-    fuenteVentana.buffer = ventana;
-    fuenteVentana.loop = true;
-    fuenteVentana.connect(fundido.gain);
-
-    entrada.connect(retardo).connect(fundido).connect(salida);
-    fuenteRampa.start(ctx.currentTime + desfase);
-    fuenteVentana.start(ctx.currentTime + desfase);
-    // A la lista de fuentes del reproductor: parar la previa también las para.
-    fuentes.push(fuenteRampa, fuenteVentana);
-  }
-  return { entrada, salida };
+  return salida;
 }
 
 export function reproductor({ lienzo, marca, alCambiar, alTerminar }) {
@@ -233,19 +212,12 @@ export function reproductor({ lienzo, marca, alCambiar, alTerminar }) {
       // Un nodo por toma, programado en su `inicio` de la hoja. Sample-exacto y sin
       // deriva acumulada.
       const vozGanancia = ctx.createGain();
+      vozGanancia.connect(salida);
 
-      // LA GRAVEDAD SE OYE AQUÍ, ANTES DE PAGAR NADA. Si la hoja trae semitonos,
-      // la voz entera pasa por el agravador en vivo: mismo tono que va a aplicar
-      // el montaje, misma duración (la sincronía no se toca). Suena un pelín
-      // ondulado —es el precio del directo—; el video final lo hace limpio ffmpeg.
+      // LA GRAVEDAD SE OYE AQUÍ, ANTES DE PAGAR NADA: cada buffer de voz se
+      // agrava precalculado, TODAS las tomas por igual. Mismo tono que aplicará
+      // el montaje, misma duración: la sincronía no se toca.
       const semitonos = Number(material.hoja.ajustes?.gravedadVoz) || 0;
-      if (semitonos) {
-        const g = agravador(ctx, semitonos, fuentes);
-        vozGanancia.connect(g.entrada);
-        g.salida.connect(salida);
-      } else {
-        vozGanancia.connect(salida);
-      }
 
       // El seguidor de envolvente: mide el nivel de la voz para agachar la música.
       const medidor = ctx.createAnalyser();
@@ -256,8 +228,9 @@ export function reproductor({ lienzo, marca, alCambiar, alTerminar }) {
       inicioContexto = ctx.currentTime + 0.08;
       for (const t of material.tomas) {
         if (t.inicio + t.duracion < desdeSegundos) continue;
-        const buf = await decodificar(t.voz);
+        let buf = await decodificar(t.voz);
         if (!buf) continue;
+        if (semitonos) buf = agravarBuffer(ctx, buf, semitonos);
         const f = ctx.createBufferSource();
         f.buffer = buf;
         f.connect(vozGanancia);

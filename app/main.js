@@ -439,7 +439,7 @@ function cuentasDeFases() {
   return [
     // Un corte estimado no cuenta como hecho: es audio defectuoso y el botón
     // de Narración lo va a repetir. La cuenta tiene que decir lo mismo que él.
-    ['cf-voz', 'Voz', t.filter((x) => x.audio === 'ok' && x.corteExacto !== false).length, t.length],
+    ['cf-voz', 'Voz', t.filter((x) => x.audio === 'ok' && !(x.corteExacto === false && x.corteForzado === true)).length, t.length],
     ['cf-imagenes', 'Imágenes', img.filter((x) => x.imagen === 'ok').length, img.length],
     ['cf-clips', 'Clips', clips.filter((x) => x.video === 'ok').length, clips.length],
     ['cf-musica', 'Música', mus.filter((e) => e.estado === 'ok').length, mus.length],
@@ -1451,7 +1451,7 @@ accion(
     // Voz cortada ADIVINANDO: es de una narración anterior al corte exacto por
     // marcas. Suena bien pero el texto de cada toma no cuadra con lo que se oye,
     // y desde fuera parece un fallo del montaje. Se dice aquí, con la salida.
-    const estimadas = pieza().tomas.filter((t) => t.audio === 'ok' && !t.corteExacto);
+    const estimadas = pieza().tomas.filter((t) => t.audio === 'ok' && t.corteExacto === false && t.corteForzado === true);
     avisar(
       'previa',
       [
@@ -1461,9 +1461,8 @@ accion(
           : 'Todas completas',
         sinMusica.length ? `${sinMusica.length} escenas sin música` : '',
         estimadas.length
-          ? `${estimadas.length} tomas llevan la voz cortada a ojo, de una narración vieja: si el ` +
-            `texto no cuadra con lo que se oye, marca «Rehacer lo que ya está hecho» y dale a ` +
-            `Narración — el corte exacto lo pone el propio servicio de voz`
+          ? `${estimadas.length} tomas llevan un corte forzado (sin silencio cerca, puede partir ` +
+            `palabra): dale a Narración y se reparan solas`
           : '',
       ]
         .filter(Boolean)
@@ -1707,7 +1706,7 @@ function pintarPorTipo() {
   // ── Voz, toma a toma ──
   const conTexto = t.filter((x) => (x.texto || '').trim());
   $('cuenta-voz').textContent = conTexto.length
-    ? `${conTexto.filter((x) => x.audio === 'ok' && x.corteExacto !== false).length}/${conTexto.length}`
+    ? `${conTexto.filter((x) => x.audio === 'ok' && !(x.corteExacto === false && x.corteForzado === true)).length}/${conTexto.length}`
     : '';
   const cajaVoz = $('lista-voz');
   cajaVoz.innerHTML = conTexto.length ? '' : '<p class="nota">Todavía no hay tomas: genera el guion primero.</p>';
@@ -1716,7 +1715,7 @@ function pintarPorTipo() {
       filaAudio({
         titulo:
           `Toma ${x.i + 1} · ${(x.segundos || 0).toFixed(1)}s` +
-          (x.audio === 'ok' && !x.corteExacto ? ' · corte viejo' : ''),
+          (x.audio === 'ok' && x.corteExacto === false && x.corteForzado === true ? ' · corte forzado' : ''),
         texto: x.texto,
         cargar: x.audio === 'ok' ? () => materialLocal(claveToma(P.id, x.i, 'audio'), 'audio/wav') : null,
         alRehacer: () => rehacerVoz(x.i),
@@ -2645,6 +2644,7 @@ accion(
     P.config.segmentacion.segundosObjetivo = Number($('objetivo').value);
     P.config.narracion.velocidad = Number($('velocidad').value) / 100;
     P.config.montaje.gravedadVoz = Number($('gravedad').value);
+    if (preparada) preparada.hoja.ajustes.gravedadVoz = P.config.montaje.gravedadVoz;
     P.config.imagen.estilo = $('estilo-imagen').value;
     P.config.marca.texto = $('marca-texto').value.trim();
     P.config.formato.vertical = $('vertical').value === '1';

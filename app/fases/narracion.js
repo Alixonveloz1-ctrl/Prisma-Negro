@@ -42,15 +42,14 @@ export function planificar(tomas, config, { soloLasQueFaltan = true } = {}) {
   // entero si le falta el audio a alguna de sus tomas: el corte por silencios es
   // solidario entre las tomas del bloque y no se puede rehacer media.
   //
-  // Y UN CORTE ESTIMADO CUENTA COMO FALTA. Es audio defectuoso: su final puede
-  // caer a mitad de palabra y su texto va corrido respecto a la voz. Sin esto,
-  // arreglar esos bloques exigía «rehacer todo» —volver a pagar las ochenta y
-  // tres tomas para reparar cinco—. Así, el mismo botón de siempre repite solo
-  // los bloques rotos, y lo exacto no se toca ni se vuelve a pagar.
+  // Y UN CORTE FORZADO CUENTA COMO FALTA. Forzado = sin ningún silencio cerca:
+  // puede partir una palabra. Un corte estimado pero anclado a un silencio real
+  // NO es falta — con una voz sin marcas es el corte normal, y repetirlo daría
+  // otro igual. Así el botón de siempre repara solo lo de verdad roto.
   const bloques = bloquesDeNarracion(tomas, config);
   if (!soloLasQueFaltan) return bloques;
   return bloques.filter((b) =>
-    b.tomas.some((t) => t.audio !== 'ok' || t.corteExacto === false),
+    b.tomas.some((t) => t.audio !== 'ok' || (t.corteExacto === false && t.corteForzado === true)),
   );
 }
 
@@ -62,38 +61,8 @@ export function planificar(tomas, config, { soloLasQueFaltan = true } = {}) {
  * de eso se encarga quien llama, y por eso puede escribir cada unidad antes de
  * pasar a la siguiente (§4).
  */
-/**
- * Voces que NUNCA devuelven marcas: las expresivas de Cloud (Chirp, Studio,
- * Journey) no admiten SSML, y las de Gemini van por otra puerta sin marcas.
- * Pedirles el bloque entero es pagar ese audio para tirarlo: se va directo
- * toma a toma, que con ellas es el único corte exacto posible.
- */
-const VOZ_SIN_MARCAS = /chirp|studio|journey|^gemini:/i;
-
-/** Narra un bloque toma a toma: cada llamada es una toma, exacta por construcción. */
-async function narrarTomaAToma({ bloque, pieza, config, senal, alEsperar }) {
-  const salida = [];
-  for (const toma of bloque.tomas) {
-    if (senal?.aborted) throw new Error('Detenido.');
-    const solo = {
-      ...bloque,
-      tomas: [toma],
-      texto: (toma.texto || '').trim(),
-      segundos: toma.segundos || 1,
-    };
-    salida.push(...(await narrarBloque({ bloque: solo, pieza, config, senal, alEsperar })));
-  }
-  return salida;
-}
-
 export async function narrarBloque({ bloque, pieza, config, senal, alEsperar }) {
   const n = config.narracion;
-
-  // Con una voz que no da marcas, el bloque entero no se pide: su audio se
-  // tiraría. Toma a toma desde el principio.
-  if (bloque.tomas.length > 1 && VOZ_SIN_MARCAS.test(n.nombreVoz || '')) {
-    return narrarTomaAToma({ bloque, pieza, config, senal, alEsperar });
-  }
 
   const r = await llamar(
     'voz',
@@ -116,24 +85,23 @@ export async function narrarBloque({ bloque, pieza, config, senal, alEsperar }) 
 
   const audio = leerWav(await (await fetch(`data:audio/wav;base64,${r.datos}`)).arrayBuffer());
 
-  // SIN MARCAS NO SE ADIVINA: SE NARRA TOMA A TOMA.
+  // SIN MARCAS, EL BLOQUE VA AL MÁXIMO Y EL CORTE ES GLOBAL.
   //
   // ─────────────────────────────────────────────────────────────────────────────
-  // Cuando el servicio no devolvía sus tiempos —voces sin SSML, o una respuesta
-  // con las marcas incompletas—, esto caía EN SILENCIO a estimar el corte. El
-  // corte estimado cae donde sea: a mitad de palabra, a mitad de frase. Y desde
-  // que existe el respiro, encima se le plantaban ahí unos segundos de silencio
-  // «de tensión»: una pausa dramática en mitad de una palabra.
+  // Las voces de Gemini cambian de tono EN CADA LLAMADA — probado muchas veces:
+  // ni la temperatura lo quita del todo—. Narrar toma a toma era el peor mundo:
+  // ochenta y tres llamadas, ochenta y tres tonos. La continuidad viene de
+  // aprovechar al máximo cada llamada: bloques de 45 s (el tope que cabe en la
+  // respuesta), así el tono se mantiene el mayor tiempo posible y solo puede
+  // cambiar en el relevo de bloque — que además nunca cruza una escena.
   //
-  // La salida no es estimar mejor: es NO CORTAR. Un bloque de UNA toma no se
-  // corta —el audio entero es la toma, exacto por construcción—, así que cuando
-  // no hay tiempos se repite la narración toma a toma. Cuesta más llamadas una
-  // vez; adivinar costaba el documental entero cada vez.
+  // Y el reparto del bloque ya no adivina corte a corte: elige TODOS los cortes a
+  // la vez, la combinación de silencios reales que mejor cuadra con las tomas
+  // (comun/audio.mjs). Un corte anclado a un silencio de verdad puede errar de
+  // frase, nunca partir una palabra; el forzado —sin silencio cerca— queda
+  // marcado y a la vista.
   // ─────────────────────────────────────────────────────────────────────────────
-  if (!r.tiempos && bloque.tomas.length > 1) {
-    return narrarTomaAToma({ bloque, pieza, config, senal, alEsperar });
-  }
-
+  //
   // Con una sola toma no hay nada que cortar: el final del audio ES el final de
   // la toma, y ese tiempo se declara para que el trozo salga marcado EXACTO.
   const tiempos =

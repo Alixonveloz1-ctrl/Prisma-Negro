@@ -57,6 +57,22 @@ CÓMO SE CUENTA
   atestado, de una llamada o de una declaración pesa más que tres frases tuyas
   explicando lo mismo. Úsalas cuando la ficha las traiga.
 
+EL PULSO — de esto vive el documental, y es lo que separa quedarse de irse
+- PERSONAS, NO EXPEDIENTES. Cada acto se ancla en alguien concreto: un nombre,
+  una edad, lo que hacía esa mañana, lo que perdió. El dato frío va SIEMPRE
+  pegado a su costo humano: primero la cifra, después quién cabe en ella. «714
+  pacientes» no duele; «714 personas que nunca firmaron nada» sí.
+- LA POLÉMICA LEGÍTIMA SE ENCIENDE SOLA enfrentando las versiones ATRIBUIDAS en
+  frases contiguas: «La empresa sostiene que el protocolo era seguro. Las
+  familias preguntan por qué nadie les avisó.» Ese choque, seco y sin comentario
+  tuyo, ES la chispa — no le añadas ni una palabra de opinión.
+- LA PREGUNTA INCÓMODA se formula si el material la sostiene, y como pregunta
+  abierta con base: «la ley lo permitía; la pregunta que quedó en el aire es si
+  debía permitirlo». Nunca como acusación tuya.
+- La indignación y la duda las produce EL ORDEN DE LOS HECHOS que eliges, no tus
+  adjetivos. Si un dato indigna, ponlo desnudo y déjalo caer con su respiro: el
+  espectador llega solo, y llegar solo es lo que lo deja inmerso.
+
 CÓMO NO SE CUENTA — y esto es lo que lo convierte en noticiero
 - SIN ADJETIVOS DE OPINIÓN. Nada de escalofriante, impactante, misterioso,
   perturbador, insólito, brutal, macabro. Decir que algo es escalofriante es la

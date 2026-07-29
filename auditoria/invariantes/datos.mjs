@@ -862,17 +862,36 @@ export const invariantes = [
       if (!/tiempos,/.test(nar) || !/r\.tiempos \|\|/.test(nar)) {
         fallos.push('Vienen los tiempos y no se usan.');
       }
-      // 2b · Y SIN tiempos NO SE ADIVINA: se narra toma a toma. Un bloque de una
-      // toma es exacto por construcción —no hay nada que cortar—. Adivinar ponía
-      // el corte a mitad de palabra, y el respiro le plantaba encima segundos de
-      // silencio: una «pausa dramática» dentro de una palabra.
-      if (!/!r\.tiempos && bloque\.tomas\.length > 1/.test(nar)) {
-        fallos.push('Sin tiempos del servicio se sigue adivinando el corte, en vez de narrar toma a toma.');
-      }
-      // Y una voz que NUNCA da marcas (Chirp, Studio, Journey, Gemini) ni pide el
-      // bloque: ese audio se tiraría entero — el guion pagado dos veces.
-      if (!/VOZ_SIN_MARCAS/.test(nar) || !/VOZ_SIN_MARCAS\.test\(n\.nombreVoz/.test(nar)) {
-        fallos.push('Con una voz sin marcas se pide el bloque entero y se tira: el guion se paga dos veces.');
+      // 2b · Sin marcas, el bloque va AL MÁXIMO (ahí es donde una voz de Gemini
+      // mantiene el tono) y el reparto elige TODOS los cortes a la vez: la
+      // combinación de silencios reales que mejor cuadra. Se comprueba
+      // EJECUTÁNDOLO, con objetivos desviados a propósito: aun así los cortes
+      // tienen que caer en los silencios de verdad, crecientes y sin pelearse.
+      {
+        const f = 24000;
+        const m = new Int16Array(12 * f);
+        for (let i = 0; i < m.length; i++) {
+          const t = i / f;
+          const callado = [3, 6, 9].some((x) => t > x - 0.12 && t < x + 0.12);
+          m[i] = callado ? 0 : Math.round(Math.sin(t * 900) * 8000);
+        }
+        const partes = repartirBloque(
+          { muestras: m, frecuencia: f, canales: 1 },
+          [2.1, 2.9, 2.6, 3.1],
+          { silencioInicialMs: 0 },
+        );
+        const fines = [];
+        let acum = 0;
+        for (const x of partes) {
+          acum += x.segundos;
+          fines.push(acum);
+        }
+        for (const [k, esperado] of [[0, 3], [1, 6], [2, 9]]) {
+          if (Math.abs(fines[k] - esperado) > 0.2) {
+            fallos.push(`Con silencios reales en 3, 6 y 9 s, el corte ${k + 1} cae en ${fines[k].toFixed(2)} s.`);
+          }
+          if (partes[k].forzado) fallos.push(`El corte ${k + 1} sale forzado con un silencio de verdad al lado.`);
+        }
       }
       if (!/bloque\.tomas\.length === 1 \? \[audio\.muestras\.length \/ audio\.frecuencia\]/.test(nar)) {
         fallos.push('Una toma sola no declara su final como tiempo exacto: saldría marcada como estimada.');
@@ -896,15 +915,19 @@ export const invariantes = [
       const { planificarNarracion } = ctx.fn;
       const cfg = { narracion: { segundosPorBloque: 45, topeBytesPorLlamada: 4000 } };
       const roto = [
-        { i: 0, escena: 0, texto: 'Una frase.', segundos: 5, audio: 'ok', corteExacto: false },
-        { i: 1, escena: 1, texto: 'Otra frase.', segundos: 5, audio: 'ok', corteExacto: true },
+        { i: 0, escena: 0, texto: 'Una frase.', segundos: 5, audio: 'ok', corteExacto: false, corteForzado: true },
+        { i: 1, escena: 1, texto: 'Otra frase.', segundos: 5, audio: 'ok', corteExacto: true, corteForzado: false },
+        { i: 2, escena: 2, texto: 'Tercera frase.', segundos: 5, audio: 'ok', corteExacto: false, corteForzado: false },
       ];
       const pendientes = planificarNarracion(roto, cfg);
       if (!pendientes.some((b) => b.tomas.some((x) => x.i === 0))) {
-        fallos.push('Un bloque con corte estimado no se repite: arreglarlo exigiría volver a pagar toda la narración.');
+        fallos.push('Un corte FORZADO (puede partir palabra) no se repara: exigiría rehacerlo todo.');
       }
       if (pendientes.some((b) => b.tomas.some((x) => x.i === 1))) {
         fallos.push('Un bloque con corte exacto se volvería a pagar sin necesidad.');
+      }
+      if (pendientes.some((b) => b.tomas.some((x) => x.i === 2))) {
+        fallos.push('Un corte anclado a silencio real se re-pagaría: con una voz sin marcas es el corte normal, y repetirlo da otro igual.');
       }
 
       // 4 · Con tiempos manda el exacto; sin ellos, se estima y se dice.
@@ -914,10 +937,10 @@ export const invariantes = [
       if (sinT.some((x) => x.exacto)) fallos.push('Un reparto estimado se hace pasar por exacto.');
       return fallos;
     },
-    // Se rompe como estaba: sin tiempos, volver a adivinar en vez de partir.
+    // Se rompe haciendo pasar por exacto un reparto estimado.
     romper: (ctx) =>
-      editando(ctx, 'app/fases/narracion.js', (t) =>
-        t.replace('if (!r.tiempos && bloque.tomas.length > 1) {', 'if (false && bloque.tomas.length > 1) {'),
+      conFuncion(ctx, 'repartirBloque', (a, o, op) =>
+        ctx.fn.repartirBloque(a, o, op).map((t) => ({ ...t, exacto: true })),
       ),
   },
 
@@ -1453,19 +1476,25 @@ export const invariantes = [
         { i: 0, escena: 0, segundos: 6, medida: true, plano, entrada: 2, respiro: 0 },
         { i: 1, escena: 0, segundos: 6, medida: true, plano, respiro: 2.5, audio: 'ok', corteExacto: true },
         { i: 2, escena: 0, segundos: 6, medida: true, plano, respiro: 0 },
-        // El corte de esta vino ESTIMADO: su final puede caer a mitad de frase, y
-        // plantarle un respiro encima es una pausa dramática dentro de una
-        // palabra. Sin corte fiable, no hay respiro.
-        { i: 3, escena: 0, segundos: 6, medida: true, plano, respiro: 4, audio: 'ok', corteExacto: false },
+        // El corte de esta vino FORZADO —sin silencio cerca—: puede partir una
+        // palabra, y plantarle un respiro encima es una pausa dramática dentro
+        // de una palabra. Sin corte fiable, no hay respiro.
+        { i: 3, escena: 0, segundos: 6, medida: true, plano, respiro: 4, audio: 'ok', corteExacto: false, corteForzado: true },
+        // Y esta vino estimada pero ANCLADA a un silencio real: alargar una
+        // pausa de verdad suena natural, y su respiro se conserva.
+        { i: 4, escena: 0, segundos: 6, medida: true, plano, respiro: 2.5, audio: 'ok', corteExacto: false, corteForzado: false },
       ];
       const hoja = construirHoja({ pieza: 'p01', tomas, escenas: [{ n: 0 }], config: { fps } });
-      const [a, b, c, d] = hoja.tomas;
+      const [a, b, c, d, e] = hoja.tomas;
 
       if (Math.abs(a.duracion - 8) > 1 / fps) fallos.push(`La toma de apertura dura ${a.duracion}, y con su entrada debía durar 8.`);
       if (Math.abs(b.duracion - 8.5) > 1 / fps) fallos.push(`La toma con respiro dura ${b.duracion}, y debía durar 8,5.`);
       if (Math.abs(c.duracion - 6) > 1 / fps) fallos.push(`Una toma sin respiro dura ${c.duracion} en vez de 6: se está alargando todo.`);
       if (Math.abs(d.duracion - 6) > 1 / fps) {
-        fallos.push('El respiro se apoya en un corte estimado: el silencio caería a mitad de una palabra.');
+        fallos.push('El respiro se apoya en un corte FORZADO: el silencio caería a mitad de una palabra.');
+      }
+      if (Math.abs(e.duracion - 8.5) > 1 / fps) {
+        fallos.push('Un corte anclado a silencio real pierde su respiro: la pieza queda plana sin motivo.');
       }
       // Y el reloj sigue siendo la suma: si el respiro no entrara en `inicio`, la
       // voz de la toma siguiente se adelantaría y volvería el desfase de siempre.
