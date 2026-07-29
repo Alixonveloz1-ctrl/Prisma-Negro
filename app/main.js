@@ -2629,6 +2629,18 @@ accion(
   'estilo',
 );
 
+/**
+ * Lo que marca el deslizador de gravedad, dicho con palabras.
+ *
+ * Un número con signo no basta en un teléfono: «−3» al lado de una etiqueta que
+ * dice «Gravedad» no aclara si eso es más grave o menos. Lo que se lee es la
+ * dirección, y la dirección es lo que estaba mal entendido.
+ */
+function textoDeGravedad(marcado) {
+  if (!marcado) return '0 · como salió';
+  return marcado > 0 ? `+${marcado} · más grave` : `${marcado} · más aguda`;
+}
+
 function pintarAjustes() {
   pintarEstilos();
   // Los selectores de imagen y clips los llena `cargarModelos` con lo que el
@@ -2645,8 +2657,8 @@ function pintarAjustes() {
   pon('objetivo', P.config.segmentacion.segundosObjetivo, 'v-objetivo');
   pon('velocidad', Math.round(P.config.narracion.velocidad * 100));
   $('v-velocidad').textContent = P.config.narracion.velocidad.toFixed(2);
-  pon('gravedad', P.config.montaje.gravedadVoz);
-  $('v-gravedad').textContent = String(P.config.montaje.gravedadVoz);
+  pon('gravedad', -P.config.montaje.gravedadVoz);
+  $('v-gravedad').textContent = textoDeGravedad(-P.config.montaje.gravedadVoz);
   $('expresivas').checked = !!P.config.narracion.vocesExpresivas;
   $('estilo').value = P.config.narracion.estilo || '';
   $('marca-texto').value = P.config.marca.texto;
@@ -2656,7 +2668,7 @@ function pintarAjustes() {
 $('proporcion').addEventListener('input', (e) => ($('v-proporcion').textContent = `${e.target.value}%`));
 $('objetivo').addEventListener('input', (e) => ($('v-objetivo').textContent = e.target.value));
 $('velocidad').addEventListener('input', (e) => ($('v-velocidad').textContent = (e.target.value / 100).toFixed(2)));
-$('gravedad').addEventListener('input', (e) => ($('v-gravedad').textContent = String(e.target.value)));
+$('gravedad').addEventListener('input', (e) => ($('v-gravedad').textContent = textoDeGravedad(Number(e.target.value))));
 // Recargar el catálogo al momento: si hubiera que guardar ajustes primero, parecería
 // que el interruptor no hace nada.
 $('expresivas').addEventListener('change', async (e) => {
@@ -2679,7 +2691,13 @@ accion(
     P.config.movimiento.proporcion = Number($('proporcion').value) / 100;
     P.config.segmentacion.segundosObjetivo = Number($('objetivo').value);
     P.config.narracion.velocidad = Number($('velocidad').value) / 100;
-    P.config.montaje.gravedadVoz = Number($('gravedad').value);
+    // EL MANDO MARCA GRAVEDAD, NO SEMITONOS. Marcaba semitonos, y en semitonos
+    // «más grave» es hacia los NEGATIVOS: el deslizador iba de −6 a +3, así que
+    // arrastrarlo hacia la derecha —buscando más gravedad, que es lo que dice la
+    // etiqueta— SUBÍA el tono. En pantalla: «no se escucha grave, sino una voz
+    // más fina, como si aumentara la velocidad». Ahora derecha es más grave y el
+    // signo se le pone aquí.
+    P.config.montaje.gravedadVoz = -Number($('gravedad').value);
     if (preparada) preparada.hoja.ajustes.gravedadVoz = P.config.montaje.gravedadVoz;
     P.config.imagen.estilo = $('estilo-imagen').value;
     P.config.marca.texto = $('marca-texto').value.trim();

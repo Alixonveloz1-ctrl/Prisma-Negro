@@ -16,6 +16,7 @@ import { llamar } from '../api.js';
 import { construirHoja, guionFfmpeg, clavesDeLaHoja } from '../../comun/hoja.mjs';
 import { claveFinal } from '../../comun/claves.mjs';
 import { deBase64 } from '../imagenes.js';
+import { subirMarca } from './miniatura.js';
 
 /** Compone la hoja de montaje de una pieza. */
 export function hojaDe(pieza, config) {
@@ -45,6 +46,20 @@ export async function revisar({ pieza, config, senal }) {
   const hoja = hojaDe(pieza, config);
   const guion = guionFfmpeg(hoja);
   const claves = clavesDeLaHoja(hoja);
+
+  // LA MARCA SE DIBUJA AQUÍ, NO SE ESPERA A QUE ALGUIEN SE ACUERDE.
+  //
+  // En pantalla: «Faltan 1 materiales. No se lanza el montaje. Falta:
+  // p2925/firma», con las 83 tomas, las 62 imágenes, los 35 clips y las 4
+  // músicas pagadas y en su sitio. La hoja EXIGE la firma cuando la marca está
+  // activa, pero la subía únicamente un botón suelto de Ajustes: un PNG gratis
+  // —lo dibuja el navegador sobre un lienzo, no cuesta ni una llamada al
+  // modelo— bloqueaba el montaje entero.
+  //
+  // Se sube cada vez y con el id de LA PIEZA (el botón de Ajustes usaba el del
+  // proyecto, que solo coincide con la primera pieza). Así también entra
+  // enseguida un cambio de texto o de color de la marca.
+  if (hoja.firma) await subirMarca({ pieza: pieza.id, config, senal });
 
   const previa = await llamar('montar.comprobar', { hoja }, { senal });
 

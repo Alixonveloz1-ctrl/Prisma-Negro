@@ -385,6 +385,41 @@ export const invariantes = [
   },
 
   {
+    nombre: 'la-marca-la-dibuja-el-montaje-y-no-bloquea-nada',
+    dice: 'En pantalla, con las 83 tomas, 62 imágenes, 35 clips y 4 músicas pagadas: «Faltan 1 materiales. No se lanza el montaje. Falta: p2925/firma». La hoja EXIGE la firma cuando la marca está activa, pero la subía solo un botón suelto de Ajustes —y con el id del PROYECTO, que únicamente coincide con la primera pieza—. Un PNG que dibuja el navegador gratis paraba el montaje entero.',
+    comprobar(ctx) {
+      const mon = fuente(ctx, 'app/fases/montaje.js');
+      const fallos = [];
+
+      // La revisión —por la que pasa también Montar— tiene que asegurarla ella.
+      if (!/subirMarca/.test(mon)) {
+        fallos.push('El montaje no sube la marca: sigue dependiendo de que alguien se acuerde.');
+      }
+      // Y con el id de LA PIEZA, que es el que la hoja pone en la clave.
+      if (!/subirMarca\(\{ pieza: pieza\.id/.test(mon)) {
+        fallos.push('La marca se sube con otro id que el de la pieza: la clave no coincidiría con la hoja.');
+      }
+      // ANTES de preguntar qué falta: después, seguiría faltando.
+      const iSube = mon.indexOf('subirMarca(');
+      const iPregunta = mon.indexOf("llamar('montar.comprobar'");
+      if (iSube < 0 || iPregunta < 0 || iSube > iPregunta) {
+        fallos.push('La marca se sube después de comprobar: el montaje se pararía igual.');
+      }
+      // Solo cuando la hoja la pide: subir una marca que el montaje no va a usar
+      // es un archivo huérfano en el almacén.
+      if (!/if \(hoja\.firma\) await subirMarca/.test(mon)) {
+        fallos.push('La marca se sube aunque la hoja no la pida.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: la marca la sube otro, y el montaje solo se queja.
+    romper: (ctx) =>
+      editando(ctx, 'app/fases/montaje.js', (t) =>
+        t.replace('if (hoja.firma) await subirMarca(', 'if (false) await subirMarca('),
+      ),
+  },
+
+  {
     nombre: 'la-imagen-se-amplia-antes-de-recorrerla',
     dice: 'Las tomas fijas llevan recorrido de cámara, y la imagen se amplía ANTES de recorrerla para que no pixele (§4.7).',
     comprobar(ctx) {

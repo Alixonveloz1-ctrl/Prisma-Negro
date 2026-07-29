@@ -97,44 +97,41 @@ const CAMARA = {
  * cada arranque y al final del documental la imagen va por delante de la voz.
  */
 /**
- * Agrava un AudioBuffer, PRECALCULADO: granos con ventana y medio solape.
+ * Cuánto se frena la voz para sonar `semitonos` más grave. Es la razón de
+ * `asetrate`: la misma que usa ffmpeg al montar.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * La primera versión era un agravador EN VIVO —dos retardos modulados por
- * fuentes en bucle—, y solo el primer audio salía grave: la modulación de los
- * AudioParam se quedaba muda después de la primera fuente en el navegador del
- * teléfono. En vez de pelear con eso, el tono se calcula ANTES de sonar, sobre
- * las muestras: determinista, igual en todos los navegadores, y a todas las
- * tomas por igual — que es exactamente lo que el en-vivo no cumplió.
+ * POR QUÉ ES UN NÚMERO Y NO UN PROCESADOR
  *
- * Mismo tono que aplicará ffmpeg al montar, misma duración (la sincronía no se
- * toca). El directo del montaje suena más limpio; esto es para ELEGIR cuántos
- * semitonos oyéndolo, no para publicarlo.
+ * «Se escucha doble, y no se escucha grave, sino una voz más fina, como si
+ *  aumentara la velocidad.»
+ *
+ * Aquí hubo un agravador granular —granos de 80 ms con medio solape—. Preserva
+ * la duración exacta, sí, pero las dos capas que se solapan leen del original a
+ * SALTO×(1−razón) de distancia: a tres semitonos son 7,6 ms de retardo entre
+ * dos copias de la misma voz al mismo volumen. Eso es un peine justo en el
+ * fundamental de una voz masculina, y se oye como lo que se oyó: la voz
+ * duplicada.
+ *
+ * Preservar la duración exacta en el navegador pide un estirado por
+ * correlación (lo que hace `atempo` en ffmpeg), demasiado caro para 83 tomas en
+ * un teléfono. Así que la previa hace lo ÚNICO que suena impecable y no cuesta
+ * nada: bajar el tono frenando la reproducción, como una cinta. El navegador
+ * remuestrea nativo, sin artefactos, en todas las tomas por igual.
+ *
+ * El precio: la voz habla algo más despacio que en el video final —un 12 % a
+ * tres semitonos—. La imagen NO se mueve: sigue el reloj de la hoja. Y lo que
+ * se alarga cae en el respiro, que es silencio; cuando no hay respiro, la voz
+ * se corta en el borde de la toma antes que pisar la siguiente (§5.6).
+ *
+ * Para lo que existe la previa —ELEGIR cuántos semitonos oyéndolo— un tono
+ * limpio algo lento vale infinitamente más que el tono exacto con la voz
+ * doblada. El video final lo aplica con asetrate+atempo: mismo tono, tempo
+ * intacto.
  * ─────────────────────────────────────────────────────────────────────────────
  */
-function agravarBuffer(ctx, buf, semitonos) {
-  const r = Math.pow(2, semitonos / 12);
-  const GRANO = Math.max(2, Math.round(buf.sampleRate * 0.08));
-  const SALTO = Math.floor(GRANO / 2);
-  const salida = ctx.createBuffer(buf.numberOfChannels, buf.length, buf.sampleRate);
-  for (let c = 0; c < buf.numberOfChannels; c++) {
-    const x = buf.getChannelData(c);
-    const y = salida.getChannelData(c);
-    for (let ini = 0; ini < x.length; ini += SALTO) {
-      for (let j = 0; j < GRANO; j++) {
-        const o = ini + j;
-        if (o >= x.length) break;
-        const pos = ini + j * r;
-        const p0 = Math.floor(pos);
-        if (p0 >= x.length) break;
-        const fr = pos - p0;
-        const v = p0 + 1 < x.length ? x[p0] * (1 - fr) + x[p0 + 1] * fr : x[p0];
-        // Ventana de Hann con medio solape: las dos capas suman uno exacto.
-        y[o] += v * (0.5 - 0.5 * Math.cos((2 * Math.PI * j) / GRANO));
-      }
-    }
-  }
-  return salida;
+function razonDeGravedad(semitonos) {
+  return semitonos ? Math.pow(2, Number(semitonos) / 12) : 1;
 }
 
 export function reproductor({ lienzo, marca, alCambiar, alTerminar }) {
@@ -208,16 +205,33 @@ export function reproductor({ lienzo, marca, alCambiar, alTerminar }) {
 
       const salida = ctx.destination;
 
+      // TODO EL AUDIO SE DESCODIFICA ANTES DE FIJAR EL RELOJ.
+      //
+      // Estaba al revés: se fijaba `inicioContexto` y se descodificaba DENTRO del
+      // bucle, toma por toma. Con 83 tomas eso tarda, y cuando le llegaba el turno
+      // a las primeras su instante YA HABÍA PASADO — y `start()` con un instante
+      // pasado arranca al momento—: las tomas de los primeros segundos salían
+      // TODAS juntas, dos y tres voces hablando encima. La otra mitad del «se
+      // escucha doble», y la que empeoraba cuanto más largo el documental.
+      const vozDe = new Map();
+      for (const t of material.tomas) {
+        if (t.inicio + t.duracion < desdeSegundos) continue;
+        const buf = await decodificar(t.voz);
+        if (buf) vozDe.set(t, buf);
+      }
+      const musicaDe = new Map();
+      for (const e of material.hoja.escenas) {
+        const buf = await decodificar(material.musica[e.n]);
+        if (buf) musicaDe.set(e, buf);
+      }
+      // Si pararon mientras descodificaba, no se arranca nada.
+      if (!corriendo) return;
+
       // ── La voz ────────────────────────────────────────────────────────────
       // Un nodo por toma, programado en su `inicio` de la hoja. Sample-exacto y sin
       // deriva acumulada.
       const vozGanancia = ctx.createGain();
       vozGanancia.connect(salida);
-
-      // LA GRAVEDAD SE OYE AQUÍ, ANTES DE PAGAR NADA: cada buffer de voz se
-      // agrava precalculado, TODAS las tomas por igual. Mismo tono que aplicará
-      // el montaje, misma duración: la sincronía no se toca.
-      const semitonos = Number(material.hoja.ajustes?.gravedadVoz) || 0;
 
       // El seguidor de envolvente: mide el nivel de la voz para agachar la música.
       const medidor = ctx.createAnalyser();
@@ -225,14 +239,15 @@ export function reproductor({ lienzo, marca, alCambiar, alTerminar }) {
       vozGanancia.connect(medidor);
       const muestras = new Float32Array(medidor.fftSize);
 
+      // LA GRAVEDAD SE OYE AQUÍ, ANTES DE PAGAR NADA, y en TODAS las tomas por
+      // igual: la voz se frena, que es bajar el tono sin un solo artefacto.
+      const razon = razonDeGravedad(material.hoja.ajustes?.gravedadVoz);
+
       inicioContexto = ctx.currentTime + 0.08;
-      for (const t of material.tomas) {
-        if (t.inicio + t.duracion < desdeSegundos) continue;
-        let buf = await decodificar(t.voz);
-        if (!buf) continue;
-        if (semitonos) buf = agravarBuffer(ctx, buf, semitonos);
+      for (const [t, buf] of vozDe) {
         const f = ctx.createBufferSource();
         f.buffer = buf;
+        if (razon !== 1) f.playbackRate.value = razon;
         f.connect(vozGanancia);
         // La voz arranca DESPUÉS de la entrada en frío, igual que en el montaje. Si
         // aquí empezara en `inicio`, la previa enseñaría un documental que no es el
@@ -240,8 +255,13 @@ export function reproductor({ lienzo, marca, alCambiar, alTerminar }) {
         // después de pagarlo.
         const arranque = t.inicio + (t.entrada || 0);
         const cuando = inicioContexto + Math.max(0, arranque - desdeSegundos);
-        const salto = Math.max(0, desdeSegundos - arranque);
+        // El desfase se cuenta sobre la grabación, no sobre el reloj: frenada, cada
+        // segundo que suena consume `razon` segundos de buffer.
+        const salto = Math.max(0, desdeSegundos - arranque) * razon;
         f.start(cuando, salto);
+        // Frenada, la voz dura más. Que se coma el respiro —que es silencio— vale;
+        // pisar la voz de la toma siguiente no: eso serían dos voces a la vez.
+        f.stop(inicioContexto + Math.max(0, t.inicio + t.duracion - desdeSegundos));
         fuentes.push(f);
       }
 
@@ -253,9 +273,7 @@ export function reproductor({ lienzo, marca, alCambiar, alTerminar }) {
       const nivelBase = 0.55;
       const FUNDIDO = material.hoja.ajustes?.fundidoMusica ?? 2.5;
 
-      for (const e of material.hoja.escenas) {
-        const buf = await decodificar(material.musica[e.n]);
-        if (!buf) continue;
+      for (const [e, buf] of musicaDe) {
         const f = ctx.createBufferSource();
         f.buffer = buf;
         f.loop = true; // la pieza suele ser más corta que la escena

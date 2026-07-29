@@ -768,22 +768,56 @@ export const invariantes = [
         fallos.push('La gravedad no tiene tope: un valor loco haría la voz un monstruo.');
       }
       const main = fuente(ctx, 'app/main.js');
-      if (!/P\.config\.montaje\.gravedadVoz = Number\(\$\('gravedad'\)\.value\)/.test(main)) {
-        fallos.push('El deslizador de gravedad no guarda: se ajusta y no pasa nada.');
+      if (!/P\.config\.montaje\.gravedadVoz = -Number\(\$\('gravedad'\)\.value\)/.test(main)) {
+        fallos.push('El deslizador de gravedad no guarda con el signo puesto: se ajusta y no pasa nada, o pasa al revés.');
       }
 
-      // 3b · Y SE OYE ANTES DE PAGAR: la previa del montado pasa la voz por el
-      // agravador en vivo cuando la hoja trae semitonos. Sin esto, elegir la
+      // 3a · Y HACIA LA DERECHA ES MÁS GRAVE. El mando marcaba SEMITONOS, donde
+      // grave es hacia los negativos: iba de −6 a +3, así que arrastrarlo hacia
+      // la derecha —buscando más gravedad, que es lo que dice su etiqueta— subía
+      // el tono. «No se escucha grave, sino una voz más fina, como si aumentara
+      // la velocidad.» El mando marca gravedad y el signo se pone al guardar.
+      const html = ctx.fuentes.get('index.html') || '';
+      const mando = /<input id="gravedad"[^>]*>/.exec(html)?.[0] || '';
+      const min = Number(/min="(-?\d+)"/.exec(mando)?.[1]);
+      const max = Number(/max="(-?\d+)"/.exec(mando)?.[1]);
+      if (!(max > 0 && max >= Math.abs(min))) {
+        fallos.push(`El mando de gravedad va de ${min} a ${max}: el extremo grave no está a la derecha.`);
+      }
+      // Y la etiqueta tiene que decir la dirección con palabras: un número con
+      // signo al lado de «Gravedad» no dice si es más grave o menos.
+      if (!/function textoDeGravedad/.test(main) || !/más grave/.test(main)) {
+        fallos.push('El valor del mando no se dice con palabras: el número solo no aclara la dirección.');
+      }
+
+      // 3b · Y SE OYE ANTES DE PAGAR, en TODAS las tomas. Sin esto, elegir la
       // gravedad era a ciegas — descargar el video para saber cómo suena.
       const previa = fuente(ctx, 'app/previa.js');
-      if (!/function agravarBuffer\(/.test(previa)) {
-        fallos.push('La previa no tiene agravador: la gravedad se elegiría a ciegas, descargando para oír.');
+      if (!/function razonDeGravedad\(/.test(previa)) {
+        fallos.push('La previa no aplica la gravedad: se elegiría a ciegas, descargando para oír.');
       }
-      // PRECALCULADO Y A CADA TOMA: el agravador en vivo —retardos modulados—
-      // solo agravó el primer audio en el teléfono. El precalculado procesa el
-      // buffer de cada toma por igual, determinista.
-      if (!/if \(semitonos\) buf = agravarBuffer\(ctx, buf, semitonos\);/.test(previa)) {
-        fallos.push('El agravador no procesa cada toma: solo la primera sonaría grave, como pasó.');
+      // Frenando la reproducción, no con granos. El agravador granular —80 ms con
+      // medio solape— dejaba las dos capas a 7,6 ms una de otra: un peine en el
+      // fundamental de una voz masculina, y se oyó como la voz DOBLADA.
+      if (/agravarBuffer/.test(previa)) {
+        fallos.push('Vuelve el agravador granular: dos capas desfasadas suenan como voz doblada.');
+      }
+      if (!/f\.playbackRate\.value = razon/.test(previa)) {
+        fallos.push('La gravedad no se aplica a la fuente de cada toma: solo la primera sonaría grave.');
+      }
+      // Frenada la voz dura más, y sin tope pisaría la voz de la toma siguiente:
+      // dos voces a la vez, que es otra forma del mismo «se escucha doble».
+      if (!/f\.stop\(inicioContexto \+ Math\.max\(0, t\.inicio \+ t\.duracion - desdeSegundos\)\)/.test(previa)) {
+        fallos.push('La voz frenada no se corta en el borde de su toma: pisaría la siguiente.');
+      }
+      // Y EL RELOJ SE FIJA DESPUÉS DE DESCODIFICAR. Al revés —descodificando
+      // dentro del bucle que programa— las primeras tomas de un documental largo
+      // llegaban con su instante ya pasado, y `start()` en pasado suena AL
+      // MOMENTO: tres voces juntas en los primeros segundos.
+      const iDecodifica = previa.indexOf('const vozDe = new Map()');
+      const iReloj = previa.indexOf('inicioContexto = ctx.currentTime');
+      if (iDecodifica < 0 || iReloj < 0 || iDecodifica > iReloj) {
+        fallos.push('Se programa mientras se descodifica: las primeras tomas arrancarían todas juntas.');
       }
       // Y la hoja DE LA PREVIA lleva la gravedad: la previa construye la suya, y
       // sin este campo el agravador nunca se enteraba del ajuste.
