@@ -2659,6 +2659,8 @@ function pintarAjustes() {
   $('v-velocidad').textContent = P.config.narracion.velocidad.toFixed(2);
   pon('gravedad', -P.config.montaje.gravedadVoz);
   $('v-gravedad').textContent = textoDeGravedad(-P.config.montaje.gravedadVoz);
+  pon('musica-volumen', Math.round(P.config.musica.volumen * 100));
+  $('v-musica-volumen').textContent = `${Math.round(P.config.musica.volumen * 100)}%`;
   $('expresivas').checked = !!P.config.narracion.vocesExpresivas;
   $('estilo').value = P.config.narracion.estilo || '';
   $('marca-texto').value = P.config.marca.texto;
@@ -2669,6 +2671,7 @@ $('proporcion').addEventListener('input', (e) => ($('v-proporcion').textContent 
 $('objetivo').addEventListener('input', (e) => ($('v-objetivo').textContent = e.target.value));
 $('velocidad').addEventListener('input', (e) => ($('v-velocidad').textContent = (e.target.value / 100).toFixed(2)));
 $('gravedad').addEventListener('input', (e) => ($('v-gravedad').textContent = textoDeGravedad(Number(e.target.value))));
+$('musica-volumen').addEventListener('input', (e) => ($('v-musica-volumen').textContent = `${e.target.value}%`));
 // Recargar el catálogo al momento: si hubiera que guardar ajustes primero, parecería
 // que el interruptor no hace nada.
 $('expresivas').addEventListener('change', async (e) => {
@@ -2698,7 +2701,13 @@ accion(
     // más fina, como si aumentara la velocidad». Ahora derecha es más grave y el
     // signo se le pone aquí.
     P.config.montaje.gravedadVoz = -Number($('gravedad').value);
-    if (preparada) preparada.hoja.ajustes.gravedadVoz = P.config.montaje.gravedadVoz;
+    P.config.musica.volumen = Number($('musica-volumen').value) / 100;
+    // Los dos ajustes que se ELIGEN OYÉNDOLOS llegan a la previa ya preparada: si
+    // hubiera que volver a preparar para oír el cambio, el mando parecería roto.
+    if (preparada) {
+      preparada.hoja.ajustes.gravedadVoz = P.config.montaje.gravedadVoz;
+      preparada.hoja.ajustes.volumenMusica = P.config.musica.volumen;
+    }
     P.config.imagen.estilo = $('estilo-imagen').value;
     P.config.marca.texto = $('marca-texto').value.trim();
     P.config.formato.vertical = $('vertical').value === '1';

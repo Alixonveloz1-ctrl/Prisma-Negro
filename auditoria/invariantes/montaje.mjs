@@ -7,7 +7,7 @@
 // se prueba entero en milisegundos y ahí salen los fallos de estructura, en vez de
 // después de horas mirando la nube (§10).
 
-import { editando } from '../contexto.mjs';
+import { editando, conFuncion } from '../contexto.mjs';
 
 const fuente = (ctx, ruta) => ctx.fuentes.get(ruta) || '';
 
@@ -416,6 +416,86 @@ export const invariantes = [
     romper: (ctx) =>
       editando(ctx, 'app/fases/montaje.js', (t) =>
         t.replace('if (hoja.firma) await subirMarca(', 'if (false) await subirMarca('),
+      ),
+  },
+
+  {
+    nombre: 'el-volumen-de-la-musica-se-elige-y-se-exporta',
+    dice: '«La música ni se escucha, apenas se medio escucha a lo lejos.» El nivel estaba escrito a mano —0,55— en el guion de ffmpeg Y otra vez en la previa, y `config.musica.volumen` existía en el modelo sin que lo leyera NADIE: un ajuste muerto. Y el agachado era de más de veinte decibelios con un umbral que salta con una respiración, así que subir el nivel tampoco habría servido.',
+    async comprobar(ctx) {
+      const { construirHoja, guionFfmpeg, normalizar } = ctx.fn;
+      const fallos = [];
+      const plano = { encuadre: 'plano medio', movimientoCamara: 'fijo', lugar: 'x', luz: 'y', sujetos: [], descripcion: 'd' };
+      const tomas = [{ i: 0, escena: 0, segundos: 6, medida: true, plano, audio: 'ok', corteExacto: true }];
+      const conMusica = (v) =>
+        guionFfmpeg(
+          construirHoja({
+            pieza: 'p01',
+            tomas,
+            escenas: [{ n: 0, musica: 'p01/mus/000' }],
+            config: v === undefined ? {} : { volumenMusica: v },
+          }),
+        );
+
+      // 1 · El nivel elegido llega al guion, tal cual.
+      for (const v of [0.2, 0.8]) {
+        if (!new RegExp(`volume=${v}\\[m\\]`).test(conMusica(v))) {
+          fallos.push(`Con la música al ${v} el guion no la pone a ese nivel: el mando no haría nada.`);
+        }
+      }
+      // Y no queda ningún nivel clavado en el código.
+      const hoj = fuente(ctx, 'comun/hoja.mjs');
+      if (/volume=0\.55/.test(hoj)) fallos.push('El nivel de música sigue escrito a mano en el guion de ffmpeg.');
+      const pre = fuente(ctx, 'app/previa.js');
+      if (/nivelBase = 0\.55/.test(pre)) fallos.push('La previa sigue con el nivel escrito a mano: sonaría distinto al video.');
+      if (!/ajustes\?\.volumenMusica/.test(pre)) fallos.push('La previa no lee el nivel de la hoja: se elegiría sin oírlo.');
+      // Y la hoja lo lleva dentro, que es lo que la previa y el montaje comparten.
+      const hoja = construirHoja({ pieza: 'p01', tomas, escenas: [{ n: 0 }], config: { volumenMusica: 0.42 } });
+      if (hoja.ajustes.volumenMusica !== 0.42) fallos.push('La hoja no lleva el nivel de música: previa y montaje podrían discrepar.');
+
+      // 2 · Y las dos puntas del cable: el ajuste del proyecto y la pantalla.
+      if (normalizar({ musica: { volumen: 9 } }).musica.volumen !== 1) {
+        fallos.push('El nivel de música no tiene tope: un valor loco saturaría la mezcla.');
+      }
+      const main = fuente(ctx, 'app/main.js');
+      if (!/P\.config\.musica\.volumen = Number\(\$\('musica-volumen'\)\.value\) \/ 100/.test(main)) {
+        fallos.push('El deslizador de volumen no guarda: se mueve y no pasa nada.');
+      }
+      if (!/preparada\.hoja\.ajustes\.volumenMusica = P\.config\.musica\.volumen/.test(main)) {
+        fallos.push('Cambiar el volumen exige volver a preparar para oírlo: el mando parecería roto.');
+      }
+      const mon = fuente(ctx, 'app/fases/montaje.js');
+      if (!/volumenMusica: config\.musica\.volumen/.test(mon)) {
+        fallos.push('El montaje no manda el nivel elegido: se exportaría con otro que el de la previa.');
+      }
+
+      // 3 · El agachado deja la música VIVA. Con ratio 12 sobre un umbral de 0,03
+      // eran más de veinte decibelios, y saltaba con una respiración.
+      const g = conMusica(0.55);
+      const ratio = Number(/sidechaincompress=[^']*?ratio=([\d.]+)/.exec(g)?.[1]);
+      const umbral = Number(/sidechaincompress=threshold=([\d.]+)/.exec(g)?.[1]);
+      if (!(ratio > 1 && ratio <= 4)) fallos.push(`El agachado va a ratio ${ratio}: entierra la música en vez de dejarle sitio.`);
+      if (!(umbral >= 0.05)) fallos.push(`El agachado salta a ${umbral} de umbral: cualquier respiración lo dispara.`);
+      // 4 · Y hay techo. Voz al 0,9 más música agachada pasa de uno; sumar dos
+      // pistas sin limitador es distorsión, y ahora el nivel lo pone el usuario.
+      if (!/alimiter=/.test(g)) fallos.push('La mezcla no lleva limitador: con la música alta, distorsiona.');
+      if (!/-map '\[techo\]'|-map \[techo\]/.test(g)) fallos.push('El limitador está en el filtro pero no es lo que se codifica.');
+      if (!/salida\.threshold\.value|createDynamicsCompressor/.test(pre)) {
+        fallos.push('La previa no lleva techo: distorsionaría donde el video final no.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: el nivel clavado, sin mirar lo que eligió el usuario.
+    //
+    // Y se rompe SUSTITUYENDO LA FUNCIÓN, no editando el archivo: lo que estas
+    // comprobaciones ejecutan es `guionFfmpeg`, así que un sabotaje sobre el texto
+    // fuente solo habría probado las comprobaciones de texto y habría dejado
+    // ciegas las que miden el agachado y el techo. Eso ya pasó en este proyecto
+    // —una invariante midiendo el bloque equivocado durante semanas— y aquí se
+    // cazó igual: con el archivo editado, estas seguían pasando.
+    romper: (ctx) =>
+      conFuncion(ctx, 'guionFfmpeg', (hoja) =>
+        ctx.fn.guionFfmpeg({ ...hoja, ajustes: { ...hoja.ajustes, volumenMusica: 0.55 } }),
       ),
   },
 

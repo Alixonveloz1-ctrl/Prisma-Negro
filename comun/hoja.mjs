@@ -19,6 +19,11 @@ export const PREDETERMINADO = {
   fundidoMusica: 2.5,
   // Semitonos de gravedad de la voz, aplicados al montar. Cero = tal cual.
   gravedadVoz: 0,
+  // El nivel del lecho de música ANTES de que la voz lo agache. Estaba escrito a
+  // mano aquí y otra vez en la previa, y el ajuste del proyecto no lo leía nadie:
+  // «la música ni se escucha, apenas se medio escucha a lo lejos», y subirla era
+  // imposible desde la pantalla.
+  volumenMusica: 0.55,
   // §4.7: se amplía la imagen antes de recorrerla para que no pixele.
   ampliacionCamara: 2,
   crf: 18,
@@ -157,6 +162,7 @@ export function construirHoja({ pieza, tomas, escenas = [], config = {} }) {
     ajustes: {
       fundidoMusica: c.fundidoMusica,
       gravedadVoz: c.gravedadVoz,
+      volumenMusica: c.volumenMusica,
       ampliacionCamara: c.ampliacionCamara,
       crf: c.crf,
       bitrateAudio: c.bitrateAudio,
@@ -408,13 +414,25 @@ export function guionFfmpeg(hoja) {
     p(
       `ffmpeg -y -v error -i voz.wav -i musica.wav -filter_complex ` +
         sh(
-          '[1:a]volume=0.55[m];' +
+          // EL NIVEL DEL LECHO LO ELIGE EL USUARIO. Estaba clavado a 0,55 aquí y
+          // otra vez en la previa, y `config.musica.volumen` no lo leía nadie.
+          `[1:a]volume=${a.volumenMusica}[m];` +
             // La voz abre el paso: la música baja cuando hay narración y vuelve
             // cuando no. Un volumen fijo o ahoga la voz o deja la música inaudible.
-            '[m][0:a]sidechaincompress=threshold=0.03:ratio=12:attack=15:release=350[duck];' +
-            '[0:a][duck]amix=inputs=2:normalize=0:dropout_transition=0[mezcla]',
+            //
+            // Con ratio 12 y umbral 0,03 el agachado eran más de VEINTE decibelios:
+            // la música desaparecía en cuanto alguien respiraba y subir el nivel no
+            // servía de nada, porque lo que sobraba era la compresión, no el
+            // volumen. Doce decibelios es un agachado de documental: la voz manda y
+            // la música sigue estando ahí.
+            '[m][0:a]sidechaincompress=threshold=0.08:ratio=3:attack=20:release=300[duck];' +
+            '[0:a][duck]amix=inputs=2:normalize=0:dropout_transition=0[mezcla];' +
+            // Y un limitador al final. Voz al 0,9 más música agachada al 0,2 pasa
+            // de uno: sumar dos pistas sin techo es distorsión en los picos, y con
+            // el nivel de música en manos del usuario deja de ser hipotético.
+            '[mezcla]alimiter=limit=0.97:level=0[techo]',
         ) +
-        ` -map ${sh('[mezcla]')} -c:a aac -b:a ${a.bitrateAudio} -ar ${a.muestreo} audio.m4a`,
+        ` -map ${sh('[techo]')} -c:a aac -b:a ${a.bitrateAudio} -ar ${a.muestreo} audio.m4a`,
     );
   } else {
     p('# ── 5. Sin música: una sola codificación de audio igualmente (§5.5) ──');

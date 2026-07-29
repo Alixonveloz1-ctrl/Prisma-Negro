@@ -19,6 +19,7 @@
 
 import { material, tipoDeClave } from './material.js';
 import { construirHoja } from '../comun/hoja.mjs';
+import { agravarMuestras } from '../comun/audio.mjs';
 import { nombreLocal } from '../comun/claves.mjs';
 
 /**
@@ -41,6 +42,8 @@ export async function preparar({ pieza, config, senal, alAvanzar }) {
       // Sin esto, la previa construía SU hoja sin la gravedad y el agravador
       // nunca se enteraba: se elegía un tono que la previa no sonaba.
       gravedadVoz: config.montaje?.gravedadVoz ?? 0,
+      // Y el nivel de la música, por lo mismo: se elige oyéndolo o no se elige.
+      volumenMusica: config.musica.volumen,
       firma: config.marca.activa && config.marca.texto ? undefined : null,
     },
   });
@@ -90,50 +93,25 @@ const CAMARA = {
 };
 
 /**
+ * El agravador, aplicado a un AudioBuffer. La cuenta vive en `comun/audio.mjs`
+ * —sin nada del navegador— para que la auditoría la ejecute con datos sintéticos y
+ * mida el tono, la duración y los bordes que salen, en vez de creérselo.
+ */
+function agravarBuffer(ctx, buf, semitonos) {
+  const salida = ctx.createBuffer(buf.numberOfChannels, buf.length, buf.sampleRate);
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    salida.getChannelData(c).set(agravarMuestras(buf.getChannelData(c), buf.sampleRate, semitonos));
+  }
+  return salida;
+}
+
+/**
  * Reproduce la pieza como sonaría montada.
  *
  * El audio va por Web Audio y programado por TIEMPO ABSOLUTO desde la hoja, no
  * encadenando «cuando acabe este, el siguiente»: encadenar acumula el retraso de
  * cada arranque y al final del documental la imagen va por delante de la voz.
  */
-/**
- * Cuánto se frena la voz para sonar `semitonos` más grave. Es la razón de
- * `asetrate`: la misma que usa ffmpeg al montar.
- *
- * ─────────────────────────────────────────────────────────────────────────────
- * POR QUÉ ES UN NÚMERO Y NO UN PROCESADOR
- *
- * «Se escucha doble, y no se escucha grave, sino una voz más fina, como si
- *  aumentara la velocidad.»
- *
- * Aquí hubo un agravador granular —granos de 80 ms con medio solape—. Preserva
- * la duración exacta, sí, pero las dos capas que se solapan leen del original a
- * SALTO×(1−razón) de distancia: a tres semitonos son 7,6 ms de retardo entre
- * dos copias de la misma voz al mismo volumen. Eso es un peine justo en el
- * fundamental de una voz masculina, y se oye como lo que se oyó: la voz
- * duplicada.
- *
- * Preservar la duración exacta en el navegador pide un estirado por
- * correlación (lo que hace `atempo` en ffmpeg), demasiado caro para 83 tomas en
- * un teléfono. Así que la previa hace lo ÚNICO que suena impecable y no cuesta
- * nada: bajar el tono frenando la reproducción, como una cinta. El navegador
- * remuestrea nativo, sin artefactos, en todas las tomas por igual.
- *
- * El precio: la voz habla algo más despacio que en el video final —un 12 % a
- * tres semitonos—. La imagen NO se mueve: sigue el reloj de la hoja. Y lo que
- * se alarga cae en el respiro, que es silencio; cuando no hay respiro, la voz
- * se corta en el borde de la toma antes que pisar la siguiente (§5.6).
- *
- * Para lo que existe la previa —ELEGIR cuántos semitonos oyéndolo— un tono
- * limpio algo lento vale infinitamente más que el tono exacto con la voz
- * doblada. El video final lo aplica con asetrate+atempo: mismo tono, tempo
- * intacto.
- * ─────────────────────────────────────────────────────────────────────────────
- */
-function razonDeGravedad(semitonos) {
-  return semitonos ? Math.pow(2, Number(semitonos) / 12) : 1;
-}
-
 export function reproductor({ lienzo, marca, alCambiar, alTerminar }) {
   let ctx = null;
   let material = null;
@@ -145,6 +123,18 @@ export function reproductor({ lienzo, marca, alCambiar, alTerminar }) {
   let corriendo = false;
 
   const buffers = new Map();
+  // Agravar cuesta trabajo de verdad —autocorrelación más solape—, así que se paga
+  // una vez por toma y por tono: darle a Reproducir otra vez no lo vuelve a pagar,
+  // y cambiar los semitonos sí lo recalcula.
+  const agravados = new Map();
+
+  function agravar(contexto, buf, semitonos) {
+    const previo = agravados.get(buf);
+    if (previo && previo.semitonos === semitonos) return previo.salida;
+    const salida = agravarBuffer(contexto, buf, semitonos);
+    agravados.set(buf, { semitonos, salida });
+    return salida;
+  }
 
   async function decodificar(blob) {
     if (!blob) return null;
@@ -203,7 +193,17 @@ export function reproductor({ lienzo, marca, alCambiar, alTerminar }) {
       await ctx.resume();
       corriendo = true;
 
-      const salida = ctx.destination;
+      // EL TECHO, el mismo que pone ffmpeg al final de la mezcla. Voz al 0,9 más
+      // música agachada pasa de uno, y con el nivel de música en manos del usuario
+      // eso deja de ser hipotético: sin limitador la previa distorsiona en los
+      // picos y parece que el material está mal grabado.
+      const salida = ctx.createDynamicsCompressor();
+      salida.threshold.value = -1;
+      salida.knee.value = 0;
+      salida.ratio.value = 20;
+      salida.attack.value = 0.003;
+      salida.release.value = 0.1;
+      salida.connect(ctx.destination);
 
       // TODO EL AUDIO SE DESCODIFICA ANTES DE FIJAR EL RELOJ.
       //
@@ -240,14 +240,13 @@ export function reproductor({ lienzo, marca, alCambiar, alTerminar }) {
       const muestras = new Float32Array(medidor.fftSize);
 
       // LA GRAVEDAD SE OYE AQUÍ, ANTES DE PAGAR NADA, y en TODAS las tomas por
-      // igual: la voz se frena, que es bajar el tono sin un solo artefacto.
-      const razon = razonDeGravedad(material.hoja.ajustes?.gravedadVoz);
+      // igual. Con la duración intacta: nada que recortar, nada que pise a nadie.
+      const semitonos = Number(material.hoja.ajustes?.gravedadVoz) || 0;
 
       inicioContexto = ctx.currentTime + 0.08;
       for (const [t, buf] of vozDe) {
         const f = ctx.createBufferSource();
-        f.buffer = buf;
-        if (razon !== 1) f.playbackRate.value = razon;
+        f.buffer = semitonos ? agravar(ctx, buf, semitonos) : buf;
         f.connect(vozGanancia);
         // La voz arranca DESPUÉS de la entrada en frío, igual que en el montaje. Si
         // aquí empezara en `inicio`, la previa enseñaría un documental que no es el
@@ -255,13 +254,7 @@ export function reproductor({ lienzo, marca, alCambiar, alTerminar }) {
         // después de pagarlo.
         const arranque = t.inicio + (t.entrada || 0);
         const cuando = inicioContexto + Math.max(0, arranque - desdeSegundos);
-        // El desfase se cuenta sobre la grabación, no sobre el reloj: frenada, cada
-        // segundo que suena consume `razon` segundos de buffer.
-        const salto = Math.max(0, desdeSegundos - arranque) * razon;
-        f.start(cuando, salto);
-        // Frenada, la voz dura más. Que se coma el respiro —que es silencio— vale;
-        // pisar la voz de la toma siguiente no: eso serían dos voces a la vez.
-        f.stop(inicioContexto + Math.max(0, t.inicio + t.duracion - desdeSegundos));
+        f.start(cuando, Math.max(0, desdeSegundos - arranque));
         fuentes.push(f);
       }
 
@@ -270,7 +263,11 @@ export function reproductor({ lienzo, marca, alCambiar, alTerminar }) {
       const musicaGanancia = ctx.createGain();
       musicaGanancia.gain.value = 0;
       musicaGanancia.connect(salida);
-      const nivelBase = 0.55;
+      // EL NIVEL QUE ELIGIÓ EL USUARIO, no un 0,55 escrito a mano en dos sitios.
+      // `config.musica.volumen` existía en el modelo desde el principio y no lo
+      // leía nadie: ni la previa ni el guion de ffmpeg. De ahí «la música ni se
+      // escucha, apenas se medio escucha a lo lejos» sin manera de subirla.
+      const nivelBase = Number(material.hoja.ajustes?.volumenMusica ?? 0.55);
       const FUNDIDO = material.hoja.ajustes?.fundidoMusica ?? 2.5;
 
       for (const [e, buf] of musicaDe) {
@@ -307,10 +304,14 @@ export function reproductor({ lienzo, marca, alCambiar, alTerminar }) {
           const v = Math.abs(muestras[i]);
           if (v > pico) pico = v;
         }
-        // Con voz, la música baja a un quinto. Ataque rápido, vuelta lenta: si
-        // vuelve rápido, se oye bombear entre palabra y palabra.
-        const objetivo = pico > 0.03 ? nivelBase * 0.2 : nivelBase;
-        const velocidad = objetivo < ultimo ? 0.25 : 0.03;
+        // DOCE DECIBELIOS, los mismos que el sidechaincompress del montaje.
+        //
+        // Bajaba a un quinto —catorce— disparándose con un umbral de 0,03, o sea
+        // con una respiración: la música se pasaba el documental entero enterrada y
+        // subir el nivel no arreglaba nada, porque lo que sobraba era el agachado.
+        // Con vuelta lenta, para que no se oiga bombear entre palabra y palabra.
+        const objetivo = pico > 0.08 ? nivelBase * 0.25 : nivelBase;
+        const velocidad = objetivo < ultimo ? 0.25 : 0.05;
         ultimo += (objetivo - ultimo) * velocidad;
         musicaGanancia.gain.setTargetAtTime(ultimo, ctx.currentTime, 0.02);
         requestAnimationFrame(seguir);

@@ -172,6 +172,8 @@ async function funcionesPuras() {
     repartirPorTiempos: aud.repartirPorTiempos,
     repartirBloque: aud.repartirBloque,
     repartir: aud.repartir,
+    agravarMuestras: aud.agravarMuestras,
+    periodoDeVoz: aud.periodoDeVoz,
     contarPalabras: gui.contarPalabras,
     normalizar: cfg.normalizar,
     sanear: est.sanear,

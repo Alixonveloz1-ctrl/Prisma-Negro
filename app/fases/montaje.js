@@ -30,6 +30,8 @@ export function hojaDe(pieza, config) {
       alto: config.formato.alto,
       fundidoMusica: config.musica.fundido,
       gravedadVoz: config.montaje?.gravedadVoz ?? 0,
+      // El nivel que el usuario eligió oyéndolo en la previa es el que se exporta.
+      volumenMusica: config.musica.volumen,
       firma: config.marca.activa && config.marca.texto ? undefined : null,
     },
   });

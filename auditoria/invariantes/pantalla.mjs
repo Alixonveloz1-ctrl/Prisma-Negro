@@ -793,22 +793,71 @@ export const invariantes = [
       // 3b · Y SE OYE ANTES DE PAGAR, en TODAS las tomas. Sin esto, elegir la
       // gravedad era a ciegas — descargar el video para saber cómo suena.
       const previa = fuente(ctx, 'app/previa.js');
-      if (!/function razonDeGravedad\(/.test(previa)) {
-        fallos.push('La previa no aplica la gravedad: se elegiría a ciegas, descargando para oír.');
+      if (!/agravarMuestras/.test(previa) || !/f\.buffer = semitonos \? agravar\(/.test(previa)) {
+        fallos.push('La previa no agrava cada toma: se elegiría a ciegas, o solo sonaría grave la primera.');
       }
-      // Frenando la reproducción, no con granos. El agravador granular —80 ms con
-      // medio solape— dejaba las dos capas a 7,6 ms una de otra: un peine en el
-      // fundamental de una voz masculina, y se oyó como la voz DOBLADA.
-      if (/agravarBuffer/.test(previa)) {
-        fallos.push('Vuelve el agravador granular: dos capas desfasadas suenan como voz doblada.');
-      }
-      if (!/f\.playbackRate\.value = razon/.test(previa)) {
-        fallos.push('La gravedad no se aplica a la fuente de cada toma: solo la primera sonaría grave.');
-      }
-      // Frenada la voz dura más, y sin tope pisaría la voz de la toma siguiente:
-      // dos voces a la vez, que es otra forma del mismo «se escucha doble».
-      if (!/f\.stop\(inicioContexto \+ Math\.max\(0, t\.inicio \+ t\.duracion - desdeSegundos\)\)/.test(previa)) {
-        fallos.push('La voz frenada no se corta en el borde de su toma: pisaría la siguiente.');
+
+      // 3c · Y SE EJECUTA, que es la única forma de saber qué sale. Dos defectos
+      // audibles vivieron aquí: la voz doblada y la última palabra cortada.
+      {
+        const { agravarMuestras } = ctx.fn;
+        const sr = 24000;
+        const F0 = 110;
+        const x = new Float32Array(sr * 3);
+        for (let i = 0; i < x.length; i++) {
+          const fase = (2 * Math.PI * F0 * i) / sr;
+          x[i] = (Math.sin(fase) + 0.5 * Math.sin(2 * fase) + 0.3 * Math.sin(3 * fase)) * 0.3;
+        }
+        const rms = (a, i, j) => {
+          let s = 0;
+          for (let k = i; k < j; k++) s += a[k] * a[k];
+          return Math.sqrt(s / (j - i));
+        };
+        // Lo periódica que es la señal consigo misma. Dos capas desfasadas —el
+        // peine del agravador granular— lo hunden; en fase, se mantiene.
+        const periodicidad = (a) => {
+          const ini = Math.floor(a.length / 3);
+          const n = 8192;
+          let mejor = 0;
+          for (let lag = 60; lag < 400; lag++) {
+            let num = 0;
+            let d1 = 0;
+            let d2 = 0;
+            for (let i = 0; i < n; i++) {
+              num += a[ini + i] * a[ini + i + lag];
+              d1 += a[ini + i] * a[ini + i];
+              d2 += a[ini + i + lag] * a[ini + i + lag];
+            }
+            const p = num / Math.sqrt(d1 * d2 || 1);
+            if (p > mejor) mejor = p;
+          }
+          return mejor;
+        };
+
+        for (const st of [-1, -3, -6]) {
+          const y = agravarMuestras(x, sr, st);
+          // LA DURACIÓN NO SE MUEVE. Frenar la reproducción sonaba impecable pero
+          // alargaba la voz, y para que no pisara la toma siguiente había que
+          // cortarla en el borde: «la última palabra es sintético, pero dice sin té».
+          if (y.length !== x.length) {
+            fallos.push(`A ${st} semitonos la voz cambia de duración (${y.length} de ${x.length}): habría que recortarla.`);
+          }
+          // NI LA ÚLTIMA SÍLABA NI LA PRIMERA SE DESVANECEN: sin dividir por la
+          // suma real de las ventanas, los bordes salían a media amplitud.
+          const cola = rms(y, y.length - 2400, y.length) / rms(x, x.length - 2400, x.length);
+          const cabeza = rms(y, 0, 2400) / rms(x, 0, 2400);
+          if (cola < 0.7) fallos.push(`A ${st} semitonos la última sílaba sale al ${Math.round(cola * 100)} %: se oye cortada.`);
+          if (cabeza < 0.7) fallos.push(`A ${st} semitonos la primera sílaba sale al ${Math.round(cabeza * 100)} %.`);
+          // Y NO SE OYE DOBLE.
+          const p = periodicidad(y);
+          if (p < 0.95) fallos.push(`A ${st} semitonos la voz queda al ${p.toFixed(2)} de periódica: eso es el peine que se oye como voz doblada.`);
+        }
+        // Una toma cortísima —«No.»— no puede quedarse muda ni desvanecida.
+        const corto = x.subarray(0, Math.round(0.2 * sr));
+        const yc = agravarMuestras(corto, sr, -3);
+        if (yc.length !== corto.length || rms(yc, 0, yc.length) / rms(corto, 0, corto.length) < 0.6) {
+          fallos.push('Una toma de dos décimas se desvanece o cambia de duración al agravarla.');
+        }
       }
       // Y EL RELOJ SE FIJA DESPUÉS DE DESCODIFICAR. Al revés —descodificando
       // dentro del bucle que programa— las primeras tomas de un documental largo

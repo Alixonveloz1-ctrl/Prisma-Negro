@@ -81,6 +81,115 @@ export function duracion({ muestras, frecuencia, canales = 1 }) {
   return muestras.length / canales / frecuencia;
 }
 
+/**
+ * El periodo de la voz en muestras, por autocorrelación del trozo más sonoro.
+ *
+ * Hace falta para que el agravador solape sus granos EN FASE (ver abajo). Se
+ * mide una vez por toma: es el mismo narrador, y su tono no cambia tanto dentro
+ * de una toma como para que valga la pena buscarlo grano a grano —eso es lo que
+ * hace `atempo` en ffmpeg, y es justo lo que no cabe en un teléfono con 83
+ * tomas—. Se analiza el trozo más sonoro porque un silencio no tiene periodo.
+ */
+export function periodoDeVoz(x, sr) {
+  const MIN = Math.max(2, Math.floor(sr / 300));
+  const MAX = Math.floor(sr / 70);
+  const POR_DEFECTO = Math.round(sr / 110);
+  const ANALISIS = 2048;
+  if (x.length < ANALISIS + MAX) return POR_DEFECTO;
+
+  let arranque = 0;
+  let masEnergia = -1;
+  const paso = Math.max(1, Math.floor((x.length - ANALISIS - MAX) / 8));
+  for (let ini = 0; ini + ANALISIS + MAX <= x.length; ini += paso) {
+    let e = 0;
+    for (let i = ini; i < ini + ANALISIS; i += 8) e += x[i] * x[i];
+    if (e > masEnergia) {
+      masEnergia = e;
+      arranque = ini;
+    }
+  }
+
+  let mejorLag = 0;
+  let mejor = 0;
+  for (let lag = MIN; lag <= MAX; lag++) {
+    let num = 0;
+    let den = 0;
+    for (let i = 0; i < ANALISIS; i++) {
+      const b = x[arranque + i + lag];
+      num += x[arranque + i] * b;
+      den += b * b;
+    }
+    const p = den > 0 ? num / Math.sqrt(den) : 0;
+    if (p > mejor) {
+      mejor = p;
+      mejorLag = lag;
+    }
+  }
+  return mejorLag || POR_DEFECTO;
+}
+
+/**
+ * Agrava unas muestras SIN MOVER SU DURACIÓN, con los granos en fase.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * DOS DEFECTOS AUDIBLES, LOS DOS DE AQUÍ
+ *
+ * «Se escucha doble.» Los granos eran de 80 ms con medio solape. Dos granos que
+ * se solapan leen del original a SALTO×(1−razón) de distancia: 7,6 ms a tres
+ * semitonos. Dos copias de la misma voz al mismo volumen separadas por un
+ * retardo arbitrario son un peine en el fundamental de una voz masculina — y se
+ * oyen como dos voces. La cura no es acortar el grano: es ELEGIR EL SALTO para
+ * que ese desfase valga exactamente UN PERIODO de la voz. Entonces las dos
+ * capas caen en fase, la onda coincide consigo misma, y no hay peine.
+ *
+ * «La última palabra es sintético, pero dice sin té y se corta.» Dos causas
+ * sumadas, las dos muertas aquí:
+ *
+ *   · La versión anterior frenaba la reproducción para bajar el tono. Limpio,
+ *     pero la voz duraba más, y para no pisar la toma siguiente había que
+ *     cortarla en el borde: al 12 % de una toma sin respiro, la última palabra.
+ *     Esto vuelve a preservar la duración EXACTA, así que no hay nada que
+ *     cortar.
+ *
+ *   · Y el solape se daba por hecho: al final del buffer no hay grano siguiente
+ *     que complete la ventana, así que la última sílaba se iba en un desvanecido
+ *     de medio grano. Ahora se divide por la SUMA REAL de las ventanas, que
+ *     vale uno en el medio y menos en los bordes: los dos extremos salen a su
+ *     amplitud entera, sea cual sea el salto.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export function agravarMuestras(x, frecuencia, semitonos) {
+  const r = Math.pow(2, Number(semitonos) / 12);
+  const sr = frecuencia;
+  const y = new Float32Array(x.length);
+  const peso = new Float32Array(x.length);
+  const T = periodoDeVoz(x, sr);
+
+  // SALTO×(1−razón) = un periodo. Es la condición de que las capas casen.
+  let salto = Math.max(T, Math.round(T / Math.abs(1 - r)));
+  // Salvo en una toma tan corta que ese salto no quepa tres veces: ahí manda
+  // que el grano cubra el fragmento entero antes que la fase.
+  salto = Math.min(salto, Math.max(2, Math.floor(x.length / 3)));
+  const grano = salto * 2;
+
+  for (let ini = 0; ini < x.length; ini += salto) {
+    for (let j = 0; j < grano; j++) {
+      const o = ini + j;
+      if (o >= x.length) break;
+      const pos = ini + j * r;
+      const p0 = Math.floor(pos);
+      if (p0 >= x.length) break;
+      const fr = pos - p0;
+      const v = p0 + 1 < x.length ? x[p0] * (1 - fr) + x[p0 + 1] * fr : x[p0];
+      const w = 0.5 - 0.5 * Math.cos((2 * Math.PI * j) / grano);
+      y[o] += v * w;
+      peso[o] += w;
+    }
+  }
+  for (let i = 0; i < y.length; i++) if (peso[i] > 1e-4) y[i] /= peso[i];
+  return y;
+}
+
 export function silencioDe(ms, frecuencia, canales = 1) {
   return new Int16Array(Math.round((ms / 1000) * frecuencia) * canales);
 }
@@ -131,6 +240,39 @@ export function silencios({ muestras, frecuencia, canales = 1 }, opciones = {}) 
   }
 
   return salida;
+}
+
+/**
+ * El instante MÁS CALLADO alrededor de un marco, dentro de una holgura.
+ *
+ * Para los cortes que hay que forzar: no hay silencio de los que cuentan, pero
+ * sí hay un punto menos malo que el punto exacto. Se mide en ventanas cortas
+ * —4 ms— porque lo que se busca es el hueco entre dos sílabas, no una pausa.
+ */
+function masCallado({ muestras, frecuencia, canales = 1 }, marco, holgura) {
+  const total = muestras.length / canales;
+  const ventana = Math.max(1, Math.round(0.004 * frecuencia));
+  const desde = Math.max(0, marco - holgura);
+  const hasta = Math.min(total, marco + holgura);
+  if (hasta - desde < ventana * 2) return marco;
+
+  let mejor = marco;
+  let menos = Infinity;
+  for (let m = desde; m + ventana <= hasta; m += ventana) {
+    let suma = 0;
+    for (let i = m; i < m + ventana; i++) {
+      const v = muestras[i * canales];
+      suma += v * v;
+    }
+    // A igualdad de energía gana el más cercano al ideal: el reparto sigue siendo
+    // el que pidió la segmentación.
+    const castigo = suma * (1 + Math.abs(m + ventana / 2 - marco) / Math.max(1, holgura));
+    if (castigo < menos) {
+      menos = castigo;
+      mejor = Math.round(m + ventana / 2);
+    }
+  }
+  return mejor;
 }
 
 /**
@@ -194,10 +336,22 @@ export function repartir(audio, objetivos, opciones = {}) {
     .filter((c) => c > minimoMarcos && c < marcosTotales - minimoMarcos)
     .sort((x, y) => x - y);
 
-  // Candidatos por frontera: cada silencio utilizable, más el forzado en su ideal.
+  // Candidatos por frontera: cada silencio utilizable, más el forzado —que ya no
+  // cae en el punto exacto, sino EN EL INSTANTE MÁS CALLADO que tenga cerca—.
+  //
+  //   «La última palabra es sintético, pero dice sin té y se corta. Y así varias
+  //    tomas.»
+  //
+  // Cuando no hay ningún silencio de los que cuentan cerca de la frontera, el
+  // corte se fuerza. Forzarlo en el punto matemático parte la palabra por donde
+  // caiga —a mitad de vocal, que es lo más audible—. Entre dos sílabas, en una
+  // oclusiva o en la caída final de una palabra hay siempre un mínimo de energía
+  // aunque no llegue a durar los 130 ms que exige contar como silencio: cortar
+  // ahí deja la palabra entera a un lado o al otro. No arregla el corte forzado
+  // —sigue siendo un defecto y sigue avisándose—, pero lo hace mucho menos audible.
   const candidatos = ideales.map(({ marco, tolerancia }) => {
     const lista = centros.map((c) => ({ marco: c, costo: Math.abs(c - marco), forzado: false }));
-    lista.push({ marco, costo: tolerancia, forzado: true });
+    lista.push({ marco: masCallado(audio, marco, tolerancia), costo: tolerancia, forzado: true });
     return lista;
   });
 
