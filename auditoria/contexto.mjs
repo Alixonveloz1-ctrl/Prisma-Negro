@@ -175,6 +175,7 @@ async function funcionesPuras() {
     normalizar: cfg.normalizar,
     sanear: est.sanear,
     abrirPieza: est.abrirPieza,
+    reescribirPieza: est.reescribirPieza,
     ascendencia: est.ascendencia,
     duracionValida: mod.duracionValida,
     regionDe: mod.regionDe,

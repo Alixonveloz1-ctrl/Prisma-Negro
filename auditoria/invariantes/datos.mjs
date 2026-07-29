@@ -628,6 +628,81 @@ export const invariantes = [
   },
 
   {
+    nombre: 'reescribir-es-otra-pieza-no-la-misma',
+    dice: 'Regenerar el guion en la misma pieza reemplaza las tomas enteras: se pierden los enlaces al material pagado y lo nuevo escribiría encima de sus archivos, porque las claves pieza/toma serían las mismas. «Reescribir» abre OTRA pieza —caso, fichas y tratamiento entero, sin vieneDe— y la vieja queda intacta, con su material listo para «Reutilizar».',
+    async comprobar(ctx) {
+      const estado = ctx.fn;
+      const fallos = [];
+
+      const P = estado.sanear({
+        id: 'p01',
+        piezas: [{
+          id: 'p01', titulo: 'Uno', caso: { titulo: 'C', sinopsis: 's' },
+          fichas: [{ afirmacion: 'a', fuente: 's' }],
+          guion: '## A\nTexto.',
+          tomas: [{ i: 0, texto: 'Texto.', imagen: 'ok', video: 'ok', audio: 'ok' }],
+          tratamiento: {
+            premisa: 'P1', hilo: 'H1', aperturaEnFrio: 'A1', cierre: 'C1',
+            estructura: [{ acto: 1, titulo: 'Uno', minutos: 5 }],
+            identidadVisual: { paleta: 'ámbar' }, musica: { atmosfera: 'cuerdas' },
+            ritmo: { segundosPorToma: 11, proporcionMovimiento: 0.15 }, cuidado: ['no afirmar X'],
+          },
+        }],
+      });
+      const z = estado.reescribirPieza(P, 'p01');
+
+      // Otra pieza, otras claves: sin esto, la primera imagen nueva pisa una pagada.
+      if (z.id === 'p01') fallos.push('La reescritura vive en la misma pieza: sus archivos pisarían los pagados.');
+      // Sin vieneDe: la ascendencia significa «lo ya contado, no lo repitas», y
+      // aquí se quiere contar lo mismo otra vez.
+      if (estado.ascendencia(P, z).length) {
+        fallos.push('La reescritura queda como continuación: el director evitaría contar justo lo que hay que contar.');
+      }
+      // Hereda lo que costó dinero conseguir…
+      if (z.fichas.length !== 1) fallos.push('La reescritura no hereda las fichas: habría que investigar de nuevo.');
+      // …y el tratamiento ENTERO: se puede ir directo al guion, y quien quiera
+      // otra estructura dirige primero.
+      if (z.tratamiento?.premisa !== 'P1' || z.tratamiento?.estructura?.length !== 1) {
+        fallos.push('La reescritura no hereda el tratamiento entero: obligaría a dirigir (y pagar) otra vez.');
+      }
+      if (z.tratamiento?.soloIdentidad) fallos.push('La reescritura queda bloqueada como si le faltara hilo propio.');
+      // La vieja no se toca: es la garantía entera de la operación.
+      const vieja = P.piezas.find((x) => x.id === 'p01');
+      if (vieja.guion !== '## A\nTexto.' || vieja.tomas.length !== 1 || vieja.tomas[0].imagen !== 'ok') {
+        fallos.push('Reescribir tocó la pieza vieja: justo lo que prometía no hacer.');
+      }
+      if (P.piezaActiva !== z.id) fallos.push('La reescritura no queda abierta.');
+
+      // Y el tratamiento es COPIA, no referencia: dirigir la nueva no puede
+      // cambiarle el aspecto a la vieja por debajo.
+      if (z.tratamiento) {
+        z.tratamiento.identidadVisual.paleta = 'verde ácido';
+        if (vieja.tratamiento.identidadVisual.paleta !== 'ámbar') {
+          fallos.push('El tratamiento se comparte por referencia: dirigir la nueva pieza cambiaría la vieja.');
+        }
+      }
+
+      // La pantalla lo ofrece donde se decide —junto a la continuación— y avisa de
+      // por qué no se regenera en el sitio.
+      const main = fuente(ctx, 'app/main.js');
+      if (!/'b-reescribir'/.test(main) || !/reescribirPieza\(/.test(main)) {
+        fallos.push('El botón «Reescribir» no existe o no llama al modelo.');
+      }
+      if (!/id="b-reescribir"/.test(fuente(ctx, 'index.html'))) {
+        fallos.push('El botón «Reescribir» no está en la pantalla.');
+      }
+      return fallos;
+    },
+    // Se rompe como la versión «ahorradora»: reescribir en la misma pieza.
+    romper: (ctx) =>
+      conFuncion(ctx, 'reescribirPieza', (P, id) => {
+        const z = P.piezas.find((x) => x.id === id);
+        P.piezaActiva = z.id;
+        return z;
+      }),
+  },
+
+  {
     nombre: 'el-documental-se-dramatiza-con-interpretes',
     dice: 'Salían casi solo objetos, manos y calles vacías. Dos causas: la instrucción del director ofrecía cuatro salidas sin gente de cinco, y el prompt de imagen NO LE CONTABA al generador los sujetos que el director había puesto en la ficha.',
     async comprobar(ctx) {

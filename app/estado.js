@@ -159,6 +159,36 @@ export function abrirPieza(proyecto, { caso = null, titulo = '', vieneDe = null 
   return z;
 }
 
+/**
+ * Reescribir un caso: OTRA pieza del mismo caso, para escribir el guion de nuevo
+ * sin tocar la vieja.
+ *
+ * Regenerar el guion EN LA MISMA pieza pisa las tomas enteras: se pierden los
+ * enlaces a las imágenes, clips y voces ya pagados, y lo que se generara después
+ * escribiría encima de los mismos archivos que ese material ocupa, porque las
+ * claves (pieza/toma) serían las mismas. Una pieza nueva estrena numeración —sus
+ * claves no chocan con nada— y la vieja queda entera en el historial, con su
+ * material listo para «Reutilizar».
+ *
+ * NO es una continuación: no lleva `vieneDe`, porque la ascendencia significa «lo
+ * ya contado, no lo repitas», y aquí se quiere contar LO MISMO otra vez, mejor.
+ * El tratamiento pasa ENTERO —premisa, hilo, actos, paleta, música—: con él se
+ * puede generar el guion directamente, y quien quiera otra estructura le da a
+ * «Dirigir» primero, que lo reemplaza.
+ */
+export function reescribirPieza(proyecto, idVieja) {
+  const vieja = proyecto.piezas.find((x) => x.id === idVieja);
+  if (!vieja) throw new Error('No encuentro la pieza que quieres reescribir.');
+  const z = abrirPieza(proyecto, {
+    caso: vieja.caso,
+    titulo: `${vieja.titulo || 'Sin título'} · reescrito`,
+  });
+  z.tema = vieja.tema;
+  z.fichas = [...vieja.fichas];
+  z.tratamiento = vieja.tratamiento ? structuredClone(vieja.tratamiento) : null;
+  return z;
+}
+
 /** La cadena de piezas de la que esta desciende, de la más cercana a la más lejana. */
 export function ascendencia(proyecto, pieza) {
   const salida = [];

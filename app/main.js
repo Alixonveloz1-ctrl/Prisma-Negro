@@ -2100,6 +2100,10 @@ function pintarContinuacion() {
     $('nota-continuar').textContent =
       `Otro video del mismo caso. Hereda las ${z.fichas.length} fichas, la paleta y la música ` +
       `de «${z.titulo}», y el director buscará lo que quedó fuera de este guion.`;
+    $('nota-reescribir').textContent =
+      `¿El guion no te convence? «Reescribir» abre otra pieza del mismo caso —fichas y tratamiento ` +
+      `incluidos— para escribirlo de nuevo SIN tocar esta: sus imágenes y clips quedan a salvo y ` +
+      `se recuperan con «Reutilizar». Regenerar el guion aquí mismo los perdería.`;
   }
 
   // Dirigidas y sin imagen: es lo único que se puede reutilizar. Y sirve
@@ -2182,6 +2186,38 @@ accion(
       `Abierta la continuación de «${padre.titulo}»: hereda sus ${z.fichas.length} fichas, ` +
         `su paleta, su música y las cautelas del caso. Dale a «Dirigir» en el paso 3: ` +
         `el director leerá lo ya contado y buscará lo que quedó fuera.`,
+      'bueno',
+    );
+  },
+  'continuar',
+);
+
+/**
+ * Reescribir: el mismo caso otra vez, en una pieza NUEVA.
+ *
+ * Es la respuesta a «quiero regenerar el guion sin perder lo ya pagado». En la
+ * misma pieza no se puede: el guion nuevo reemplaza las tomas enteras —con ellas
+ * se van los enlaces a imágenes, clips y voces— y lo que se generara después
+ * escribiría encima de los archivos del material viejo, que usan las mismas
+ * claves. La pieza nueva hereda caso, fichas y tratamiento, sin `vieneDe`: no es
+ * una continuación, se cuenta lo mismo otra vez. El material pagado vuelve por
+ * «Reutilizar» en Tomas, donde las fichas de plano coincidan.
+ */
+accion(
+  'b-reescribir',
+  async () => {
+    const vieja = pieza();
+    if (!vieja.guion.trim()) throw new Error('Esta pieza no tiene guion que reescribir.');
+    const z = estado.reescribirPieza(P, vieja.id);
+    await guardar();
+    pintarTodo();
+    avisar(
+      'continuar',
+      `Abierta «${z.titulo}»: mismo caso, mismas ${z.fichas.length} fichas y el mismo tratamiento. ` +
+        `«${vieja.titulo}» queda intacta en el historial, con todo su material. ` +
+        `El camino: genera el guion (o dale a «Dirigir» antes si quieres otra estructura), luego la ` +
+        `dirección de arte, y en Tomas «Reutilizar imágenes» recupera lo ya pagado donde los planos ` +
+        `coincidan. La música y la voz sí se generan de nuevo.`,
       'bueno',
     );
   },
