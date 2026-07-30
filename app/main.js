@@ -2297,11 +2297,15 @@ function pintarTiras() {
     const b = document.createElement('button');
     b.className = 'tira';
     b.innerHTML =
-      (t.visual && !t.movimiento
-        ? `<img src="${URL.createObjectURL(t.visual)}" alt="">`
-        : t.visual
-          ? `<div class="sin" style="color:var(--violeta-2)">clip</div>`
-          : `<div class="sin">sin imagen</div>`) +
+      // Las tomas con clip enseñan SU FOTOGRAMA, no la palabra «clip». Con
+      // ochenta y tres tomas, una tira de texto no dice nada: repasar es mirar.
+      (t.movimiento && t.cartel
+        ? `<img src="${URL.createObjectURL(t.cartel)}" alt="">`
+        : t.visual && !t.movimiento
+          ? `<img src="${URL.createObjectURL(t.visual)}" alt="">`
+          : t.visual
+            ? `<div class="sin" style="color:var(--violeta-2)">clip</div>`
+            : `<div class="sin">sin imagen</div>`) +
       `<div class="pie">#${t.i + 1}` +
       (t.voz ? '' : ' <span class="pastilla p-falta">sin voz</span>') +
       `</div>`;

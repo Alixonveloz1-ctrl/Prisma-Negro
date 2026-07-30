@@ -676,7 +676,7 @@ nav.abajo button svg{width:22px;height:22px}
             <!-- Las tomas con clip se ven AQUÍ, en bucle y sin sonido: el visor era solo
                  un <img>, así que un clip no se veía en la previa —y el montaje sí lo
                  monta—. El bucle es el mismo que hace el video final. -->
-            <video id="previa-clip" loop muted playsinline style="display:none"></video>
+            <video id="previa-clip" loop muted autoplay playsinline webkit-playsinline preload="auto" style="display:none"></video>
             <img id="previa-marca" class="marca-visor" alt="">
             <div id="previa-vacio" class="visor-vacio">Prepara la previa para ver el documental.</div>
             <button id="b-cine" class="btn-cine" title="Pantalla completa">⛶</button>

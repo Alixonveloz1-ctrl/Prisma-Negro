@@ -710,11 +710,36 @@ export const invariantes = [
       if (/\.scrollIntoView\(/.test(main)) {
         fallos.push('El reproductor sigue moviendo la página con scrollIntoView: se va de pantalla en cada toma.');
       }
+      // DENTRO DEL VISOR, contando las etiquetas. Antes esto se medía por
+      // distancia —«a menos de 600 caracteres del visor»— y era frágil de la peor
+      // manera: añadir un comentario o un atributo dentro del visor rompía la
+      // comprobación sin que nada estuviera mal. Se mide la anidación, que es lo
+      // que de verdad importa: en modo cine el visor se fija a la pantalla, y un
+      // botón fuera de él se queda detrás.
       const v = html.indexOf('id="visor-montado"');
       const botonCine = html.indexOf('id="b-cine"');
       if (v < 0) fallos.push('El visor del montado no tiene identidad: no hay a qué ponerle el modo cine.');
-      else if (botonCine < v || botonCine - v > 600) {
-        fallos.push('El botón de cine no está dentro del visor.');
+      else {
+        let hondo = 1;
+        let i = html.indexOf('>', v) + 1;
+        let fin = -1;
+        while (i < html.length && hondo > 0) {
+          const abre = html.indexOf('<div', i);
+          const cierra = html.indexOf('</div>', i);
+          if (cierra < 0) break;
+          if (abre >= 0 && abre < cierra) {
+            hondo++;
+            i = abre + 4;
+          } else {
+            hondo--;
+            i = cierra + 6;
+            if (hondo === 0) fin = cierra;
+          }
+        }
+        if (fin < 0) fallos.push('El visor del montado no cierra: el HTML está mal formado.');
+        else if (botonCine < v || botonCine > fin) {
+          fallos.push('El botón de cine no está DENTRO del visor: en modo cine se quedaría detrás.');
+        }
       }
       const regla = css.indexOf('.visor.cine{');
       if (regla < 0 || !/position:fixed/.test(css.slice(regla, css.indexOf('}', regla)))) {

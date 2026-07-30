@@ -19,7 +19,7 @@
 
 import { material, tipoDeClave } from './material.js';
 import { construirHoja } from '../comun/hoja.mjs';
-import { nombreLocal } from '../comun/claves.mjs';
+import { nombreLocal, claveFotograma } from '../comun/claves.mjs';
 
 /**
  * Prepara la previa de una pieza.
@@ -57,10 +57,22 @@ export async function preparar({ pieza, config, senal, alAvanzar }) {
     if (senal?.aborted) break;
     const [visual, voz] = await Promise.all([cargar(fila.archivo), cargar(fila.audio)]);
 
+    // EL FOTOGRAMA DE LAS TOMAS CON CLIP, ADEMÁS DEL CLIP.
+    //
+    // El visor enseñaba negro en las tomas con clip. Un <video> con un blob no
+    // siempre pinta en el navegador de un teléfono —y cuando no pinta, no avisa:
+    // deja el hueco en negro—. La imagen desde la que se generó ese clip YA está
+    // pagada y en el almacén, así que se baja y se pone de CARTEL del video: si el
+    // video va, se ve el video; si no, se ve la imagen fija de esa toma. Nunca
+    // negro.
+    const dueño = pieza.tomas.find((t) => t.i === fila.i);
+    const cartel = fila.movimiento && dueño ? await cargar(claveFotograma(pieza.id, dueño, pieza.tomas)) : null;
+
     tomas.push({
       ...fila,
       texto: dueña?.texto || '',
       visual,
+      cartel,
       voz,
       falta: [!visual && (fila.movimiento ? 'clip' : 'imagen'), !voz && 'voz'].filter(Boolean),
     });
@@ -103,6 +115,7 @@ export function reproductor({ lienzo, clip, vacio, marca, alCambiar, alTerminar 
   let animacion = null;
   let reloj = null;
   let urlActual = null;
+  let urlCartel = null;
   let inicioContexto = 0;
   let corriendo = false;
 
@@ -153,10 +166,24 @@ export function reproductor({ lienzo, clip, vacio, marca, alCambiar, alTerminar 
     // Audio, y el clip trae el suyo propio, que en el montaje no se usa.
     if (t.movimiento && clip) {
       lienzo.style.visibility = 'hidden';
+      // El cartel primero: es lo que se ve mientras el video carga, y lo que
+      // queda si el navegador no lo reproduce.
+      if (urlCartel) URL.revokeObjectURL(urlCartel);
+      urlCartel = t.cartel ? URL.createObjectURL(t.cartel) : null;
+      if (urlCartel) clip.poster = urlCartel;
+      else clip.removeAttribute('poster');
       clip.src = urlActual;
       clip.style.display = 'block';
-      clip.currentTime = 0;
-      clip.play().catch(() => {});
+      // `load()` explícito: tras un `removeAttribute('src')`, asignar uno nuevo no
+      // siempre basta para que el navegador vuelva a cargar. Y NADA de tocar
+      // `currentTime` aquí: sin metadatos todavía, lanza, y una excepción en el
+      // pintado deja el visor a medias y para el reloj.
+      try {
+        clip.load();
+        clip.play().catch(() => {});
+      } catch {
+        /* con el cartel puesto, la toma se ve igual */
+      }
       return;
     }
 
