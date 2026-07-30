@@ -242,6 +242,13 @@ nav.pestanas button.on{background:var(--violeta);border-color:var(--violeta);col
   overflow:hidden;border:1px solid var(--linea);
 }
 .visor img,.visor video{width:100%;height:100%;object-fit:contain;display:block}
+/* LOS DOS VISUALES, SUPERPUESTOS. En flujo normal —que es como estaban— dos hijos
+   al 100% de alto no caben: el primero ocupa el visor entero y el segundo cae
+   debajo, donde `overflow:hidden` lo recorta. Con la imagen oculta por
+   `visibility` seguía ocupando su sitio, así que el video de las tomas con clip
+   quedaba fuera de la vista y el visor salía NEGRO — aunque el clip estuviera
+   bajado y las tiras lo enseñaran. Superpuestos, da igual cuál se muestre. */
+.visor #previa-imagen,.visor #previa-clip{position:absolute;inset:0}
 /* La marca va ENCIMA, como el montaje la incrusta dentro de cada toma (§5.7). */
 .marca-visor{
   position:absolute!important;right:2.8%;bottom:4.5%;width:14%!important;height:auto!important;

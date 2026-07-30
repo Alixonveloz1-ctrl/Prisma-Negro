@@ -150,7 +150,7 @@ export function reproductor({ lienzo, clip, vacio, marca, alCambiar, alTerminar 
     // material, del reproductor o del navegador.
     if (!t.visual) {
       lienzo.removeAttribute('src');
-      lienzo.style.visibility = 'hidden';
+      lienzo.style.display = 'none';
       if (vacio) {
         vacio.textContent = `La toma ${t.i + 1} no tiene ${t.movimiento ? 'clip' : 'imagen'} en el almacén. Genérala y vuelve a preparar.`;
         vacio.style.display = 'flex';
@@ -168,7 +168,7 @@ export function reproductor({ lienzo, clip, vacio, marca, alCambiar, alTerminar 
     // para lo que dura la locución. Y mudo: el sonido de la previa lo lleva Web
     // Audio, y el clip trae el suyo propio, que en el montaje no se usa.
     if (t.movimiento && clip) {
-      lienzo.style.visibility = 'hidden';
+      lienzo.style.display = 'none';
       // El cartel primero: es lo que se ve mientras el video carga, y lo que
       // queda si el navegador no lo reproduce.
       if (urlCartel) URL.revokeObjectURL(urlCartel);
@@ -191,7 +191,7 @@ export function reproductor({ lienzo, clip, vacio, marca, alCambiar, alTerminar 
     }
 
     lienzo.src = urlActual;
-    lienzo.style.visibility = 'visible';
+    lienzo.style.display = 'block';
 
     // §4.7: las tomas fijas NO se quedan quietas. Se les aplica el mismo recorrido
     // que les va a poner el montaje.

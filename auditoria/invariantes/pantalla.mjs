@@ -793,6 +793,45 @@ export const invariantes = [
   },
 
   {
+    nombre: 'los-dos-visuales-del-visor-se-superponen',
+    dice: 'El visor tiene DOS visuales —la imagen de las tomas fijas y el video de las que llevan clip— y solo uno se enseña cada vez. En flujo normal no caben: los dos son alto 100 %, así que el primero ocupa el visor entero y el segundo cae debajo, donde `overflow:hidden` lo recorta. Y ocultar el primero con `visibility` no lo saca del flujo: sigue ocupando su sitio. Resultado en pantalla: el visor NEGRO en todas las tomas con clip, con el clip bajado y las tiras enseñándolo. Van superpuestos en absoluto, y entonces da igual cuál se muestre.',
+    comprobar(ctx) {
+      const css = hoja(ctx);
+      const js = fuente(ctx, 'app/previa.js');
+      const fallos = [];
+
+      // Los dos, colocados en absoluto sobre el visor.
+      const puestos = /\.visor\s+#previa-imagen\s*,\s*\.visor\s+#previa-clip\{([^}]*)\}/.exec(css);
+      if (!puestos) fallos.push('Los dos visuales del visor no se colocan juntos: uno tapará al otro o caerá fuera.');
+      else if (!/position:\s*absolute/.test(puestos[1])) {
+        fallos.push('Los visuales del visor no van en absoluto: el segundo cae fuera del recorte y no se ve.');
+      }
+      // Y el visor los recorta, que es lo que hace el fallo invisible.
+      const v = /\.visor\{([^}]*)\}/.exec(css);
+      if (v && !/position:\s*relative/.test(v[1])) {
+        fallos.push('El visor no es el ancla de los visuales colocados en absoluto.');
+      }
+
+      // Y se alterna con `display`, no con `visibility`: lo segundo deja el hueco
+      // ocupado, que es justo lo que empujaba el video fuera de la vista.
+      if (/lienzo\.style\.visibility/.test(js)) {
+        fallos.push('El visor se oculta con `visibility`: sigue ocupando su sitio y empuja al otro visual.');
+      }
+      // Uno u otro, nunca los dos: si la imagen se muestra sin apagar el video, el
+      // video de la toma anterior se queda encima.
+      if (!/clip\.style\.display = 'none'/.test(js)) {
+        fallos.push('El video no se apaga al pintar una toma fija: se quedaría encima de la imagen.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: los dos en flujo y ocultando con `visibility`.
+    romper: (ctx) =>
+      editando(ctx, 'index.html', (t) =>
+        t.replace('.visor #previa-imagen,.visor #previa-clip{position:absolute;inset:0}', ''),
+      ),
+  },
+
+  {
     nombre: 'los-botones-se-pulsan-y-no-revientan',
     dice: '«Can\'t find variable: dueña», en pantalla, al darle a Preparar. Lo puso una limpieza que borró la declaración y dejó el uso. `node --check` no lo ve —es sintaxis válida— y el arnés tampoco lo veía: ARRANCABA la aplicación y ahí se quedaba, y `preparar()` solo corre cuando alguien pulsa. Un fallo de programación en cualquier manejador viajaba entero hasta el teléfono. Ahora el arnés PULSA, y un error que solo puede ser un fallo de programación —una variable que no existe, algo que no es función— no pasa de aquí.',
     async comprobar(ctx) {
