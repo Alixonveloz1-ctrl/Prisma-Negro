@@ -152,7 +152,13 @@ async function funcionesPuras() {
   const mus = await import('../app/fases/musica.js');
   const nar = await import('../app/fases/narracion.js');
   const est2 = await import('../comun/estilos.mjs');
+  // El proveedor se importa entero para poder EJECUTAR lo que no llama a la nube
+  // —normalizar el WAV que devuelve el servicio de voz, por ejemplo—: mirarlo en
+  // el texto fuente no habría cazado que un tamaño declarado a cero deja el audio
+  // sin una sola muestra.
+  const prv = await import('../api/_lib/proveedor.js');
   return {
+    normalizarWav: prv.normalizarWav,
     atmosferaDe: mus.atmosferaDe,
     planificarNarracion: nar.planificar,
     // La lista de estilos entra por aquí para poder recorrerlos todos: una
@@ -174,6 +180,8 @@ async function funcionesPuras() {
     repartir: aud.repartir,
     agravarMuestras: aud.agravarMuestras,
     periodoDeVoz: aud.periodoDeVoz,
+    leerWav: aud.leerWav,
+    escribirWav: aud.escribirWav,
     contarPalabras: gui.contarPalabras,
     normalizar: cfg.normalizar,
     sanear: est.sanear,

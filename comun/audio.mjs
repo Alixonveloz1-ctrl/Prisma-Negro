@@ -35,7 +35,14 @@ export function leerWav(buffer) {
       frecuencia = dv.getUint32(cuerpo + 4, true);
       bits = dv.getUint16(cuerpo + 14, true);
     } else if (tipo === 'data') {
-      const fin = Math.min(cuerpo + largo, dv.byteLength);
+      // EL TAMAÑO DECLARADO NO SIEMPRE ES EL TAMAÑO. Un servicio que escribe la
+      // cabecera antes de saber cuánto audio va a salir deja ahí un cero o un
+      // 0xFFFFFFFF. Con el cero a rajatabla el archivo se queda sin una sola
+      // muestra —y un <audio> con eso marca 00:00 y no suena—; pasado de largo,
+      // se sale del archivo. En los dos casos manda lo que hay de verdad.
+      const resto = dv.byteLength - cuerpo;
+      const util = largo > 0 && largo <= resto ? largo : resto;
+      const fin = cuerpo + Math.max(0, util);
       datos = new Int16Array(dv.buffer.slice(dv.byteOffset + cuerpo, dv.byteOffset + fin));
     }
     // Los trozos van alineados a 2 bytes: sin esto, un WAV con un trozo de largo

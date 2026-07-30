@@ -1020,6 +1020,68 @@ export const invariantes = [
   },
 
   {
+    nombre: 'la-voz-sale-siempre-con-la-misma-cabecera-wav',
+    dice: '«Solo las de Gemini se escuchan», y el reproductor de la muestra marcando 00:08 / 00:00: duración cero. Los dos caminos de voz devolvían formatos distintos y solo uno estaba comprobado: el de Gemini llega en PCM crudo y esta casa le escribe la cabecera, el de Cloud TTS venía tal cual del servicio. Un <audio> se cree la cabecera —si el tamaño del trozo de datos no cuadra, la duración le sale cero y no suena—, y nuestro propio lector no se enteraba porque recortaba al tamaño real del archivo. Por eso el defecto solo se veía en el botón de escuchar la voz.',
+    comprobar(ctx) {
+      const { normalizarWav, leerWav, escribirWav } = ctx.fn;
+      const fallos = [];
+      const f = 24000;
+      const m = new Int16Array(f * 2);
+      for (let i = 0; i < m.length; i++) m[i] = Math.round(Math.sin((i / f) * 900) * 9000);
+      const bueno = Buffer.from(escribirWav({ muestras: m, frecuencia: f, canales: 1 }));
+
+      const casos = {
+        'una cabecera correcta': Buffer.from(bueno),
+        // El que se vio: tamaño declarado a cero.
+        'un tamaño de datos declarado a cero': (() => {
+          const b = Buffer.from(bueno);
+          b.writeUInt32LE(0, 40);
+          return b;
+        })(),
+        // El de quien escribe la cabecera antes de saber cuánto audio saldrá.
+        'un tamaño de streaming': (() => {
+          const b = Buffer.from(bueno);
+          b.writeUInt32LE(0xffffffff, 40);
+          b.writeUInt32LE(0xffffffff, 4);
+          return b;
+        })(),
+        'PCM crudo sin cabecera': Buffer.from(m.buffer.slice(0)),
+      };
+
+      for (const [que, buf] of Object.entries(casos)) {
+        const salida = Buffer.from(normalizarWav(buf.toString('base64')), 'base64');
+        const declarado = salida.length >= 44 ? salida.readUInt32LE(40) : 0;
+        const riff = salida.length >= 8 ? salida.readUInt32LE(4) : 0;
+        if (declarado !== m.length * 2) {
+          fallos.push(`Con ${que}, el WAV sale declarando ${declarado} bytes de audio en vez de ${m.length * 2}: el reproductor marca 00:00.`);
+        }
+        if (riff !== m.length * 2 + 36) fallos.push(`Con ${que}, el tamaño RIFF sale mal.`);
+        // Y las muestras tienen que estar TODAS: normalizar no puede perder audio.
+        try {
+          if (leerWav(salida.buffer.slice(salida.byteOffset, salida.byteOffset + salida.length)).muestras.length !== m.length) {
+            fallos.push(`Con ${que}, el audio normalizado pierde muestras.`);
+          }
+        } catch (e) {
+          fallos.push(`Con ${que}, el audio normalizado ni se deja leer: ${e.message}`);
+        }
+      }
+
+      // Y los DOS caminos del servidor pasan por el mismo escritor: es lo que
+      // impide que vuelva a haber un formato comprobado y otro no (§3).
+      const prov = fuente(ctx, 'api/_lib/proveedor.js');
+      if ((prov.match(/normalizarWav\(datos\.audioContent/g) || []).length < 2) {
+        fallos.push('Alguna salida del servicio de voz se devuelve sin normalizar.');
+      }
+      if (/datos: datos\.audioContent,/.test(prov)) {
+        fallos.push('Queda una salida de voz que devuelve la cabecera tal cual venga.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: la cabecera del servicio, tal cual.
+    romper: (ctx) => conFuncion(ctx, 'normalizarWav', (b64) => b64),
+  },
+
+  {
     nombre: 'una-palabra-floja-no-cuenta-como-silencio',
     dice: '«Dice ospi, silencio, tal.» La palabra partida en dos con un silencio dentro. El umbral de silencio era el 6 % DEL PICO del bloque: en una narración con una frase enfática y otra floja, la floja entera cae por debajo de ese 6 % y se clasifica como silencio. Medido: en un bloque de seis segundos con dos y medio a plena voz y tres de palabra floja, el detector daba UN silencio de 2,50 a 6,00 — tres segundos y medio de habla dados por callados—. Y como el corte cae en «silencio de verdad», no se marca forzado y el montaje le pone el RESPIRO encima: de ahí el silencio largo dentro de la palabra.',
     comprobar(ctx) {

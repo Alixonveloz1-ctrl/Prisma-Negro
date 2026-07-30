@@ -15,7 +15,7 @@ import { proyecto } from './cuenta.js';
 import { valor as valorEntorno } from './entorno.js';
 // El mismo escritor de WAV que usa el navegador: una sola forma de audio en todo el
 // sistema, venga del camino que venga.
-import { escribirWav } from '../../comun/audio.mjs';
+import { escribirWav, leerWav } from '../../comun/audio.mjs';
 // El catálogo de generadores. Fijo y escrito a mano a propósito: ver la cabecera
 // de ese archivo, que cuenta los dos fallos que tuvo sondearlo.
 import {
@@ -475,6 +475,53 @@ const escaparSsml = (x) =>
  * a ser una estimación y se pueda decir en pantalla.
  * ─────────────────────────────────────────────────────────────────────────────
  */
+/**
+ * Deja el audio del servicio de voz en un WAV CANÓNICO: cabecera de 44 bytes con
+ * los tamaños exactos, escrita por el mismo escritor que usa todo el sistema.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Solo las de Gemini se escuchan.»
+ *
+ * Y en pantalla, el reproductor de la muestra marcando 00:08 / 00:00: duración
+ * cero. Los dos caminos de voz devolvían cosas distintas y solo uno estaba
+ * comprobado. El de Gemini llega en PCM crudo y esta casa le escribe la
+ * cabecera; el de Cloud TTS venía TAL CUAL de Google, con la cabecera que
+ * trajera. Un elemento <audio> se cree la cabecera: si el tamaño del trozo de
+ * datos no cuadra, la duración le sale cero y no reproduce nada.
+ *
+ * Nuestro propio lector no se enteraba —recorta el trozo al tamaño real del
+ * archivo, así que la narración salía bien—, y por eso el defecto solo se veía
+ * en el botón de escuchar la voz. Ahora los dos caminos salen por el mismo
+ * escritor y no hay dos formatos que puedan discrepar (§3).
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export function normalizarWav(b64, frecuenciaSiCrudo = 24000) {
+  const bytes = Buffer.from(b64, 'base64');
+  // La copia es obligatoria: un Buffer de Node vive dentro de un ArrayBuffer
+  // COMPARTIDO, y pasar `bytes.buffer` sin recortar leería desde el principio de
+  // ese depósito —bytes de otra cosa— en vez de desde el principio del audio.
+  const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  try {
+    const esRiff =
+      bytes.length > 44 &&
+      bytes.toString('latin1', 0, 4) === 'RIFF' &&
+      bytes.toString('latin1', 8, 12) === 'WAVE';
+    const { muestras, frecuencia, canales } = esRiff
+      ? leerWav(ab)
+      : {
+          muestras: new Int16Array(ab.slice(0, ab.byteLength & ~1)),
+          frecuencia: frecuenciaSiCrudo,
+          canales: 1,
+        };
+    if (!muestras.length) return b64;
+    return Buffer.from(escribirWav({ muestras, frecuencia, canales })).toString('base64');
+  } catch {
+    // Si no se deja leer, vale más devolver lo que mandó el servicio que quedarse
+    // sin voz: lo que llega es audio de todas formas, solo que sin normalizar.
+    return b64;
+  }
+}
+
 export async function voz({ texto: t, nombreVoz, velocidad = 1.0, tono = 0, marcas = null }) {
   const conMarcas = Array.isArray(marcas) && marcas.length > 1;
   const ssml = conMarcas
@@ -529,7 +576,7 @@ export async function voz({ texto: t, nombreVoz, velocidad = 1.0, tono = 0, marc
     // siempre, que al menos sabe que está estimando.
     if (r.ok && datos.audioContent && datos.timepoints?.length === marcas.length) {
       return {
-        datos: datos.audioContent,
+        datos: normalizarWav(datos.audioContent),
         tipo: 'audio/wav',
         tiempos: datos.timepoints.map((p) => Number(p.timeSeconds) || 0),
       };
@@ -540,7 +587,7 @@ export async function voz({ texto: t, nombreVoz, velocidad = 1.0, tono = 0, marc
   if (!r.ok || !datos.audioContent) {
     throw new Error(`El servicio de voz falló: ${datos?.error?.message || `HTTP ${r.status}`}`);
   }
-  return { datos: datos.audioContent, tipo: 'audio/wav', tiempos: null };
+  return { datos: normalizarWav(datos.audioContent), tipo: 'audio/wav', tiempos: null };
 }
 
 /**
