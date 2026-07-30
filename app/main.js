@@ -15,7 +15,10 @@
 import { llamar, ponerClave, ponerModeloTexto, ponerModelos } from './api.js';
 import * as estado from './estado.js';
 import { Cola } from './cola.js';
-import { etiquetaDe, CATALOGO, PREDETERMINADO } from '../comun/modelos.mjs';
+import {
+  etiquetaDe, CATALOGO, PREDETERMINADO,
+  SIN_VELOCIDAD_NI_TONO, SIN_TONO, SIN_SSML,
+} from '../comun/modelos.mjs';
 import { segmentarVerificado } from '../comun/segmentar.mjs';
 import { TEMAS, EPOCAS, EPOCA_POR_DEFECTO, temaPorId, epocaPorId } from '../comun/temas.mjs';
 import { ESTILOS, estiloPorId } from '../comun/estilos.mjs';
@@ -2678,6 +2681,10 @@ $('objetivo').addEventListener('input', (e) => ($('v-objetivo').textContent = e.
 $('velocidad').addEventListener('input', (e) => ($('v-velocidad').textContent = (e.target.value / 100).toFixed(2)));
 $('gravedad').addEventListener('input', (e) => ($('v-gravedad').textContent = textoDeGravedad(Number(e.target.value))));
 $('musica-volumen').addEventListener('input', (e) => ($('v-musica-volumen').textContent = `${e.target.value}%`));
+// Al cambiar de voz, se dice enseguida qué mandos ignora esa: si esperara a
+// guardar, se probaría la velocidad con una voz que no la admite y parecería que
+// el deslizador está roto.
+$('voz')?.addEventListener('change', () => pintarLimitesDeVoz());
 // Recargar el catálogo al momento: si hubiera que guardar ajustes primero, parecería
 // que el interruptor no hace nada.
 $('expresivas').addEventListener('change', async (e) => {
@@ -2833,9 +2840,33 @@ async function cargarVoces() {
       if (v.nombre === P.config.narracion.nombreVoz) o.selected = true;
       sel.appendChild(o);
     }
+    pintarLimitesDeVoz();
   } catch {
     // Sin catálogo se sigue con la voz por defecto: no es motivo para no trabajar.
   }
+}
+
+/**
+ * Qué mandos ignora la voz elegida, dicho antes de tocarlos.
+ *
+ * «Las de Chirp no se escuchan.» No era el reproductor: Chirp y Journey NO
+ * admiten velocidad, ni tono, ni SSML, y mandárselos hace que el servicio
+ * rechace la petición entera. Ahora se omiten —así la voz suena—, pero callarlo
+ * dejaría dos deslizadores que no hacen nada sin decir por qué.
+ */
+function pintarLimitesDeVoz() {
+  const caja = $('limites-voz');
+  if (!caja) return;
+  const v = $('voz')?.value || P.config.narracion.nombreVoz || '';
+  const sin = [
+    SIN_VELOCIDAD_NI_TONO.test(v) && 'la velocidad',
+    SIN_TONO.test(v) && 'el tono',
+    SIN_SSML.test(v) && 'el corte exacto por marcas (se reparte por silencios)',
+  ].filter(Boolean);
+  caja.textContent = sin.length
+    ? `Esta voz no admite ${sin.join(', ni ')}. Se le pide sin eso —si no, el servicio rechaza la ` +
+      `petición y no hay audio—. La gravedad de la voz sí funciona: esa se aplica al montar.`
+    : '';
 }
 
 // Reentrada rápida: la contraseña vive en la sesión, no en el disco.

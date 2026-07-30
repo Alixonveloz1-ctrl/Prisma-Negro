@@ -1020,6 +1020,67 @@ export const invariantes = [
   },
 
   {
+    nombre: 'a-cada-voz-se-le-piden-solo-los-mandos-que-admite',
+    dice: '«Las de Chirp no se escuchan.» No era el reproductor: la petición se RECHAZA. Chirp y Journey no admiten SSML, ni velocidad, ni tono —documentado por Google—, y esta casa se los mandaba a todas las voces por igual: el tono va a −1 por defecto y la velocidad estaba en 1,02. Con eso el servicio devuelve un error y no hay audio. Se omite lo que la voz no entiende, y se DICE en pantalla: si no, quedan dos deslizadores que no hacen nada sin explicación.',
+    async comprobar(ctx) {
+      const { SIN_VELOCIDAD_NI_TONO, SIN_TONO, SIN_SSML } = await import('../../comun/modelos.mjs');
+      const prov = fuente(ctx, 'api/_lib/proveedor.js');
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      // 1 · Las reglas conocen a las que no admiten, y no tocan a las que sí.
+      for (const v of ['es-US-Chirp-HD-D', 'es-US-Chirp3-HD-Achernar', 'es-US-Journey-D']) {
+        if (!SIN_VELOCIDAD_NI_TONO.test(v)) fallos.push(`A «${v}» se le mandaría velocidad y la rechaza.`);
+        if (!SIN_TONO.test(v)) fallos.push(`A «${v}» se le mandaría tono y lo rechaza.`);
+        if (!SIN_SSML.test(v)) fallos.push(`A «${v}» se le mandaría SSML y lo rechaza: se gasta la llamada para nada.`);
+      }
+      // Studio no admite tono, pero sí velocidad y SSML.
+      if (!SIN_TONO.test('es-US-Studio-B')) fallos.push('A Studio se le manda tono y no lo admite.');
+      if (SIN_VELOCIDAD_NI_TONO.test('es-US-Studio-B')) fallos.push('A Studio se le quita la velocidad, que sí admite.');
+      // Y a las corrientes no se les quita nada: perderían el ajuste fino por nada.
+      for (const v of ['es-US-Neural2-B', 'es-MX-Standard-A', 'es-US-Wavenet-C']) {
+        if (SIN_VELOCIDAD_NI_TONO.test(v) || SIN_TONO.test(v) || SIN_SSML.test(v)) {
+          fallos.push(`A «${v}» se le quitan mandos que sí admite.`);
+        }
+      }
+
+      // 2 · Y la petición se arma con eso: nada de mandarlos siempre.
+      const i = prov.indexOf('audioEncoding: ');
+      const cuerpo = i < 0 ? '' : prov.slice(i, i + 500);
+      if (/^\s*speakingRate: velocidad,/m.test(cuerpo) || /^\s*pitch: tono,/m.test(cuerpo)) {
+        fallos.push('La velocidad o el tono se mandan siempre: con Chirp, la petición se rechaza entera.');
+      }
+      if (!/SIN_VELOCIDAD_NI_TONO\.test\(v\) \? \{\} : \{ speakingRate/.test(cuerpo)) {
+        fallos.push('La velocidad no se omite en las voces que no la admiten.');
+      }
+      if (!/SIN_TONO\.test\(v\) \? \{\} : \{ pitch/.test(cuerpo)) {
+        fallos.push('El tono no se omite en las voces que no lo admiten.');
+      }
+      // Ni SSML: pedírselo no es «probar», es gastar la llamada para que la
+      // rechacen — y con las de Chirp, en TODAS.
+      if (!/admiteSsml && Array\.isArray\(marcas\)/.test(prov)) {
+        fallos.push('Se le pide SSML a voces que no lo admiten: una llamada perdida por bloque.');
+      }
+
+      // 3 · Y se dice en pantalla, junto a la voz.
+      if (!/function pintarLimitesDeVoz/.test(main) || !/id="limites-voz"/.test(fuente(ctx, 'index.html'))) {
+        fallos.push('No se avisa de qué mandos ignora la voz elegida: parecerían rotos.');
+      }
+      if (!/\$\('voz'\)\?\.addEventListener\('change'/.test(main)) {
+        fallos.push('El aviso no se actualiza al cambiar de voz: diría lo de la voz anterior.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: los mandos a todas las voces por igual.
+    romper: (ctx) =>
+      editando(ctx, 'api/_lib/proveedor.js', (t) =>
+        t
+          .replace('...(SIN_VELOCIDAD_NI_TONO.test(v) ? {} : { speakingRate: velocidad }),', 'speakingRate: velocidad,')
+          .replace('...(SIN_TONO.test(v) ? {} : { pitch: tono }),', 'pitch: tono,'),
+      ),
+  },
+
+  {
     nombre: 'la-voz-sale-siempre-con-la-misma-cabecera-wav',
     dice: '«Solo las de Gemini se escuchan», y el reproductor de la muestra marcando 00:08 / 00:00: duración cero. Los dos caminos de voz devolvían formatos distintos y solo uno estaba comprobado: el de Gemini llega en PCM crudo y esta casa le escribe la cabecera, el de Cloud TTS venía tal cual del servicio. Un <audio> se cree la cabecera —si el tamaño del trozo de datos no cuadra, la duración le sale cero y no suena—, y nuestro propio lector no se enteraba porque recortaba al tamaño real del archivo. Por eso el defecto solo se veía en el botón de escuchar la voz.',
     comprobar(ctx) {

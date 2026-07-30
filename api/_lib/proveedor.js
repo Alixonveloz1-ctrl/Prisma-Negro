@@ -21,6 +21,7 @@ import { escribirWav, leerWav } from '../../comun/audio.mjs';
 import {
   CATALOGO, PREDETERMINADO, grafiasDe, etiquetaDe,
   regionDe, hostDe, modalidadesDe, admiteTamanoImagen, duracionValida,
+  SIN_VELOCIDAD_NI_TONO, SIN_TONO, SIN_SSML,
 } from '../../comun/modelos.mjs';
 
 // §6: los generadores de video tienen listas CERRADAS de duración. Se pide la más
@@ -523,7 +524,11 @@ export function normalizarWav(b64, frecuenciaSiCrudo = 24000) {
 }
 
 export async function voz({ texto: t, nombreVoz, velocidad = 1.0, tono = 0, marcas = null }) {
-  const conMarcas = Array.isArray(marcas) && marcas.length > 1;
+  const v = String(nombreVoz || '');
+  const admiteSsml = !SIN_SSML.test(v);
+  // Pedir SSML a una voz que no lo entiende no es «probar»: es gastar una llamada
+  // para que la rechacen, y con las de Chirp era TODAS las llamadas.
+  const conMarcas = admiteSsml && Array.isArray(marcas) && marcas.length > 1;
   const ssml = conMarcas
     ? `<speak>${marcas.map((x, k) => `${escaparSsml(x)}<mark name="m${k}"/>`).join(' ')}</speak>`
     : '';
@@ -546,8 +551,10 @@ export async function voz({ texto: t, nombreVoz, velocidad = 1.0, tono = 0, marc
     audioConfig: {
       audioEncoding: 'LINEAR16',
       sampleRateHertz: 24000,
-      speakingRate: velocidad,
-      pitch: tono,
+      // Solo lo que esta voz entiende. Mandarle a Chirp una velocidad o un tono
+      // no lo ignora: rechaza la petición entera y te quedas sin voz.
+      ...(SIN_VELOCIDAD_NI_TONO.test(v) ? {} : { speakingRate: velocidad }),
+      ...(SIN_TONO.test(v) ? {} : { pitch: tono }),
     },
     ...(conSsml ? { enableTimePointing: ['SSML_MARK'] } : {}),
   });

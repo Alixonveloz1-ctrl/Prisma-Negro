@@ -231,3 +231,28 @@ export function duracionValida(clave, segundos) {
     return db < da || (db === da && b > a) ? b : a;
   });
 }
+
+/**
+ * Las voces que NO admiten los mandos de la petición.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Las de Chirp no se escuchan.»
+ *
+ * No era la cabecera ni el reproductor: la petición se RECHAZA. Chirp y Journey
+ * no admiten SSML, ni velocidad, ni tono —está en la documentación de Google—, y
+ * esta casa se los mandaba a todas las voces por igual: el tono va a −1 por
+ * defecto y la velocidad estaba en 1,02. Con eso, el servicio devuelve un error
+ * y no hay audio que oír.
+ *
+ * Studio sí admite velocidad, pero tampoco tono.
+ *
+ * No se avisa y se sigue: se OMITE lo que esa voz no entiende. Un documental con
+ * la voz que el usuario eligió y sin el ajuste fino vale infinitamente más que
+ * ningún audio.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export const SIN_VELOCIDAD_NI_TONO = /chirp|journey/i;
+export const SIN_TONO = /chirp|journey|studio/i;
+
+/** Ni SSML, luego tampoco marcas de tiempo: el corte se estima por silencios. */
+export const SIN_SSML = /chirp|journey/i;
