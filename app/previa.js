@@ -18,8 +18,7 @@
 // No cuesta nada: el material ya está pagado y en el almacén.
 
 import { material, tipoDeClave } from './material.js';
-import { construirHoja, correccionDeTono, referenciaDeTono } from '../comun/hoja.mjs';
-import { agravarMuestras, tonoDeVoz, leerWav, MEDIDOR_DE_TONO } from '../comun/audio.mjs';
+import { construirHoja } from '../comun/hoja.mjs';
 import { nombreLocal } from '../comun/claves.mjs';
 
 /**
@@ -39,12 +38,8 @@ export async function preparar({ pieza, config, senal, alAvanzar }) {
       ancho: config.formato.ancho,
       alto: config.formato.alto,
       fundidoMusica: config.musica.fundido,
-      // Sin esto, la previa construía SU hoja sin la gravedad y el agravador
-      // nunca se enteraba: se elegía un tono que la previa no sonaba.
-      gravedadVoz: config.montaje?.gravedadVoz ?? 0,
       // Y el nivel de la música, por lo mismo: se elige oyéndolo o no se elige.
       volumenMusica: config.musica.volumen,
-      igualarTono: config.montaje?.igualarTono !== false,
       firma: config.marca.activa && config.marca.texto ? undefined : null,
     },
   });
@@ -58,36 +53,9 @@ export async function preparar({ pieza, config, senal, alAvanzar }) {
   };
 
   const tomas = [];
-  // Cuántas tomas estrenan medida de tono. Se devuelve para poder decirlo en
-  // pantalla y para que quien llame sepa que hay que guardar el proyecto.
-  let medidas = 0;
   for (const [n, fila] of hoja.tomas.entries()) {
     if (senal?.aborted) break;
     const [visual, voz] = await Promise.all([cargar(fila.archivo), cargar(fila.audio)]);
-
-    // EL TONO DE ESTA TOMA, medido sobre el audio que ya está pagado.
-    //
-    // Se mide AQUÍ y no solo al narrar porque así también se iguala el material
-    // que ya existe: quien tiene 83 tomas generadas no tiene que volver a pagarlas
-    // para que dejen de sonar a veinte narradores distintos. Queda guardado en la
-    // toma, así que el montaje lo encuentra sin volver a bajar el audio.
-    // SE MIDE SIEMPRE, no solo si falta. El medidor se equivocaba de octava por
-    // encima de 150 Hz, así que lo guardado de antes está mal y guardarse de
-    // volver a medir sería conservar el defecto para siempre. Cuesta décimas.
-    const dueña = pieza.tomas.find((t) => t.i === fila.i);
-    if (voz && dueña) {
-      try {
-        const wav = leerWav(await voz.arrayBuffer());
-        const hz = tonoDeVoz(wav.muestras, wav.frecuencia);
-        if (hz > 0 && (dueña.hz !== +hz.toFixed(2) || dueña.hzV !== MEDIDOR_DE_TONO)) {
-          dueña.hz = +hz.toFixed(2);
-          dueña.hzV = MEDIDOR_DE_TONO;
-          medidas++;
-        }
-      } catch {
-        /* un audio que no se puede leer no impide preparar la previa */
-      }
-    }
 
     tomas.push({
       ...fila,
@@ -99,26 +67,13 @@ export async function preparar({ pieza, config, senal, alAvanzar }) {
     alAvanzar?.(n + 1, hoja.tomas.length);
   }
 
-  // Con los tonos ya medidos se recalcula la corrección de cada toma: la
-  // referencia es la MEDIANA de la pieza, así que no se puede saber hasta
-  // haberlas visto todas. La hoja se construyó antes de medir.
-  if (medidas) {
-    const referencia =
-      config.montaje?.igualarTono === false ? 0 : referenciaDeTono(pieza.tomas.map((t) => t.hz));
-    for (const lista of [tomas, hoja.tomas]) {
-      for (const f of lista) {
-        f.ajusteTono = correccionDeTono(pieza.tomas.find((t) => t.i === f.i)?.hz, referencia);
-      }
-    }
-  }
-
   const musica = {};
   for (const e of hoja.escenas) {
     if (e.musica) musica[e.n] = await cargar(e.musica);
   }
   const firma = hoja.firma ? await cargar(hoja.firma) : null;
 
-  return { hoja, tomas, musica, firma, medidas };
+  return { hoja, tomas, musica, firma };
 }
 
 // ── El reproductor ────────────────────────────────────────────────────────────
@@ -135,26 +90,13 @@ const CAMARA = {
 };
 
 /**
- * El agravador, aplicado a un AudioBuffer. La cuenta vive en `comun/audio.mjs`
- * —sin nada del navegador— para que la auditoría la ejecute con datos sintéticos y
- * mida el tono, la duración y los bordes que salen, en vez de creérselo.
- */
-function agravarBuffer(ctx, buf, semitonos) {
-  const salida = ctx.createBuffer(buf.numberOfChannels, buf.length, buf.sampleRate);
-  for (let c = 0; c < buf.numberOfChannels; c++) {
-    salida.getChannelData(c).set(agravarMuestras(buf.getChannelData(c), buf.sampleRate, semitonos));
-  }
-  return salida;
-}
-
-/**
  * Reproduce la pieza como sonaría montada.
  *
  * El audio va por Web Audio y programado por TIEMPO ABSOLUTO desde la hoja, no
  * encadenando «cuando acabe este, el siguiente»: encadenar acumula el retraso de
  * cada arranque y al final del documental la imagen va por delante de la voz.
  */
-export function reproductor({ lienzo, clip, marca, alCambiar, alTerminar }) {
+export function reproductor({ lienzo, clip, vacio, marca, alCambiar, alTerminar }) {
   let ctx = null;
   let material = null;
   let fuentes = [];
@@ -165,19 +107,6 @@ export function reproductor({ lienzo, clip, marca, alCambiar, alTerminar }) {
   let corriendo = false;
 
   const buffers = new Map();
-  // Agravar cuesta trabajo de verdad —autocorrelación más solape—, así que se paga
-  // una vez por toma y por tono: darle a Reproducir otra vez no lo vuelve a pagar,
-  // y cambiar los semitonos sí lo recalcula.
-  const agravados = new Map();
-
-  function agravar(contexto, buf, semitonos) {
-    const previo = agravados.get(buf);
-    if (previo && previo.semitonos === semitonos) return previo.salida;
-    const salida = agravarBuffer(contexto, buf, semitonos);
-    agravados.set(buf, { semitonos, salida });
-    return salida;
-  }
-
   async function decodificar(blob) {
     if (!blob) return null;
     if (buffers.has(blob)) return buffers.get(blob);
@@ -200,11 +129,19 @@ export function reproductor({ lienzo, clip, marca, alCambiar, alTerminar }) {
       clip.style.display = 'none';
     }
 
+    // SI FALTA EL MATERIAL, SE DICE. Antes se ocultaba la imagen y ya: una pantalla
+    // negra muda en medio de la previa, sin manera de saber si el fallo era del
+    // material, del reproductor o del navegador.
     if (!t.visual) {
       lienzo.removeAttribute('src');
       lienzo.style.visibility = 'hidden';
+      if (vacio) {
+        vacio.textContent = `La toma ${t.i + 1} no tiene ${t.movimiento ? 'clip' : 'imagen'} en el almacén. Genérala y vuelve a preparar.`;
+        vacio.style.display = 'flex';
+      }
       return;
     }
+    if (vacio) vacio.style.display = 'none';
     urlActual = URL.createObjectURL(t.visual);
 
     // UNA TOMA CON CLIP ES UN VIDEO, y el visor era solo un <img>: un mp4 dentro
@@ -301,18 +238,12 @@ export function reproductor({ lienzo, clip, marca, alCambiar, alTerminar }) {
       vozGanancia.connect(medidor);
       const muestras = new Float32Array(medidor.fftSize);
 
-      // LA GRAVEDAD SE OYE AQUÍ, ANTES DE PAGAR NADA, y en TODAS las tomas por
-      // igual. Con la duración intacta: nada que recortar, nada que pise a nadie.
-      const gravedad = Number(material.hoja.ajustes?.gravedadVoz) || 0;
-
       inicioContexto = ctx.currentTime + 0.08;
       for (const [t, buf] of vozDe) {
         const f = ctx.createBufferSource();
-        // La gravedad de la pieza MÁS lo que le falte a esta toma para sonar como
-        // las demás. Sumados en un solo paso: dos pasadas de agravador serían dos
-        // veces el artefacto.
-        const semitonos = +(gravedad + (Number(t.ajusteTono) || 0)).toFixed(3);
-        f.buffer = semitonos ? agravar(ctx, buf, semitonos) : buf;
+        // LA VOZ, TAL CUAL SALIÓ. Aquí hubo un agravador y un igualador de tono
+        // entre tomas, y los dos hicieron más daño que bien: ver `comun/hoja.mjs`.
+        f.buffer = buf;
         f.connect(vozGanancia);
         // La voz arranca DESPUÉS de la entrada en frío, igual que en el montaje. Si
         // aquí empezara en `inicio`, la previa enseñaría un documental que no es el

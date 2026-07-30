@@ -17,15 +17,11 @@ export const PREDETERMINADO = {
   alto: 1080,
   // §5.4: con fundidos cortos el relevo de la música se oye como un tajo.
   fundidoMusica: 2.5,
-  // Semitonos de gravedad de la voz, aplicados al montar. Cero = tal cual.
-  gravedadVoz: 0,
   // El nivel del lecho de música ANTES de que la voz lo agache. Estaba escrito a
   // mano aquí y otra vez en la previa, y el ajuste del proyecto no lo leía nadie:
   // «la música ni se escucha, apenas se medio escucha a lo lejos», y subirla era
   // imposible desde la pantalla.
   volumenMusica: 0.55,
-  // Llevar todas las tomas al mismo tono. Se puede apagar: ver `referenciaDeTono`.
-  igualarTono: true,
   // §4.7: se amplía la imagen antes de recorrerla para que no pixele.
   ampliacionCamara: 2,
   crf: 18,
@@ -34,65 +30,6 @@ export const PREDETERMINADO = {
 };
 
 const q = (n, fps) => Math.round(n * fps) / fps;
-
-/**
- * Los semitonos que hay que subirle o bajarle a una toma para que suene como la
- * referencia de la pieza.
- *
- * Con dos frenos, porque una medida de tono se equivoca de dos maneras conocidas:
- *
- *   · Por OCTAVA —el error clásico de la autocorrelación: coger el doble del
- *     periodo—. Se pliega a la octava de la referencia en vez de dejarlo suelto:
- *     una toma medida en 55 con la pieza en 110 se trata como 110.
- *   · Por poco. Más de tres semitonos de diferencia es más probable que sea una
- *     medida mala que un narrador que cambió tanto: se deja sin tocar.
- */
-export function correccionDeTono(hz, referencia, tope = 3) {
-  const h = aLaOctavaDe(Number(hz), Number(referencia));
-  const r = Number(referencia);
-  if (!(h > 0) || !(r > 0)) return 0;
-  const semitonos = 12 * Math.log2(r / h);
-  // Aun plegado, si se va de tres semitonos es más probable que sea una medida
-  // mala que un narrador que cambió tanto de voz. Corregir con un número dudoso
-  // suena peor que no corregir: se deja como está.
-  if (!Number.isFinite(semitonos) || Math.abs(semitonos) > tope) return 0;
-  return +semitonos.toFixed(3);
-}
-
-/**
- * Lleva un tono a la octava de la referencia.
- *
- * Segunda red bajo el medidor. Un error de octava —confundir el periodo con el
- * doble— ya no debería pasar, pero si pasara, plegarlo lo vuelve inofensivo: una
- * toma medida en 55 con la pieza en 110 se trata como 110, en vez de quedar como
- * un valor extraño que corre la referencia de todas las demás.
- */
-export function aLaOctavaDe(hz, referencia) {
-  let h = Number(hz);
-  const r = Number(referencia);
-  if (!(h > 0) || !(r > 0)) return h;
-  let vueltas = 0;
-  while (h < r / 1.5 && vueltas++ < 6) h *= 2;
-  while (h > r * 1.5 && vueltas++ < 12) h /= 2;
-  return h;
-}
-
-/** La mediana de los tonos medidos, con las octavas ya plegadas. */
-export function referenciaDeTono(tonos) {
-  const medidos = tonos.map(Number).filter((h) => h > 0).sort((a, b) => a - b);
-  if (!medidos.length) return 0;
-  const mediana = (lista) =>
-    lista.length % 2
-      ? lista[(lista.length - 1) / 2]
-      : (lista[lista.length / 2 - 1] + lista[lista.length / 2]) / 2;
-  // Dos pasadas: la primera da un centro provisional, y con él se pliegan las
-  // octavas antes de sacar la mediana buena. Sin plegar, una mezcla de medidas
-  // buenas y medidas una octava abajo deja la mediana EN MEDIO de los dos grupos
-  // —ni con unas ni con otras—, y el igualador hunde la mitad de las tomas y deja
-  // la otra mitad: «una grave, una normal, una grave, una normal».
-  const provisional = mediana(medidos);
-  return mediana(medidos.map((h) => aLaOctavaDe(h, provisional)).sort((a, b) => a - b));
-}
 
 /**
  * Construye la hoja de montaje.
@@ -107,18 +44,6 @@ export function construirHoja({ pieza, tomas, escenas = [], config = {} }) {
   const c = { ...PREDETERMINADO, ...config };
   if (!pieza) throw new Error('La hoja de montaje necesita saber de qué pieza es.');
   if (!tomas?.length) throw new Error('La hoja de montaje necesita al menos una toma.');
-
-  // LA REFERENCIA DE TONO DE LA PIEZA: la mediana de lo que se midió.
-  //
-  // «Parece hasta diferentes voces.» Gemini interpreta cada llamada por su cuenta
-  // y sale con un tono distinto; con veinte llamadas para 83 tomas, el documental
-  // cambia de narrador veinte veces. La temperatura a cero no lo arregla y los
-  // bloques largos solo lo espacian. Lo que sí lo arregla es medir el tono de cada
-  // toma y llevarlas TODAS al mismo. La mediana y no la media: una toma mal medida
-  // arrastraría la media y desafinaría la pieza entera.
-  // Y se puede apagar. Un igualador que se equivoca suena peor que no igualar, y
-  // quien está montando tiene que poder seguir sin esperar a que yo lo arregle.
-  const referencia = c.igualarTono === false ? 0 : referenciaDeTono(tomas.map((t) => t.hz));
 
   let reloj = 0;
   const filas = tomas.map((t, n) => {
@@ -188,10 +113,6 @@ export function construirHoja({ pieza, tomas, escenas = [], config = {} }) {
         };
       })(),
       audio: claveToma(pieza, t.i, 'audio'),
-      // Los semitonos que le faltan a ESTA toma para sonar como las demás. Van
-      // aparte de la gravedad general para que el mando de Ajustes se siga
-      // pudiendo mover en la previa ya preparada: al sonar se suman los dos.
-      ajusteTono: correccionDeTono(t.hz, referencia),
       // §8.2: cada toma sabe de qué tipo es su imagen, y eso puede salir en
       // pantalla.
       tipoImagen: t.tipoImagen || 'generada',
@@ -238,9 +159,7 @@ export function construirHoja({ pieza, tomas, escenas = [], config = {} }) {
     firma: config.firma === null ? null : `${pieza}/firma`,
     ajustes: {
       fundidoMusica: c.fundidoMusica,
-      gravedadVoz: c.gravedadVoz,
       volumenMusica: c.volumenMusica,
-      igualarTono: c.igualarTono !== false,
       ampliacionCamara: c.ampliacionCamara,
       crf: c.crf,
       bitrateAudio: c.bitrateAudio,
@@ -434,25 +353,6 @@ export function guionFfmpeg(hoja) {
     // sola con la música. No hace falta nada más aquí —el silencio del respiro y
     // el relleno de cuadre son el mismo mecanismo—.
     const filtros = [`aresample=${a.muestreo}`];
-    // LA GRAVEDAD, SIN TOCAR EL RELOJ. Bajar el tono con `asetrate` también
-    // frena el audio; el `atempo` recíproco le devuelve la velocidad exacta.
-    // El producto de los dos factores es 1: la duración no se mueve NI UN
-    // FOTOGRAMA, y el banco lo demuestra montando con gravedad puesta y
-    // exigiendo el mismo largo al milisegundo. Así la voz se agrava sobre lo ya
-    // generado —sin regenerar ni una toma— y la sincronía queda intacta.
-    // Y AQUÍ SE IGUALA EL TONO ENTRE TOMAS. La gravedad que eligió el usuario es
-    // de toda la pieza; `ajusteTono` es lo que le falta a ESTA toma para sonar
-    // como las demás. Se suman y salen en el mismo par asetrate/atempo, así que
-    // igualar el tono tampoco mueve el reloj ni un fotograma.
-    const g = (Number(a.gravedadVoz) || 0) + (Number(t.ajusteTono) || 0);
-    if (g) {
-      const factor = Math.pow(2, g / 12);
-      filtros.push(
-        `asetrate=${Math.round(a.muestreo * factor)}`,
-        `aresample=${a.muestreo}`,
-        `atempo=${(1 / factor).toFixed(6)}`,
-      );
-    }
     // La apertura en frío: la imagen entra antes que la voz. Solo la primera toma
     // la lleva, y desplaza SU audio dentro de SU hueco, no el de las demás: cada
     // trozo se rellena a su duración exacta antes de pegarse.

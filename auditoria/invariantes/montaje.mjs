@@ -420,6 +420,58 @@ export const invariantes = [
   },
 
   {
+    nombre: 'el-tono-de-la-voz-no-se-toca',
+    dice: 'La voz sale COMO LA GENERÓ EL SERVICIO. Aquí vivieron dos cosas —un mando de gravedad y un igualador de tono entre tomas— y las dos hicieron más daño que bien: el mando iba al revés y sonaba fina y acelerada; el agravador granular doblaba la voz; frenar la reproducción cortaba la última palabra; y el igualador, con el medidor yéndose de octava, dejaba «una toma grave, una normal, una grave, una normal» — hasta en el video ya descargado. Cada arreglo trajo un defecto nuevo, así que se quitó de raíz. Esta invariante existe para que no vuelva a entrar sin que alguien la borre a propósito.',
+    comprobar(ctx) {
+      const fallos = [];
+
+      // 1 · Ni una cadena de tono en el guion de montaje. Es lo único que de
+      // verdad decide qué sale en el archivo final.
+      for (const [re, que] of [
+        [/asetrate=/, 'un asetrate (cambio de tono)'],
+        [/atempo=/, 'un atempo (el compañero del asetrate)'],
+        [/rubberband|pitch=/, 'un cambiador de tono'],
+      ]) {
+        if (re.test(ctx.guion)) fallos.push(`El guion de montaje lleva ${que}: la voz tiene que salir tal cual.`);
+      }
+      // Y la hoja no puede volver a llevar el ajuste, ni general ni por toma.
+      if ('gravedadVoz' in (ctx.hoja.ajustes || {})) fallos.push('La hoja vuelve a llevar gravedad de voz.');
+      if (ctx.hoja.tomas.some((t) => 'ajusteTono' in t)) fallos.push('Las tomas vuelven a llevar ajuste de tono.');
+
+      // 2 · Ni en el navegador. La previa tiene que sonar lo mismo que el archivo:
+      // un agravador solo en la previa es peor que ninguno, porque se elige con un
+      // sonido que después no sale.
+      for (const ruta of ['app/previa.js', 'comun/audio.mjs', 'comun/hoja.mjs', 'app/main.js', 'app/config.js']) {
+        const t = fuente(ctx, ruta);
+        for (const [re, que] of [
+          [/agravarMuestras|agravarBuffer/, 'el agravador'],
+          [/gravedadVoz/, 'el mando de gravedad'],
+          [/ajusteTono|correccionDeTono|referenciaDeTono/, 'el igualador de tono'],
+          [/tonoDeVoz|periodoDeVoz/, 'el medidor de tono'],
+        ]) {
+          if (re.test(t)) fallos.push(`${ruta} vuelve a traer ${que}.`);
+        }
+      }
+      // Ni el modelo de datos guarda tonos medidos: sin dato no hay tentación.
+      if (/\bhzV?\b:/.test(fuente(ctx, 'app/estado.js'))) {
+        fallos.push('El modelo de toma vuelve a guardar el tono medido.');
+      }
+
+      // 3 · Y LO QUE SÍ SE QUEDA, porque son los dos mandos que pidió quien monta
+      // y los dos funcionan: el volumen de la música y la velocidad de la voz.
+      const html = ctx.fuentes.get('index.html') || '';
+      if (!/id="musica-volumen"/.test(html)) fallos.push('Se fue también el volumen de la música, que sí sirve.');
+      if (!/id="velocidad"/.test(html)) fallos.push('Se fue también la velocidad de la voz, que sí sirve.');
+      return fallos;
+    },
+    // Se rompe metiendo el asetrate otra vez, que es por donde volvería.
+    romper: (ctx) => ({
+      ...ctx,
+      guion: ctx.guion.replace(/-af 'aresample=(\d+)/, "-af 'aresample=$1,asetrate=40363,atempo=1.19"),
+    }),
+  },
+
+  {
     nombre: 'lo-que-se-baja-es-el-paquete-de-publicar',
     dice: '«Estamos descargando solamente el MP4. Debería descargar un ZIP donde venga ya el video, un archivo de texto con la descripción que va al publicarlo más los hashtags, toda la música continua sola, y aparte toda la voz en un solo audio.» Las dos pistas sueltas ya las fabrica el montaje para poder mezclarlas y las tiraba al terminar; el texto ya lo escribe la fase de metadatos y había que recomponerlo a mano en el teléfono.',
     comprobar(ctx) {
@@ -517,123 +569,6 @@ export const invariantes = [
       conFuncion(ctx, 'guionEntrega', () => '#!/bin/sh\n'),
   },
 
-  {
-    nombre: 'las-tomas-se-igualan-al-mismo-tono',
-    dice: '«Parece hasta diferentes voces.» Las voces que interpretan cada llamada por su cuenta salen con un tono distinto en cada una: con veinte llamadas para 83 tomas, el documental cambia de narrador veinte veces. Ni la temperatura a cero ni los bloques largos lo arreglan —solo lo espacian—. Se mide el tono de cada toma y se llevan TODAS al mismo, con el mismo par asetrate/atempo que la gravedad: sin mover el reloj.',
-    comprobar(ctx) {
-      const { construirHoja, guionFfmpeg, correccionDeTono, sanear, MEDIDOR_DE_TONO } = ctx.fn;
-      const fallos = [];
-      const plano = { encuadre: 'plano medio', movimientoCamara: 'fijo', lugar: 'x', luz: 'y', sujetos: [], descripcion: 'd' };
-      const toma = (i, hz) => ({ i, escena: 0, segundos: 4, medida: true, plano, audio: 'ok', corteExacto: true, hz });
-
-      // 1 · La corrección lleva cada toma a la referencia, y en la dirección buena.
-      // Una toma grave respecto a la referencia hay que SUBIRLA (positivo).
-      if (!(correccionDeTono(100, 112) > 0)) fallos.push('Una toma más grave que la referencia no se sube: la corrección va al revés.');
-      if (!(correccionDeTono(125, 112) < 0)) fallos.push('Una toma más aguda que la referencia no se baja.');
-      if (Math.abs(correccionDeTono(110, 110)) > 0.001) fallos.push('Una toma que ya está en la referencia se toca igualmente.');
-      // Un error de octava —el clásico de la autocorrelación— no se «corrige»:
-      // eso convertiría la toma en otra voz en vez de igualarla.
-      if (correccionDeTono(55, 110) !== 0) fallos.push('Un error de octava se corrige como si fuera desafinación: haría otra voz.');
-      if (Math.abs(correccionDeTono(90, 118)) > 4.001) fallos.push('La corrección no tiene tope.');
-      if (correccionDeTono(0, 110) !== 0 || correccionDeTono(110, 0) !== 0) {
-        fallos.push('Sin medida se inventa una corrección.');
-      }
-
-      // 2 · La referencia de la pieza es la MEDIANA de lo medido.
-      const hoja = construirHoja({
-        pieza: 'p01',
-        tomas: [toma(0, 100), toma(1, 110), toma(2, 120)],
-        escenas: [{ n: 0 }],
-      });
-      const ajustes = hoja.tomas.map((t) => t.ajusteTono);
-      if (Math.abs(ajustes[1]) > 0.001) fallos.push('La toma que está en la mediana se desafina.');
-      if (!(ajustes[0] > 0) || !(ajustes[2] < 0)) fallos.push('Las tomas no convergen hacia la referencia.');
-      // Y una medida absurda se queda fuera en vez de arrastrar a las demás, que
-      // es lo que haría una media.
-      const conRara = construirHoja({
-        pieza: 'p01',
-        tomas: [toma(0, 100), toma(1, 110), toma(2, 120), toma(3, 700)],
-        escenas: [{ n: 0 }],
-      });
-      if (conRara.tomas[3].ajusteTono !== 0) fallos.push('Una medida absurda se «corrige» en vez de dejarse fuera.');
-      if (Math.abs(conRara.tomas[0].ajusteTono - ajustes[0]) > 1) {
-        fallos.push('Una medida absurda mueve la referencia de las demás: la mediana no está haciendo su trabajo.');
-      }
-
-      // 3 · Y llega al guion como una cadena POR TOMA, sumada a la gravedad.
-      const g = guionFfmpeg(
-        construirHoja({
-          pieza: 'p01',
-          tomas: [toma(0, 100), toma(1, 110), toma(2, 120)],
-          escenas: [{ n: 0 }],
-          config: { gravedadVoz: -2, muestreo: 48000 },
-        }),
-      );
-      const pares = [...g.matchAll(/asetrate=(\d+),aresample=(\d+),atempo=([\d.]+)/g)];
-      if (pares.length !== 3) {
-        fallos.push(`Salen ${pares.length} cadenas de tono para 3 tomas: no se iguala toma a toma.`);
-      }
-      const factores = pares.map((m) => Number(m[1]) / Number(m[2]));
-      if (new Set(factores.map((f) => f.toFixed(4))).size < 3) {
-        fallos.push('Las tres tomas salen con el mismo tono: la corrección por toma no llega al guion.');
-      }
-      // Y CADA PAR SIGUE SIENDO RECÍPROCO: igualar el tono no puede mover el reloj.
-      for (const m of pares) {
-        const producto = (Number(m[1]) / Number(m[2])) * Number(m[3]);
-        if (Math.abs(producto - 1) > 0.001) {
-          fallos.push(`Una toma igualada cambia de duración (producto ${producto.toFixed(4)}): el documental se correría.`);
-        }
-      }
-
-      // 4 · Se mide donde hay muestras, se guarda, y la previa lo aplica.
-      const nar = fuente(ctx, 'app/fases/narracion.js');
-      const pre = fuente(ctx, 'app/previa.js');
-      if (!/tonoDeVoz/.test(nar)) fallos.push('La narración no mide el tono: el material nuevo no se podría igualar.');
-      if (!/tonoDeVoz/.test(pre)) fallos.push('Preparar no mide el tono: el material YA pagado nunca se igualaría.');
-      // Y se mide SIEMPRE al preparar. Guardarse de volver a medir conservaría
-      // para siempre las medidas del medidor viejo, que se iba de octava.
-      if (/!\(Number\(dueña\.hz\) > 0\)/.test(pre)) {
-        fallos.push('Preparar solo mide si falta: una medida vieja y mala se quedaría para siempre.');
-      }
-      // Y se puede APAGAR sin volver a preparar: un igualador que se equivoca
-      // suena peor que ninguno, y probarlo no puede costar bajar 83 audios.
-      if (!/igualarTono/.test(pre) || !/id="igualar-tono"/.test(fuente(ctx, 'index.html'))) {
-        fallos.push('El igualador no se puede apagar: si se equivoca, no hay salida.');
-      }
-      const hojaApagada = construirHoja({
-        pieza: 'p01',
-        tomas: [toma(0, 100), toma(1, 110), toma(2, 120)],
-        escenas: [{ n: 0 }],
-        config: { igualarTono: false },
-      });
-      if (hojaApagada.tomas.some((t) => t.ajusteTono !== 0)) {
-        fallos.push('Apagar el igualador no lo apaga.');
-      }
-      if (!/gravedad \+ \(Number\(t\.ajusteTono\) \|\| 0\)/.test(pre)) {
-        fallos.push('La previa no suma el ajuste de tono: se elegiría oyendo algo distinto de lo que se exporta.');
-      }
-      // Y sobrevive a la recarga: medirlo exige bajar los 83 audios otra vez.
-      const p = sanear({ id: 'p01', piezas: [{ id: 'p01', tomas: [{ i: 0, hz: 123.45, hzV: MEDIDOR_DE_TONO }] }] });
-      if (p.piezas[0].tomas[0].hz !== 123.45) fallos.push('El tono medido se pierde al recargar: habría que volver a medirlo.');
-      // PERO SOLO SI VIENE SELLADO POR EL MEDIDOR DE AHORA. El medidor v1 se iba
-      // de octava, así que media pieza tiene los valores a la mitad; aplicarlos
-      // hunde unas tomas y deja otras, y mirando el número no se distingue. Una
-      // medida de vintage desconocido se tira: sin tono no se iguala, que es lo
-      // peor que puede pasar, en vez de igualar al revés.
-      const viejo = sanear({ id: 'p01', piezas: [{ id: 'p01', tomas: [{ i: 0, hz: 82.5 }] }] });
-      if (viejo.piezas[0].tomas[0].hz !== 0) {
-        fallos.push('Una medida sin sellar se da por buena: si la hizo el medidor viejo, desafina media pieza.');
-      }
-      return fallos;
-    },
-    // Se rompe como estaba: un solo tono para toda la pieza, el que eligió el
-    // usuario, sin igualar nada.
-    romper: (ctx) =>
-      conFuncion(ctx, 'construirHoja', (a) => {
-        const h = ctx.fn.construirHoja(a);
-        return { ...h, tomas: h.tomas.map((t) => ({ ...t, ajusteTono: 0 })) };
-      }),
-  },
 
   {
     nombre: 'el-volumen-de-la-musica-se-elige-y-se-exporta',

@@ -153,25 +153,13 @@ function proyectoSintetico() {
       // largo de `apad`) no se habría ejecutado NUNCA antes de un montaje real.
       entrada: i === 0 ? 1.4 : 0,
       respiro: i === 3 ? 2.5 : i === 6 ? 4 : 0,
-      // TONOS DISTINTOS POR TOMA, como salen de una voz que interpreta cada
-      // llamada por su cuenta —«parece hasta diferentes voces»—. El montaje las
-      // iguala a la mediana con un asetrate/atempo POR TOMA, y esa es justo la
-      // manera de que la duración se mueva sin que nadie lo note: aquí se ejecuta
-      // de verdad y el largo se sigue exigiendo al milisegundo.
-      //
-      // La 7 va sin medir (hz 0): una toma sin medida no se corrige, y su camino
-      // también tiene que pasar por ffmpeg.
-      hz: [96, 118, 104, 131, 112, 99, 125, 0][i],
     });
   }
   return {
     id: 'p01',
     tomas,
     escenas: [{ n: 0 }, { n: 1 }, { n: 2 }],
-    // La voz se agrava tres semitonos AL MONTAR: si el par asetrate/atempo no
-    // fuera exactamente recíproco, el video saldría más largo o más corto y la
-    // comprobación del largo al milisegundo lo cazaría aquí, en un minuto.
-    config: { gravedadVoz: -3 },
+    config: {},
   };
 }
 

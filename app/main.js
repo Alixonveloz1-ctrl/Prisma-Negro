@@ -38,7 +38,6 @@ import * as local from './local.js';
 import { material } from './material.js';
 import { deBase64 } from './imagenes.js';
 import { claveToma, claveMusica, claveFotograma, claveClip } from '../comun/claves.mjs';
-import { referenciaDeTono, correccionDeTono } from '../comun/hoja.mjs';
 
 const $ = (id) => document.getElementById(id);
 
@@ -1417,9 +1416,9 @@ function asegurarReproductor() {
   reproductor = previa.reproductor({
     lienzo: $('previa-imagen'),
     clip: $('previa-clip'),
+    vacio: $('previa-vacio'),
     marca: $('previa-marca'),
     alCambiar: (t, k, total, segundo) => {
-      $('previa-vacio').style.display = 'none';
       $('previa-pie').textContent =
         `${reloj(segundo)} / ${reloj(preparada?.hoja.total || 0)} · toma ${t.i + 1} de ${total}` +
         ` · escena ${t.escena}${t.movimiento ? ' · clip' : ` · cámara ${t.camara}`}` +
@@ -1448,10 +1447,6 @@ accion(
       alAvanzar: (n, de) => avisar('previa', `Bajando material… ${n} de ${de} tomas`),
     });
 
-    // El tono medido de cada toma se guarda: es lo que iguala las voces, y el
-    // montaje lo necesita sin volver a bajar los 83 audios.
-    if (preparada.medidas) await guardar();
-
     asegurarReproductor().cargar(preparada);
     pintarTiras();
     pintarPorTipo();
@@ -1470,7 +1465,6 @@ accion(
           ? `A ${faltan.length} les falta algo: ${faltan.slice(0, 6).map((t) => `#${t.i + 1} (${t.falta.join('+')})`).join(', ')}`
           : 'Todas completas',
         sinMusica.length ? `${sinMusica.length} escenas sin música` : '',
-        preparada.medidas ? `Tono igualado en ${preparada.medidas} tomas` : '',
         estimadas.length
           ? `${estimadas.length} tomas llevan un corte forzado (sin silencio cerca, puede partir ` +
             `palabra): dale a Narración y se reparan solas`
@@ -2659,18 +2653,6 @@ accion(
   'estilo',
 );
 
-/**
- * Lo que marca el deslizador de gravedad, dicho con palabras.
- *
- * Un número con signo no basta en un teléfono: «−3» al lado de una etiqueta que
- * dice «Gravedad» no aclara si eso es más grave o menos. Lo que se lee es la
- * dirección, y la dirección es lo que estaba mal entendido.
- */
-function textoDeGravedad(marcado) {
-  if (!marcado) return '0 · como salió';
-  return marcado > 0 ? `+${marcado} · más grave` : `${marcado} · más aguda`;
-}
-
 function pintarAjustes() {
   pintarEstilos();
   // Los selectores de imagen y clips los llena `cargarModelos` con lo que el
@@ -2687,12 +2669,9 @@ function pintarAjustes() {
   pon('objetivo', P.config.segmentacion.segundosObjetivo, 'v-objetivo');
   pon('velocidad', Math.round(P.config.narracion.velocidad * 100));
   $('v-velocidad').textContent = P.config.narracion.velocidad.toFixed(2);
-  pon('gravedad', -P.config.montaje.gravedadVoz);
-  $('v-gravedad').textContent = textoDeGravedad(-P.config.montaje.gravedadVoz);
   pon('musica-volumen', Math.round(P.config.musica.volumen * 100));
   $('v-musica-volumen').textContent = `${Math.round(P.config.musica.volumen * 100)}%`;
   $('expresivas').checked = !!P.config.narracion.vocesExpresivas;
-  $('igualar-tono').checked = P.config.montaje.igualarTono !== false;
   $('estilo').value = P.config.narracion.estilo || '';
   $('marca-texto').value = P.config.marca.texto;
   $('vertical').value = P.config.formato.vertical ? '1' : '0';
@@ -2701,7 +2680,6 @@ function pintarAjustes() {
 $('proporcion').addEventListener('input', (e) => ($('v-proporcion').textContent = `${e.target.value}%`));
 $('objetivo').addEventListener('input', (e) => ($('v-objetivo').textContent = e.target.value));
 $('velocidad').addEventListener('input', (e) => ($('v-velocidad').textContent = (e.target.value / 100).toFixed(2)));
-$('gravedad').addEventListener('input', (e) => ($('v-gravedad').textContent = textoDeGravedad(Number(e.target.value))));
 $('musica-volumen').addEventListener('input', (e) => ($('v-musica-volumen').textContent = `${e.target.value}%`));
 // Al cambiar de voz, se dice enseguida qué mandos ignora esa: si esperara a
 // guardar, se probaría la velocidad con una voz que no la admite y parecería que
@@ -2729,33 +2707,10 @@ accion(
     P.config.movimiento.proporcion = Number($('proporcion').value) / 100;
     P.config.segmentacion.segundosObjetivo = Number($('objetivo').value);
     P.config.narracion.velocidad = Number($('velocidad').value) / 100;
-    // EL MANDO MARCA GRAVEDAD, NO SEMITONOS. Marcaba semitonos, y en semitonos
-    // «más grave» es hacia los NEGATIVOS: el deslizador iba de −6 a +3, así que
-    // arrastrarlo hacia la derecha —buscando más gravedad, que es lo que dice la
-    // etiqueta— SUBÍA el tono. En pantalla: «no se escucha grave, sino una voz
-    // más fina, como si aumentara la velocidad». Ahora derecha es más grave y el
-    // signo se le pone aquí.
-    P.config.montaje.gravedadVoz = -Number($('gravedad').value);
     P.config.musica.volumen = Number($('musica-volumen').value) / 100;
-    P.config.montaje.igualarTono = $('igualar-tono').checked;
     // Los dos ajustes que se ELIGEN OYÉNDOLOS llegan a la previa ya preparada: si
     // hubiera que volver a preparar para oír el cambio, el mando parecería roto.
-    if (preparada) {
-      preparada.hoja.ajustes.gravedadVoz = P.config.montaje.gravedadVoz;
-      preparada.hoja.ajustes.volumenMusica = P.config.musica.volumen;
-      // Y el igualador se enciende y se apaga OYÉNDOLO, igual que los otros dos:
-      // si apagarlo exigiera volver a preparar —bajar las 83 tomas otra vez—,
-      // nadie lo probaría, que es justo lo que hace falta cuando el igualador se
-      // equivoca.
-      const referencia = P.config.montaje.igualarTono
-        ? referenciaDeTono(pieza().tomas.map((t) => t.hz))
-        : 0;
-      for (const lista of [preparada.tomas, preparada.hoja.tomas]) {
-        for (const f of lista) {
-          f.ajusteTono = correccionDeTono(pieza().tomas.find((t) => t.i === f.i)?.hz, referencia);
-        }
-      }
-    }
+    if (preparada) preparada.hoja.ajustes.volumenMusica = P.config.musica.volumen;
     P.config.imagen.estilo = $('estilo-imagen').value;
     P.config.marca.texto = $('marca-texto').value.trim();
     P.config.formato.vertical = $('vertical').value === '1';
@@ -2900,7 +2855,7 @@ function pintarLimitesDeVoz() {
   ].filter(Boolean);
   caja.textContent = sin.length
     ? `Esta voz no admite ${sin.join(', ni ')}. Se le pide sin eso —si no, el servicio rechaza la ` +
-      `petición y no hay audio—. La gravedad de la voz sí funciona: esa se aplica al montar.`
+      `petición y no hay audio—.`
     : '';
 }
 
