@@ -2269,6 +2269,10 @@ accion(
       if (tipo === 'vid') {
         t.heredadoVid = de.clave;
         t.video = 'ok';
+        // Y pasa a ser toma CON MOVIMIENTO: sin esto la hoja no usa el clip
+        // —exige `movimiento` para pedirlo— y la toma se montaba con la imagen
+        // fija teniendo el clip heredado ahí al lado.
+        t.movimiento = true;
       } else {
         t.heredado = de.clave;
         t.imagen = 'ok';

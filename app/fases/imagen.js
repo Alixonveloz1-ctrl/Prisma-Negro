@@ -129,18 +129,39 @@ export function heredables(tomas, piezasAnteriores) {
     }
   }
 
+  // EL MOVIMIENTO DE LA TOMA NO DECIDE QUÉ PUEDE HEREDAR.
+  //
+  // ─────────────────────────────────────────────────────────────────────────────
+  // «En una toma donde heredé la imagen de otra toma, que también tenía video,
+  //  solo se está mostrando la imagen, no se está mostrando el video.»
+  //
+  // Esto miraba `t.movimiento` y ELEGÍA UNA RAMA: con movimiento, solo clips; sin
+  // movimiento, solo imágenes. Una toma fija cuyo plano ya tenía un clip pagado
+  // heredaba la imagen y dejaba el clip en el estante — y una toma con movimiento
+  // a la que no le encontraba clip se quedaba sin nada, ni siquiera la imagen que
+  // sí estaba.
+  //
+  // `movimiento` es una PROPUESTA del director sobre esta toma, no una regla sobre
+  // qué material sirve. Si el plano ya tiene clip, el clip vale: está pagado, es lo
+  // caro, y se ve mejor. Es lo mismo que hace el emparejador de planos gemelos
+  // dentro del caso, que sí heredaba las dos cosas.
+  //
+  // Y cuando hereda el clip, hereda TAMBIÉN su imagen si la hay: el clip salió de
+  // ella, la previa la usa de cartel, y sin ella la toma apuntaría a un fotograma
+  // local que nadie generó.
+  // ─────────────────────────────────────────────────────────────────────────────
   const salida = [];
   for (const t of tomas) {
     if (!t.plano) continue;
     const k = huellaDePlano(t);
-    if (t.movimiento) {
-      if (t.heredadoVid || t.video === 'ok') continue;
+
+    if (!t.heredadoVid && t.video !== 'ok') {
       const c = clips.get(k);
       if (c) salida.push({ i: t.i, de: c, tipo: 'vid' });
-    } else {
-      if (t.heredado || t.imagen === 'ok') continue;
-      const c = imagenes.get(k);
-      if (c) salida.push({ i: t.i, de: c, tipo: 'img' });
+    }
+    if (!t.heredado && t.imagen !== 'ok') {
+      const g = imagenes.get(k);
+      if (g) salida.push({ i: t.i, de: g, tipo: 'img' });
     }
   }
   return salida;

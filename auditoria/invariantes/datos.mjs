@@ -1459,6 +1459,94 @@ export const invariantes = [
   },
 
   {
+    nombre: 'heredar-la-imagen-no-deja-el-clip-en-el-estante',
+    dice: '«En una toma donde heredé la imagen de otra toma, que también tenía video, solo se está mostrando la imagen.» El banco elegía UNA RAMA según el movimiento propuesto para la toma: con movimiento miraba solo el estante de clips, sin movimiento solo el de imágenes. Así una toma fija cuyo plano ya tenía un clip PAGADO se llevaba el fotograma y dejaba lo caro en el estante, y una toma con movimiento a la que no le encontraba clip se quedaba sin nada —ni siquiera la imagen que sí estaba—.',
+    comprobar(ctx) {
+      const { heredables, construirHoja } = ctx.fn;
+      const fallos = [];
+      const conClip = { lugar: 'el hostal', encuadre: 'plano medio', luz: 'noche', descripcion: 'd', sujetos: [] };
+      const soloImagen = { lugar: 'el juzgado', encuadre: 'plano general', luz: 'día', descripcion: 'd', sujetos: [] };
+
+      // Un banco con las dos formas que existen de verdad: un plano del que se
+      // pagó el clip —y por tanto también su imagen, porque el clip sale de ella—
+      // y otro que solo llegó al fotograma.
+      const banco = [
+        {
+          id: 'p01',
+          titulo: 'A',
+          tomas: [
+            { i: 3, movimiento: true, video: 'ok', imagen: 'ok', plano: conClip },
+            { i: 9, movimiento: false, video: null, imagen: 'ok', plano: soloImagen },
+          ],
+        },
+      ];
+      const reparto = (t) =>
+        heredables([t], banco)
+          .map((h) => h.tipo)
+          .sort()
+          .join('+') || 'nada';
+
+      // 1 · Lo que preguntó: toma FIJA sobre un plano que ya tiene clip. Se lleva
+      // las dos cosas. El clip porque está pagado, es lo caro y se ve mejor; la
+      // imagen porque la previa la usa de cartel y el montaje la necesita.
+      const fija = reparto({ i: 0, movimiento: false, plano: conClip });
+      if (fija !== 'img+vid') {
+        fallos.push(
+          `Una toma fija sobre un plano con clip pagado hereda «${fija}»: ` +
+            'el clip se queda en el estante aunque ya esté pagado.',
+        );
+      }
+      // 2 · Y al revés: toma CON MOVIMIENTO sobre un plano del que solo hay
+      // imagen. Antes se quedaba sin nada y se volvía a pagar el fotograma.
+      const animada = reparto({ i: 0, movimiento: true, plano: soloImagen });
+      if (animada !== 'img') {
+        fallos.push(
+          `Una toma con movimiento sobre un plano que solo tiene imagen hereda «${animada}»: ` +
+            'se paga otra vez un fotograma que ya existe.',
+        );
+      }
+      // 3 · Lo ya resuelto no se vuelve a repartir, ni por un lado ni por el otro.
+      const yaTiene = reparto({ i: 0, movimiento: false, video: 'ok', imagen: 'ok', plano: conClip });
+      if (yaTiene !== 'nada') {
+        fallos.push(`Una toma que ya tiene su material recibe «${yaTiene}»: se pisaría lo pagado.`);
+      }
+
+      // 4 · Y el clip heredado tiene que LLEGAR AL MONTAJE. La hoja solo abre el
+      // clip de una toma con movimiento, así que heredarlo sin marcar movimiento
+      // deja el archivo comprado y sin usar: se montaría la imagen fija.
+      const tomas = [
+        { i: 0, escena: 0, texto: 'x', segundos: 5, medida: true, plano: conClip,
+          tipoImagen: 'reconstruccion', movimiento: true, heredadoVid: 'p01/t003/vid',
+          heredado: 'p01/t003/img', video: 'ok', imagen: 'ok', reusa: null },
+      ];
+      const hoja = construirHoja({ pieza: 'p02', tomas, escenas: [{ n: 0, titulo: 'A' }] });
+      if (hoja.tomas[0]?.archivo !== 'p01/t003/vid') {
+        fallos.push(
+          `El clip heredado no llega al montaje: la hoja abre ${hoja.tomas[0]?.archivo}.`,
+        );
+      }
+      // Y el que aplica la herencia tiene que marcar ese movimiento.
+      const main = fuente(ctx, 'app/main.js');
+      const i = main.indexOf("'b-reutilizar',");
+      const cuerpo = main.slice(i, main.indexOf('\nfunction ', i));
+      if (!/t\.heredadoVid = de\.clave;[\s\S]{0,400}?t\.movimiento = true;/.test(cuerpo)) {
+        fallos.push('Al heredar un clip no se marca la toma como animada: la hoja no lo pediría.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: una rama u otra según el movimiento propuesto, nunca
+    // las dos. Va por el contexto —no editando la fuente— porque la comprobación
+    // EJECUTA `heredables`, y un sabotaje sobre el texto no la alcanzaría.
+    romper: (ctx) =>
+      conFuncion(ctx, 'heredables', (tomas, anteriores) => {
+        const porI = new Map(tomas.map((t) => [t.i, t]));
+        return ctx.fn
+          .heredables(tomas, anteriores)
+          .filter((h) => (porI.get(h.i)?.movimiento ? h.tipo === 'vid' : h.tipo === 'img'));
+      }),
+  },
+
+  {
     nombre: 'la-musica-se-pide-en-ingles-porque-es-lo-unico-que-entiende',
     dice: 'La música falló SIEMPRE, no a veces: «Unsupported language detected. Please use one of the supported languages: en.» La instrucción iba en español como todo lo demás, y el generador rechaza la petición entera antes de generar nada. Reintentar no podía arreglarlo nunca.',
     comprobar(ctx) {
@@ -1819,6 +1907,91 @@ export const invariantes = [
       editando(ctx, 'app/fases/guion.js', (t) =>
         t.replace(/- LO CONCRETO, SIEMPRE\.[\s\S]*?explicando lo mismo\./, '- Frases cortas.'),
       ),
+  },
+
+  {
+    nombre: 'cada-acto-ve-entero-lo-que-ya-se-escribio',
+    dice: '«Me parece que la historia se está repitiendo: en las tomas más adelante se repite lo que ya se dijo antes.» El guion se escribe acto por acto, y al acto siguiente solo le llegaban los ÚLTIMOS 600 CARACTERES del anterior —unas cien palabras—. El acto cuarto sabía cómo terminaba el tercero y nada de lo que dijeron el primero y el segundo, así que volvía a contar el dato duro «para que se entienda» y el espectador lo oía por segunda vez a los diez minutos.',
+    async comprobar(ctx) {
+      const { escribirGuion } = ctx.fn;
+      const fallos = [];
+
+      // Actos largos a propósito: si cupieran en una cola de 600 caracteres, esto
+      // pasaría igual con el fallo puesto y no comprobaría nada.
+      const acto = (n) =>
+        `## Acto ${n}\n\nAPERTURA_DEL_ACTO_${n}: la denuncia entró el catorce de marzo a las nueve y diez. ` +
+        'La agente de guardia anotó el nombre, la edad y la dirección, y dejó constancia de todo. '.repeat(8) +
+        `CIERRE_DEL_ACTO_${n}.`;
+
+      // La única forma de ver QUÉ SE LE PIDE al modelo es mirar lo que sale por la
+      // puerta. Se sustituye la puerta entera: aquí no se llama a nadie.
+      const pedidas = [];
+      const puerta = globalThis.fetch;
+      globalThis.fetch = async (url, opciones) => {
+        pedidas.push(JSON.parse(opciones.body));
+        return { ok: true, status: 200, json: async () => ({ ok: true, texto: acto(pedidas.length) }) };
+      };
+      try {
+        await escribirGuion({
+          tema: 'El caso del puerto',
+          fichas: [{ afirmacion: 'Ardió el puerto.', fuente: 'Sentencia', tipoFuente: 'judicial' }],
+          minutos: 1,
+        });
+      } catch (e) {
+        fallos.push(`El guion no llega a escribirse: ${e.message}`);
+      } finally {
+        globalThis.fetch = puerta;
+      }
+      if (pedidas.length < 3) {
+        return fallos.concat(`Se pidieron ${pedidas.length} actos: no hay costura que comprobar.`);
+      }
+
+      // 1 · El primero no arrastra nada: no hay nada escrito todavía.
+      if (/LO QUE YA LLEVAS ESCRITO/.test(pedidas[0].instruccion)) {
+        fallos.push('Al primer acto se le pasa un contexto de actos anteriores que no existe.');
+      }
+      // 2 · Cada acto ve los anteriores ENTEROS, desde su primera frase. Con la
+      // cola de 600 caracteres la apertura del primero no llegaba al tercero, y
+      // era justo lo que hacía falta para no volver a contarla.
+      for (let n = 1; n < pedidas.length; n++) {
+        for (let k = 1; k <= n; k++) {
+          for (const [dónde, marca] of [['la apertura', `APERTURA_DEL_ACTO_${k}`], ['el cierre', `CIERRE_DEL_ACTO_${k}`]]) {
+            if (!pedidas[n].instruccion.includes(marca)) {
+              fallos.push(`El acto ${n + 1} no ve ${dónde} del acto ${k}: puede volver a contarlo.`);
+            }
+          }
+        }
+        if (!/no vuelvas a contar estos hechos/.test(pedidas[n].instruccion)) {
+          fallos.push(`Al acto ${n + 1} se le dan los anteriores sin decirle que ya están dichos.`);
+        }
+      }
+      // 3 · Y la regla general, que es la que cubre las repeticiones DENTRO de un
+      // mismo acto: un hecho se cuenta una vez en todo el documental.
+      if (!/UNA VEZ EN TODO EL DOCUMENTAL/.test(pedidas[0].sistema || '')) {
+        fallos.push('Las reglas del guion no prohíben contar dos veces el mismo hecho.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: del documental ya escrito solo viajaba la cola del
+    // acto anterior. Se sabotea la función que la comprobación EJECUTA —no el
+    // texto fuente, que no la alcanzaría— recortando lo que sale por la puerta.
+    romper: (ctx) =>
+      conFuncion(ctx, 'escribirGuion', async (args) => {
+        const puerta = globalThis.fetch;
+        globalThis.fetch = async (url, opciones) => {
+          const cuerpo = JSON.parse(opciones.body);
+          cuerpo.instruccion = String(cuerpo.instruccion).replace(
+            /LO QUE YA LLEVAS ESCRITO[\s\S]*?\n\nFICHAS DISPONIBLES:/,
+            (bloque) => `CONTEXTO:\n${bloque.slice(-600)}\n\nFICHAS DISPONIBLES:`,
+          );
+          return puerta(url, { ...opciones, body: JSON.stringify(cuerpo) });
+        };
+        try {
+          return await ctx.fn.escribirGuion(args);
+        } finally {
+          globalThis.fetch = puerta;
+        }
+      }),
   },
 
   {

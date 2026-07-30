@@ -80,6 +80,12 @@ CÓMO NO SE CUENTA — y esto es lo que lo convierte en noticiero
   nadie. Cuenta lo que pasó y calla.
 - SIN EXPLICAR LO QUE YA SE ENTENDIÓ. Si el dato anterior lo dice, no lo repitas
   con otras palabras "para que quede claro". Se nota y aburre.
+- UN HECHO SE CUENTA UNA VEZ EN TODO EL DOCUMENTAL. Esto vale sobre todo entre
+  actos: cuando te den lo ya escrito, léelo como lo que es —ya dicho— y sigue
+  desde ahí. Nada de recapitular al empezar un acto, nada de volver a presentar
+  a quien ya salió, nada de repetir la cifra o la fecha "por si se olvidó". Si
+  un hecho anterior hace falta para entender el nuevo, se le alude en media
+  frase y se avanza; no se vuelve a contar.
 - SIN CÓDIGOS NI SIGLAS LEÍDOS EN VOZ ALTA. «El expediente NCT00076648» no se
   narra: se dice "el expediente del registro federal". Un identificador largo
   leído entero rompe el hechizo — es dato de ficha, no de boca de narrador. Las
@@ -211,10 +217,31 @@ export async function escribirGuion({
               `\n\nComo mucho, una frase de recordatorio al principio de todo el ` +
               `documental. Ni una escena entera de resumen.\n\n`
             : '') +
-          // La costura entre actos: sin esto, cada acto vuelve a presentar el caso.
+          // LO QUE YA SE ESCRIBIÓ, ENTERO.
+          //
+          // ───────────────────────────────────────────────────────────────────
+          // «Me parece que la historia se está repitiendo: en las tomas más
+          //  adelante se repite lo que ya se dijo en las tomas anteriores.»
+          //
+          // Aquí iban los ÚLTIMOS 600 CARACTERES del acto anterior — unas cien
+          // palabras—. Con eso, el acto cuarto sabía cómo terminaba el tercero y
+          // nada de lo que dijeron el primero y el segundo: volvía a contar el
+          // dato duro «para que se entienda», y el espectador lo oía por segunda
+          // vez a los diez minutos.
+          //
+          // Ahora ve los actos anteriores COMPLETOS. Es el mismo razonamiento que
+          // ya se aplicaba a las partes anteriores de una serie —«un resumen
+          // pierde qué frases están dichas, y eso es lo único que importa aquí»—
+          // y aquí importa más todavía, porque es el mismo documental. Un guion
+          // entero son unas dos mil palabras: cabe de sobra, y sale mucho más
+          // barato que un documental que se repite.
+          // ───────────────────────────────────────────────────────────────────
           (partes.length
-            ? `EL ACTO ANTERIOR TERMINABA ASÍ (no lo repitas, sigue de ahí):\n` +
-              `…${partes[partes.length - 1].slice(-600)}\n\n`
+            ? `LO QUE YA LLEVAS ESCRITO DE ESTE MISMO DOCUMENTAL. Está dicho: no ` +
+              `vuelvas a contar estos hechos, ni a presentar a quien ya presentaste, ` +
+              `ni a explicar lo ya explicado. Este acto CONTINÚA desde aquí:\n\n` +
+              partes.map((p, k) => `── acto ${k + 1} ──\n${p}`).join('\n\n') +
+              `\n\n`
             : '') +
           `FICHAS DISPONIBLES:\n${listaFichas}\n\n` +
           `Escribe SOLO este acto, en texto plano, empezando por «## ${acto.titulo}». ` +
