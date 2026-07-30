@@ -70,6 +70,55 @@ export function tiemposDeEscenas(tomas, escenas) {
   return { marcas, total: reloj, sinMedir, fiable: sinMedir === 0 };
 }
 
+/**
+ * El texto que se pega al publicar, tal cual: título, descripción con capítulos,
+ * y las etiquetas ya en forma de hashtag.
+ *
+ * Va en el paquete de entrega como un .txt porque publicar desde un teléfono es
+ * copiar y pegar, y tener que recomponer esto a mano en el móvil —con la lista
+ * de capítulos y quince etiquetas— es donde se pierde la mitad del trabajo.
+ *
+ * Sobre los hashtags: son los que el modelo saca DEL CASO, y eso es lo honesto.
+ * Esta herramienta no sabe qué es tendencia hoy, y meter etiquetas de moda que
+ * no tienen que ver con el video es lo que hunde el alcance en vez de subirlo.
+ */
+export function textoDePublicacion(m, titulo) {
+  if (!m) return '';
+  const etiquetas = (m.etiquetas || []).map(comoHashtag).filter(Boolean);
+  return [
+    `TÍTULO`,
+    (m.titulos || [])[0] || titulo || '',
+    '',
+    (m.titulos || []).length > 1 ? 'OTROS TÍTULOS' : '',
+    ...(m.titulos || []).slice(1),
+    (m.titulos || []).length > 1 ? '' : '',
+    'DESCRIPCIÓN',
+    m.descripcion || '',
+    '',
+    'HASHTAGS',
+    etiquetas.join(' '),
+    '',
+    'ETIQUETAS (para el campo de tags, separadas por coma)',
+    (m.etiquetas || []).join(', '),
+  ]
+    .filter((x) => x !== '' || true)
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/** «crimen sin resolver» → «#crimensinresolver». Sin tildes ni signos. */
+function comoHashtag(etiqueta) {
+  const limpio = String(etiqueta || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-zA-Z0-9\s]/g, '')
+    .trim()
+    .split(/\s+/)
+    .join('');
+  return limpio ? `#${limpio.toLowerCase()}` : '';
+}
+
 export async function generarMetadatos({ tema, guion, tomas, escenas, fichas = [], senal }) {
   const tiempos = tiemposDeEscenas(tomas, escenas);
 

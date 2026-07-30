@@ -13,8 +13,9 @@
 // el registro de la nube por su cuenta, porque el usuario no puede.
 
 import { llamar } from '../api.js';
-import { construirHoja, guionFfmpeg, clavesDeLaHoja } from '../../comun/hoja.mjs';
-import { claveFinal } from '../../comun/claves.mjs';
+import { construirHoja, guionFfmpeg, guionEntrega, clavesDeLaHoja } from '../../comun/hoja.mjs';
+import { claveFinal, claveVozEntera, claveLecho } from '../../comun/claves.mjs';
+import { crc32, armarZip, cabeEnZip } from '../../comun/zip.mjs';
 import { deBase64 } from '../imagenes.js';
 import { subirMarca } from './miniatura.js';
 
@@ -114,7 +115,7 @@ export async function montar({ pieza, config, senal, aviso }) {
   aviso?.('Arrancando el montador en la nube…');
   const r = await llamar(
     'montar.lanzar',
-    { pieza: pieza.id, hoja, guionFfmpeg: guion },
+    { pieza: pieza.id, hoja, guionFfmpeg: guion, guionDeEntrega: guionEntrega(hoja) },
     { senal },
   );
 
@@ -166,22 +167,106 @@ export async function esperarMontaje({ ejecucion, senal, aviso }) {
  * descarga.
  */
 export async function bajarFinal({ pieza, senal, alAvanzar }) {
-  const clave = claveFinal(pieza.id);
+  const p = await bajarPista({ clave: claveFinal(pieza.id), tipo: 'video/mp4', senal, alAvanzar });
+  return p && new Blob(p.partes, { type: 'video/mp4' });
+}
+
+/**
+ * Baja un material por trozos y devuelve las piezas, el tamaño y su CRC32.
+ *
+ * Las piezas se devuelven SIN pegar y el CRC se acumula sobre la marcha, que es
+ * lo que permite meterlas después en un ZIP sin que el archivo entero pase nunca
+ * por la memoria de JavaScript. Un documental de quince minutos pasa del giga: si
+ * se materializara, el navegador del teléfono recarga la página a media descarga.
+ */
+export async function bajarPista({ clave, tipo, senal, alAvanzar }) {
   const partes = [];
   let desde = 0;
   let total = null;
+  let crc = 0;
 
   do {
     if (senal?.aborted) throw new Error('Detenido.');
     const r = await llamar('bajar', { clave, desde }, { senal });
     if (!r.existe) return null;
 
-    // Cada trozo va directo a un Blob: nunca se acumula el video entero en memoria.
-    partes.push(deBase64(r.datos, 'video/mp4'));
+    const trozo = deBase64(r.datos, tipo);
+    partes.push(trozo);
+    crc = crc32(new Uint8Array(await trozo.arrayBuffer()), crc);
     total = r.total;
     desde = r.hasta + 1;
     alAvanzar?.(desde, total);
   } while (total && desde < total);
 
-  return new Blob(partes, { type: 'video/mp4' });
+  return { partes, bytes: desde, crc };
+}
+
+/**
+ * El paquete de entrega: todo lo que hace falta para publicar, en un archivo.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Debería descargar un ZIP donde venga ya el video, un archivo de texto con la
+ *  descripción que va en el video al publicarlo más los hashtags, toda la música
+ *  continua sola, y aparte toda la voz en un solo audio.»
+ *
+ * Las dos pistas sueltas no se fabrican aquí: el montaje YA las hizo para poder
+ * mezclarlas y hasta ahora las tiraba al terminar. Lo único nuevo es subirlas.
+ *
+ * Un aviso honesto sobre el tiempo: el paquete NO se baja más rápido que el
+ * video solo — trae más cosas, así que tarda algo más. Lo que tarda es el video,
+ * y eso es su tamaño, no el formato.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export async function bajarPaquete({ pieza, titulo, texto, senal, alAvanzar }) {
+  const nombre = (titulo || 'documental').replace(/[^\w\sáéíóúñÁÉÍÓÚÑ-]/gi, '').trim() || 'documental';
+
+  const video = await bajarPista({
+    clave: claveFinal(pieza.id),
+    tipo: 'video/mp4',
+    senal,
+    alAvanzar: (h, t) => alAvanzar?.('el video', h, t),
+  });
+  if (!video) return null;
+
+  // Las pistas sueltas son de un montaje reciente: una pieza montada antes de que
+  // el contenedor las subiera no las tiene, y eso no es motivo para no entregar
+  // el paquete — se dice cuáles faltan y se sigue.
+  const sueltas = [];
+  for (const [clave, archivo, comoSeLlama] of [
+    [claveVozEntera(pieza.id), `${nombre} · voz.m4a`, 'la voz'],
+    [claveLecho(pieza.id), `${nombre} · música.m4a`, 'la música'],
+  ]) {
+    const p = await bajarPista({
+      clave,
+      tipo: 'audio/mp4',
+      senal,
+      alAvanzar: (h, t) => alAvanzar?.(comoSeLlama, h, t),
+    }).catch(() => null);
+    if (p) sueltas.push({ nombre: archivo, ...p });
+  }
+
+  const bytesTexto = new TextEncoder().encode(texto || '');
+  const entradas = [
+    { nombre: `${nombre}.mp4`, ...video },
+    { nombre: `${nombre} · publicar.txt`, partes: [bytesTexto], bytes: bytesTexto.length, crc: crc32(bytesTexto) },
+    ...sueltas,
+  ];
+
+  // Por encima de cuatro gigas haría falta ZIP64, y un ZIP que declara un tamaño
+  // y trae otro no se abre. Antes que entregar un archivo roto, se entrega el
+  // video solo y se dice por qué.
+  if (!cabeEnZip(entradas)) {
+    return {
+      blob: new Blob(video.partes, { type: 'video/mp4' }),
+      archivo: `${nombre}.mp4`,
+      incompleto: 'El paquete pasa de cuatro gigas y no cabe en un ZIP. Se entrega el video solo.',
+    };
+  }
+
+  return {
+    blob: new Blob(armarZip(entradas), { type: 'application/zip' }),
+    archivo: `${nombre}.zip`,
+    lleva: entradas.map((e) => e.nombre),
+    faltan: 2 - sueltas.length,
+  };
 }

@@ -16,6 +16,7 @@ import { normalizar } from './config.js';
 import * as local from './local.js';
 import { llamar } from './api.js';
 import { idPieza } from '../comun/claves.mjs';
+import { MEDIDOR_DE_TONO } from '../comun/audio.mjs';
 
 // ── Los tres caminos ──────────────────────────────────────────────────────────
 
@@ -289,12 +290,23 @@ function sanearToma(bruto, i, proyecto) {
     // cada sílaba final y no hay suspense posible.
     respiro: Math.max(0, Math.min(8, Number(t.respiro) || 0)),
     entrada: Math.max(0, Math.min(8, Number(t.entrada) || 0)),
-    // El tono medido de esta toma, en hercios. Con él se igualan todas al mismo,
-    // que es lo que arregla el «parece hasta diferentes voces» de las voces que
-    // interpretan cada llamada por su cuenta. Se guarda porque medirlo exige
-    // bajar el audio: sin esto, cada recarga lo perdería y habría que preparar
-    // otra vez para que el montaje pudiera igualar.
-    hz: Number(t.hz) > 0 && Number(t.hz) < 1000 ? +Number(t.hz).toFixed(2) : 0,
+    // El tono medido de esta toma, en hercios, y CON QUÉ VERSIÓN DEL MEDIDOR.
+    //
+    // Con el tono se igualan todas las tomas al mismo —lo que arregla el «parece
+    // hasta diferentes voces»— y se guarda porque medirlo exige bajar el audio.
+    //
+    // La versión no es burocracia: el medidor de la v1 se iba de octava por
+    // encima de 150 Hz, y una pieza medida con él tiene la mitad de los valores
+    // a la mitad de lo que son. Aplicar eso hunde unas tomas y deja otras — «una
+    // grave, una normal»—, y el montaje no puede saberlo mirando el número. Una
+    // medida de vintage desconocido SE TIRA: sin tono no se iguala, que es lo
+    // peor que puede pasar, en vez de igualar al revés. Al preparar se vuelve a
+    // medir y a sellar.
+    ...(() => {
+      const hz = Number(t.hz);
+      const bueno = Number(t.hzV) === MEDIDOR_DE_TONO && hz > 0 && hz < 1000;
+      return { hz: bueno ? +hz.toFixed(2) : 0, hzV: bueno ? MEDIDOR_DE_TONO : 0 };
+    })(),
     // §8.2: cada toma sabe de qué tipo es su imagen, y eso puede salir en pantalla.
     tipoImagen: ['generada', 'archivo', 'reconstruccion'].includes(t.tipoImagen)
       ? t.tipoImagen

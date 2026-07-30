@@ -29,7 +29,7 @@
 
 import { llamar } from '../api.js';
 import { bloquesDeNarracion } from '../cola.js';
-import { leerWav, escribirWav, repartirBloque, tonoDeVoz } from '../../comun/audio.mjs';
+import { leerWav, escribirWav, repartirBloque, tonoDeVoz, MEDIDOR_DE_TONO } from '../../comun/audio.mjs';
 import { claveToma } from '../../comun/claves.mjs';
 import { deBase64, aBase64 } from '../imagenes.js';
 
@@ -159,6 +159,7 @@ export async function narrarBloque({ bloque, pieza, config, senal, alEsperar }) 
       // «parece hasta diferentes voces» de una voz que interpreta cada llamada por
       // su cuenta. Sale gratis: el audio ya está descodificado.
       hz: +tonoDeVoz(trozo.muestras, trozo.frecuencia).toFixed(2),
+      hzV: MEDIDOR_DE_TONO,
     });
   }
 

@@ -89,14 +89,16 @@ export function duracion({ muestras, frecuencia, canales = 1 }) {
 }
 
 /**
- * El periodo de la voz en muestras, por autocorrelación del trozo más sonoro.
+ * La versión del medidor de tono. Sube cuando el medidor cambia de resultado.
  *
- * Hace falta para que el agravador solape sus granos EN FASE (ver abajo). Se
- * mide una vez por toma: es el mismo narrador, y su tono no cambia tanto dentro
- * de una toma como para que valga la pena buscarlo grano a grano —eso es lo que
- * hace `atempo` en ffmpeg, y es justo lo que no cabe en un teléfono con 83
- * tomas—. Se analiza el trozo más sonoro porque un silencio no tiene periodo.
+ * La v1 cogía el máximo absoluto de la autocorrelación y se iba de octava por
+ * encima de 150 Hz. Las piezas medidas con ella llevan la mitad de los valores a
+ * la mitad de lo que son, y aplicarlos hunde unas tomas y deja otras. Un número
+ * de tono sin su versión no se puede usar: no hay forma de saber, mirándolo, si
+ * está bien o es la mitad.
  */
+export const MEDIDOR_DE_TONO = 2;
+
 function analizarPeriodo(x, sr) {
   const MIN = Math.max(2, Math.floor(sr / 300));
   const MAX = Math.floor(sr / 70);

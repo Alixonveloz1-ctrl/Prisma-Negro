@@ -575,3 +575,34 @@ function zoompan(camara, frames, W, H, fps) {
 
   return `zoompan=z='${z}':x='${x}':y='${y}':d=${n}:s=${W}x${H}:fps=${fps}`;
 }
+
+/**
+ * El guion de ENTREGA. Aparte del de montaje, y no por orden: por honradez.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * El montaje tiene una regla que se comprueba contando: UNA codificación de
+ * video y UNA de audio en todo el episodio (§5.5). Es la diferencia entre un
+ * archivo limpio y uno con dos generaciones de compresión encima.
+ *
+ * Las pistas sueltas que pide la entrega —la voz entera y el lecho de música,
+ * para poder retocar el sonido sin volver a montar— también son codificaciones
+ * de audio. Metidas en el guion de montaje, la cuenta pasaba de una a tres y la
+ * comprobación dejaba de significar nada: cualquiera podría colar mañana una
+ * recodificación de verdad y nadie se enteraría.
+ *
+ * Así que van en su propio guion, que corre DESPUÉS y no toca el video. La
+ * cuenta del montaje sigue siendo uno y uno, y sigue siendo cierta.
+ *
+ * No fabrican nada nuevo: `voz.wav` y `musica.wav` ya existen —hacen falta para
+ * la mezcla— y hasta ahora se tiraban al terminar.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export function guionEntrega(hoja) {
+  const a = { ...PREDETERMINADO, ...(hoja.ajustes || {}) };
+  const L = ['#!/bin/sh', '# Las pistas sueltas del paquete de entrega. No tocan el video.', ''];
+  L.push(`ffmpeg -y -v error -i voz.wav -c:a aac -b:a ${a.bitrateAudio} voz.m4a`);
+  if ((hoja.escenas || []).some((e) => e.musica)) {
+    L.push(`ffmpeg -y -v error -i musica.wav -c:a aac -b:a ${a.bitrateAudio} musica.m4a`);
+  }
+  return L.join('\n') + '\n';
+}

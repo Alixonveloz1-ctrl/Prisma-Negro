@@ -420,10 +420,108 @@ export const invariantes = [
   },
 
   {
+    nombre: 'lo-que-se-baja-es-el-paquete-de-publicar',
+    dice: '«Estamos descargando solamente el MP4. Debería descargar un ZIP donde venga ya el video, un archivo de texto con la descripción que va al publicarlo más los hashtags, toda la música continua sola, y aparte toda la voz en un solo audio.» Las dos pistas sueltas ya las fabrica el montaje para poder mezclarlas y las tiraba al terminar; el texto ya lo escribe la fase de metadatos y había que recomponerlo a mano en el teléfono.',
+    comprobar(ctx) {
+      const { armarZip, crc32, cabeEnZip, guionEntrega, construirHoja, textoDePublicacion } = ctx.fn;
+      const fallos = [];
+
+      // 1 · EL ZIP SE ARMA DE VERDAD Y SE ABRE. Un ZIP mal contado no da error:
+      // da un archivo que el teléfono no abre después de bajar un giga.
+      const enc = new TextEncoder();
+      const texto = enc.encode('TÍTULO\nEl caso\n\nHASHTAGS\n#misterio #truecrime');
+      const trozos = [];
+      let crc = 0;
+      let bytes = 0;
+      for (let k = 0; k < 4; k++) {
+        const t = new Uint8Array(5000).fill(k + 1);
+        trozos.push(t);
+        crc = crc32(t, crc);
+        bytes += t.length;
+      }
+      const piezas = armarZip([
+        { nombre: 'doc.mp4', partes: trozos, bytes, crc },
+        { nombre: 'doc · publicar.txt', partes: [texto], bytes: texto.length, crc: crc32(texto) },
+      ]);
+      const zip = new Uint8Array(piezas.reduce((n, p) => n + p.length, 0));
+      let pos = 0;
+      for (const p of piezas) {
+        zip.set(p, pos);
+        pos += p.length;
+      }
+      const leer32 = (o) => zip[o] | (zip[o + 1] << 8) | (zip[o + 2] << 16) | (zip[o + 3] << 24);
+      // La firma del final del índice, y que el índice esté donde dice estar.
+      const fin = zip.length - 22;
+      if (leer32(fin) >>> 0 !== 0x06054b50) fallos.push('El ZIP no termina con su índice: no se abre.');
+      const cuantos = zip[fin + 8] | (zip[fin + 10] << 8);
+      if (zip[fin + 8] !== 2) fallos.push(`El índice del ZIP declara ${cuantos} archivos y hay 2.`);
+      const inicioIndice = leer32(fin + 16) >>> 0;
+      if ((leer32(inicioIndice) >>> 0) !== 0x02014b50) {
+        fallos.push('El índice del ZIP no está donde el final dice que está.');
+      }
+      // Y el CRC del archivo grande tiene que ser el acumulado por trozos: si se
+      // calculara al final habría que releer más de un giga en el teléfono.
+      const entero = new Uint8Array(bytes);
+      trozos.reduce((o, t) => (entero.set(t, o), o + t.length), 0);
+      if (crc32(entero) !== crc) fallos.push('El CRC acumulado por trozos no coincide con el del archivo entero.');
+      // Por encima de cuatro gigas se avisa en vez de entregar un ZIP roto.
+      if (cabeEnZip([{ nombre: 'x', bytes: 5e9 }])) fallos.push('Un archivo de cinco gigas se da por bueno en un ZIP clásico.');
+
+      // 2 · Las pistas sueltas salen de lo que el montaje YA fabricó, y en su
+      // propio guion: metidas en el de montaje, la cuenta de codificaciones
+      // pasaba de una a tres y esa comprobación dejaba de significar nada.
+      const hoja = construirHoja({
+        pieza: 'p01',
+        tomas: [{ i: 0, escena: 0, segundos: 5, medida: true, audio: 'ok', plano: { encuadre: 'x', movimientoCamara: 'fijo', lugar: 'y', luz: 'z', sujetos: [], descripcion: 'd' } }],
+        escenas: [{ n: 0, musica: 'p01/mus/000' }],
+      });
+      const entrega = guionEntrega(hoja);
+      if (!/-i voz\.wav/.test(entrega) || !/voz\.m4a/.test(entrega)) fallos.push('La entrega no saca la voz suelta.');
+      if (!/-i musica\.wav/.test(entrega) || !/musica\.m4a/.test(entrega)) fallos.push('La entrega no saca la música suelta.');
+      if (/salida\.mp4|-c:v/.test(entrega)) fallos.push('El guion de entrega toca el video: eso es una segunda generación.');
+      // Una pieza sin música no pide un lecho que no existe.
+      const sinMus = construirHoja({
+        pieza: 'p01',
+        tomas: [{ i: 0, escena: 0, segundos: 5, medida: true, audio: 'ok', plano: { encuadre: 'x', movimientoCamara: 'fijo', lugar: 'y', luz: 'z', sujetos: [], descripcion: 'd' } }],
+        escenas: [{ n: 0, musica: null }],
+      });
+      if (/musica\.m4a/.test(guionEntrega(sinMus))) fallos.push('Sin música se pide igualmente el lecho suelto.');
+
+      // 3 · Y el contenedor sube por LISTA, sin conocer un solo nombre (§7.4).
+      const sh = fuente(ctx, 'montador/montar.sh');
+      if (!/salidas\.tsv/.test(sh)) fallos.push('El contenedor no tiene lista de subidas: habría que nombrarle los archivos.');
+      if (/SALIDA_VOZ|SALIDA_LECHO|voz\.m4a|musica\.m4a/.test(sh)) {
+        fallos.push('El contenedor nombra las pistas sueltas: se despliega a mano y siempre irá por detrás (§7.4).');
+      }
+      const mon = fuente(ctx, 'api/_lib/montador.js');
+      if (!/salidas:/.test(mon)) fallos.push('El encargo no lleva la lista de subidas.');
+
+      // 4 · El texto de publicar lleva los hashtags hechos, no las etiquetas
+      // crudas: publicar desde el teléfono es copiar y pegar.
+      const t = textoDePublicacion(
+        { titulos: ['Uno'], descripcion: 'Va de esto.', etiquetas: ['crimen sin resolver', 'misterio médico'] },
+        'x',
+      );
+      if (!/#crimensinresolver/.test(t)) fallos.push('Las etiquetas no salen como hashtag: sin espacios ni tildes.');
+      if (!/#misteriomedico/.test(t)) fallos.push('Un hashtag conserva la tilde: no funciona así.');
+      if (!/DESCRIPCIÓN/.test(t) || !/Va de esto\./.test(t)) fallos.push('El texto no lleva la descripción.');
+
+      // 5 · Y la pantalla baja el paquete, no el MP4 pelado.
+      if (!/bajarPaquete/.test(fuente(ctx, 'app/main.js'))) {
+        fallos.push('El botón sigue bajando solo el video.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: solo el MP4.
+    romper: (ctx) =>
+      conFuncion(ctx, 'guionEntrega', () => '#!/bin/sh\n'),
+  },
+
+  {
     nombre: 'las-tomas-se-igualan-al-mismo-tono',
     dice: '«Parece hasta diferentes voces.» Las voces que interpretan cada llamada por su cuenta salen con un tono distinto en cada una: con veinte llamadas para 83 tomas, el documental cambia de narrador veinte veces. Ni la temperatura a cero ni los bloques largos lo arreglan —solo lo espacian—. Se mide el tono de cada toma y se llevan TODAS al mismo, con el mismo par asetrate/atempo que la gravedad: sin mover el reloj.',
     comprobar(ctx) {
-      const { construirHoja, guionFfmpeg, correccionDeTono, sanear } = ctx.fn;
+      const { construirHoja, guionFfmpeg, correccionDeTono, sanear, MEDIDOR_DE_TONO } = ctx.fn;
       const fallos = [];
       const plano = { encuadre: 'plano medio', movimientoCamara: 'fijo', lugar: 'x', luz: 'y', sujetos: [], descripcion: 'd' };
       const toma = (i, hz) => ({ i, escena: 0, segundos: 4, medida: true, plano, audio: 'ok', corteExacto: true, hz });
@@ -515,8 +613,17 @@ export const invariantes = [
         fallos.push('La previa no suma el ajuste de tono: se elegiría oyendo algo distinto de lo que se exporta.');
       }
       // Y sobrevive a la recarga: medirlo exige bajar los 83 audios otra vez.
-      const p = sanear({ id: 'p01', piezas: [{ id: 'p01', tomas: [{ i: 0, hz: 123.45 }] }] });
+      const p = sanear({ id: 'p01', piezas: [{ id: 'p01', tomas: [{ i: 0, hz: 123.45, hzV: MEDIDOR_DE_TONO }] }] });
       if (p.piezas[0].tomas[0].hz !== 123.45) fallos.push('El tono medido se pierde al recargar: habría que volver a medirlo.');
+      // PERO SOLO SI VIENE SELLADO POR EL MEDIDOR DE AHORA. El medidor v1 se iba
+      // de octava, así que media pieza tiene los valores a la mitad; aplicarlos
+      // hunde unas tomas y deja otras, y mirando el número no se distingue. Una
+      // medida de vintage desconocido se tira: sin tono no se iguala, que es lo
+      // peor que puede pasar, en vez de igualar al revés.
+      const viejo = sanear({ id: 'p01', piezas: [{ id: 'p01', tomas: [{ i: 0, hz: 82.5 }] }] });
+      if (viejo.piezas[0].tomas[0].hz !== 0) {
+        fallos.push('Una medida sin sellar se da por buena: si la hizo el medidor viejo, desafina media pieza.');
+      }
       return fallos;
     },
     // Se rompe como estaba: un solo tono para toda la pieza, el que eligió el

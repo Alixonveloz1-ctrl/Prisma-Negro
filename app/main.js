@@ -2477,21 +2477,40 @@ accion(
 accion(
   'b-bajar',
   async () => {
-    avisar('paso5', 'Bajando por trozos…');
-    const blob = await montajeFase.bajarFinal({
+    // EL PAQUETE, no solo el MP4: el video, el texto que se pega al publicar con
+    // sus hashtags, y las dos pistas de audio sueltas para poder retocar el
+    // sonido sin volver a montar.
+    const m = pieza().metadatos;
+    if (!m) {
+      avisar('paso5', 'Sin metadatos: el paquete irá sin el texto de publicación. Dale a «Metadatos» si lo quieres dentro.');
+    }
+    const r = await montajeFase.bajarPaquete({
       pieza: pieza(),
-      alAvanzar: (hecho, total) =>
-        avisar('paso5', `Bajando… ${(hecho / 1048576).toFixed(0)} de ${(total / 1048576).toFixed(0)} MB`),
+      titulo: P.titulo,
+      texto: metadatos.textoDePublicacion(m, P.titulo),
+      alAvanzar: (que, hecho, total) =>
+        avisar(
+          'paso5',
+          `Bajando ${que}… ${(hecho / 1048576).toFixed(0)} de ${(total / 1048576).toFixed(0)} MB`,
+        ),
     });
-    if (!blob) throw new Error('El video montado no está en el almacén todavía.');
+    if (!r) throw new Error('El video montado no está en el almacén todavía.');
 
-    const url = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(r.blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${P.titulo.replace(/[^\w\sáéíóúñÁÉÍÓÚÑ-]/gi, '').trim() || 'documental'}.mp4`;
+    a.download = r.archivo;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
-    avisar('paso5', 'Descargado.', 'bueno');
+    avisar(
+      'paso5',
+      r.incompleto ||
+        `Descargado ${r.archivo}: ${r.lleva.length} archivos.` +
+          (r.faltan
+            ? ` Faltan las pistas sueltas de voz y música: las sube el montaje, así que estarán en el próximo que hagas.`
+            : ''),
+      r.incompleto || r.faltan ? 'malo' : 'bueno',
+    );
   },
   'paso5',
 );

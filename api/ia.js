@@ -288,6 +288,9 @@ async function despachar(modo, c) {
         pieza: exigir(c, 'pieza'),
         hoja: c.hoja,
         guionFfmpeg: exigir(c, 'guionFfmpeg'),
+        // El guion de entrega es opcional: un cliente anterior no lo manda y el
+        // montaje sigue funcionando igual, solo que sin pistas sueltas.
+        guionDeEntrega: c.guionDeEntrega || '',
       });
     }
 

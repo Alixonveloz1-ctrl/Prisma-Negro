@@ -59,6 +59,10 @@ REGISTRO="$(jq -r '.registro // empty' encargo.json)"
 # sabe cómo se llaman los archivos que va a abrir: los escribe desde los datos.
 jq -r '.guion' encargo.json > guion.sh || rendirse "El encargo no trae guion de montaje."
 jq -r '.manifiesto' encargo.json > manifiesto.tsv || rendirse "El encargo no trae manifiesto."
+# La lista de subidas es opcional: un encargo de una versión anterior no la trae,
+# y entonces solo se sube el resultado por SALIDA, como siempre.
+jq -r '.salidas // empty' encargo.json > salidas.tsv 2>/dev/null || true
+jq -r '.entrega // empty' encargo.json > entrega.sh 2>/dev/null || true
 
 [ -s guion.sh ] || rendirse "El guion de montaje llegó vacío."
 [ -s manifiesto.tsv ] || rendirse "El manifiesto llegó vacío: no hay nada que bajar."
@@ -130,6 +134,35 @@ fi
 # ── 5. El resultado ──────────────────────────────────────────────────────────
 avisa "Subiendo el resultado ($(du -h salida.mp4 | cut -f1))."
 gcloud storage cp salida.mp4 "$SALIDA" || rendirse "No se pudo subir el resultado a SALIDA."
+
+# ── 5a. La entrega: las pistas sueltas ───────────────────────────────────────
+#
+# Su propio guion, aparte del de montaje, y corre DESPUÉS. Si falla, se dice en
+# la queja y se sigue: el video ya está montado y subido, y quedarse sin las
+# pistas sueltas no es motivo para tirar un montaje entero.
+if [ -s entrega.sh ]; then
+  avisa "Preparando las pistas sueltas."
+  sh entrega.sh 2>>"$QUEJA" || echo "El guion de entrega falló." >>"$QUEJA"
+fi
+
+# ── 5b. Lo demás que haya que subir, según la LISTA DE SALIDAS ───────────────
+#
+# Simétrica al manifiesto de bajadas, y por el mismo motivo (§7.4): el contenedor
+# no sabe qué es ninguno de estos archivos —el video, la voz suelta, el lecho de
+# música— ni cómo se llaman. Le llega `archivo local → destino` y copia.
+#
+# Lo que no exista se salta: una pieza sin música no deja lecho, y eso no es un
+# fallo. Y NADA de aquí es motivo para rendirse: el resultado ya está entregado.
+if [ -s salidas.tsv ]; then
+  while IFS="$(printf '\t')" read -r archivo destino || [ -n "$archivo" ]; do
+    [ -n "$destino" ] || continue
+    [ -s "$archivo" ] || continue
+    # El resultado ya subió por SALIDA; no se sube dos veces.
+    [ "$archivo" != "salida.mp4" ] || continue
+    gcloud storage cp "$archivo" "$destino" 2>>"$QUEJA" ||
+      echo "No se pudo subir $archivo" >>"$QUEJA"
+  done < salidas.tsv
+fi
 
 if [ -n "$REGISTRO" ]; then
   gcloud storage cp "$QUEJA" "$REGISTRO" 2>/dev/null || true

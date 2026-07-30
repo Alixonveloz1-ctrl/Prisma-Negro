@@ -151,14 +151,19 @@ async function funcionesPuras() {
   const aud = await import('../comun/audio.mjs');
   const mus = await import('../app/fases/musica.js');
   const nar = await import('../app/fases/narracion.js');
+  const met = await import('../app/fases/metadatos.js');
   const est2 = await import('../comun/estilos.mjs');
   // El proveedor se importa entero para poder EJECUTAR lo que no llama a la nube
   // —normalizar el WAV que devuelve el servicio de voz, por ejemplo—: mirarlo en
   // el texto fuente no habría cazado que un tamaño declarado a cero deja el audio
   // sin una sola muestra.
   const prv = await import('../api/_lib/proveedor.js');
+  const zip = await import('../comun/zip.mjs');
   return {
     normalizarWav: prv.normalizarWav,
+    armarZip: zip.armarZip,
+    crc32: zip.crc32,
+    cabeEnZip: zip.cabeEnZip,
     atmosferaDe: mus.atmosferaDe,
     planificarNarracion: nar.planificar,
     // La lista de estilos entra por aquí para poder recorrerlos todos: una
@@ -181,6 +186,7 @@ async function funcionesPuras() {
     agravarMuestras: aud.agravarMuestras,
     periodoDeVoz: aud.periodoDeVoz,
     tonoDeVoz: aud.tonoDeVoz,
+    MEDIDOR_DE_TONO: aud.MEDIDOR_DE_TONO,
     leerWav: aud.leerWav,
     escribirWav: aud.escribirWav,
     contarPalabras: gui.contarPalabras,
@@ -199,6 +205,8 @@ async function funcionesPuras() {
     claveFotograma: cla.claveFotograma,
     claveClip: cla.claveClip,
     construirHoja: hoj.construirHoja,
+    guionEntrega: hoj.guionEntrega,
+    textoDePublicacion: met.textoDePublicacion,
     correccionDeTono: hoj.correccionDeTono,
     referenciaDeTono: hoj.referenciaDeTono,
     aLaOctavaDe: hoj.aLaOctavaDe,

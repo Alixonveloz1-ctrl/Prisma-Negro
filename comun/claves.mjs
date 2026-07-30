@@ -31,6 +31,12 @@ export const EXTENSIONES = {
   fichas: '.json',
   registro: '.txt',
   final: '.mp4',
+  // Las dos pistas sueltas del montaje. El contenedor ya las fabrica —la voz
+  // entera en PCM y el lecho de música entero— y antes las tiraba al terminar:
+  // subirlas cuesta un `cp` y son lo que hace falta para retocar el audio fuera
+  // sin volver a montar.
+  voz: '.m4a',
+  lecho: '.m4a',
   propio: '.bin',
 };
 
@@ -60,6 +66,8 @@ export const clavePortada = (pieza) => `portada/${pieza}`;
 export const claveMiniatura = (pieza) => `${pieza}/miniatura`;
 export const claveHoja = (pieza) => `${pieza}/hoja`;
 export const claveFinal = (pieza) => `${pieza}/final`;
+export const claveVozEntera = (pieza) => `${pieza}/voz`;
+export const claveLecho = (pieza) => `${pieza}/lecho`;
 
 /** El tipo de material que hay detrás de una clave. */
 export function tipoDe(clave) {

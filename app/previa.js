@@ -19,7 +19,7 @@
 
 import { material, tipoDeClave } from './material.js';
 import { construirHoja, correccionDeTono, referenciaDeTono } from '../comun/hoja.mjs';
-import { agravarMuestras, tonoDeVoz, leerWav } from '../comun/audio.mjs';
+import { agravarMuestras, tonoDeVoz, leerWav, MEDIDOR_DE_TONO } from '../comun/audio.mjs';
 import { nombreLocal } from '../comun/claves.mjs';
 
 /**
@@ -79,8 +79,9 @@ export async function preparar({ pieza, config, senal, alAvanzar }) {
       try {
         const wav = leerWav(await voz.arrayBuffer());
         const hz = tonoDeVoz(wav.muestras, wav.frecuencia);
-        if (hz > 0 && dueña.hz !== +hz.toFixed(2)) {
+        if (hz > 0 && (dueña.hz !== +hz.toFixed(2) || dueña.hzV !== MEDIDOR_DE_TONO)) {
           dueña.hz = +hz.toFixed(2);
+          dueña.hzV = MEDIDOR_DE_TONO;
           medidas++;
         }
       } catch {

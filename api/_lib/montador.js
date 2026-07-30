@@ -102,7 +102,7 @@ export function componerManifiesto(hoja) {
  * contenedor con TRES variables: dónde está el encargo, dónde está el material,
  * dónde dejar el resultado. Nada más.
  */
-export async function lanzar({ pieza, hoja, guionFfmpeg }) {
+export async function lanzar({ pieza, hoja, guionFfmpeg, guionDeEntrega = '' }) {
   // El guion de ffmpeg Y el manifiesto viajan DENTRO del encargo, como datos. Así el
   // contenedor conoce UN protocolo —la forma de este objeto— y CERO nombres de
   // archivo: puede montar material que no existía cuando se desplegó (§7.4).
@@ -111,10 +111,24 @@ export async function lanzar({ pieza, hoja, guionFfmpeg }) {
     pieza,
     hoja,
     guion: guionFfmpeg,
+    // El guion de ENTREGA va aparte del de montaje: ver `guionEntrega`. Corre
+    // después, no toca el video, y su fallo no tumba el montaje.
+    entrega: guionDeEntrega || '',
     manifiesto: componerManifiesto(hoja),
     // §7.6: dónde escribir la queja para que la aplicación pueda leerla, porque el
     // usuario no lee registros de la nube desde el teléfono.
     registro: rutaGs(`${pieza}/registro`),
+    // Y la lista de SUBIDAS, simétrica al manifiesto de bajadas: `archivo local →
+    // destino`. El contenedor copia lo que haya y no sabe qué es ninguno de los
+    // tres — lo mismo que con las bajadas (§7.4). Lo que no exista se salta: una
+    // pieza sin música no deja lecho, y eso no es un fallo.
+    salidas: [
+      ['salida.mp4', rutaGs(`${pieza}/final`)],
+      ['voz.m4a', rutaGs(`${pieza}/voz`)],
+      ['musica.m4a', rutaGs(`${pieza}/lecho`)],
+    ]
+      .map(([a, b]) => `${a}\t${b}`)
+      .join('\n') + '\n',
   };
 
   await subir(`${pieza}/encargo`, Buffer.from(JSON.stringify(encargo)), 'application/json');
