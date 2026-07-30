@@ -154,7 +154,7 @@ function agravarBuffer(ctx, buf, semitonos) {
  * encadenando «cuando acabe este, el siguiente»: encadenar acumula el retraso de
  * cada arranque y al final del documental la imagen va por delante de la voz.
  */
-export function reproductor({ lienzo, marca, alCambiar, alTerminar }) {
+export function reproductor({ lienzo, clip, marca, alCambiar, alTerminar }) {
   let ctx = null;
   let material = null;
   let fuentes = [];
@@ -194,6 +194,11 @@ export function reproductor({ lienzo, marca, alCambiar, alTerminar }) {
     if (urlActual) URL.revokeObjectURL(urlActual);
     urlActual = null;
     animacion?.cancel();
+    if (clip) {
+      clip.pause();
+      clip.removeAttribute('src');
+      clip.style.display = 'none';
+    }
 
     if (!t.visual) {
       lienzo.removeAttribute('src');
@@ -201,19 +206,34 @@ export function reproductor({ lienzo, marca, alCambiar, alTerminar }) {
       return;
     }
     urlActual = URL.createObjectURL(t.visual);
+
+    // UNA TOMA CON CLIP ES UN VIDEO, y el visor era solo un <img>: un mp4 dentro
+    // de un <img> no se ve. La previa enseñaba un hueco justo en las tomas que
+    // más costaron, y el montaje sí las monta.
+    //
+    // En bucle, que es lo que hace el video final cuando el clip se queda corto
+    // para lo que dura la locución. Y mudo: el sonido de la previa lo lleva Web
+    // Audio, y el clip trae el suyo propio, que en el montaje no se usa.
+    if (t.movimiento && clip) {
+      lienzo.style.visibility = 'hidden';
+      clip.src = urlActual;
+      clip.style.display = 'block';
+      clip.currentTime = 0;
+      clip.play().catch(() => {});
+      return;
+    }
+
     lienzo.src = urlActual;
     lienzo.style.visibility = 'visible';
 
     // §4.7: las tomas fijas NO se quedan quietas. Se les aplica el mismo recorrido
     // que les va a poner el montaje.
-    const pasos = t.movimiento ? null : CAMARA[t.camara] || CAMARA.acercar;
-    if (pasos) {
-      animacion = lienzo.animate(pasos, {
-        duration: t.duracion * 1000,
-        easing: 'linear',
-        fill: 'forwards',
-      });
-    }
+    const pasos = CAMARA[t.camara] || CAMARA.acercar;
+    animacion = lienzo.animate(pasos, {
+      duration: t.duracion * 1000,
+      easing: 'linear',
+      fill: 'forwards',
+    });
   }
 
   return {
@@ -391,6 +411,7 @@ export function reproductor({ lienzo, marca, alCambiar, alTerminar }) {
       corriendo = false;
       cancelAnimationFrame(reloj);
       animacion?.cancel();
+      clip?.pause();
       for (const f of fuentes) {
         try {
           f.stop();

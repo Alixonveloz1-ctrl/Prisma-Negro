@@ -358,14 +358,28 @@ export function guionFfmpeg(hoja) {
     const cadenas = [];
 
     if (t.movimiento) {
-      // §6: los generadores de video tienen listas cerradas de duración. Si el clip
-      // se queda corto para lo que dura la locución, se congela el último fotograma
-      // para cubrir el resto.
+      // §6: los generadores de video tienen listas CERRADAS de duración, así que el
+      // clip casi nunca dura lo que dura la locución. Si la toma pide doce segundos
+      // y el clip trae ocho, hay que cubrir cuatro.
+      //
+      // ─────────────────────────────────────────────────────────────────────────
+      // ANTES SE CONGELABA EL ÚLTIMO FOTOGRAMA. «Se queda tieso hasta que termina
+      // el audio y pasa a la siguiente toma. Eso se ve horrible.»
+      //
+      // Y tiene razón: cuatro segundos de imagen muerta en medio de un plano que
+      // se estaba moviendo se leen como un fallo de reproducción, no como una
+      // decisión. El clip se REPITE, que es lo que hace la previa y lo que se
+      // eligió al verlo.
+      //
+      // El bucle va en la ENTRADA (`-stream_loop -1`), no en el filtro: el filtro
+      // `loop` guarda los fotogramas en memoria y un clip de ocho segundos en
+      // 1080p son setecientos megas. Repitiendo la entrada, ffmpeg vuelve a leer
+      // el archivo y `-frames:v` corta donde toca — que es lo que fija la
+      // duración exacta, igual que antes.
+      // ─────────────────────────────────────────────────────────────────────────
       cadenas.push(
         `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,` +
-          `crop=${W}:${H},fps=${fps},` +
-          `tpad=stop_mode=clone:stop_duration=${(t.duracion + 1).toFixed(3)},` +
-          `setsar=1[v]`,
+          `crop=${W}:${H},fps=${fps},setsar=1[v]`,
       );
     } else {
       // §4.7: se amplía la imagen ANTES de recorrerla para que no pixele.
@@ -389,7 +403,9 @@ export function guionFfmpeg(hoja) {
       mapa = '[vo]';
     }
 
-    const bucle = t.movimiento ? '' : '-loop 1 ';
+    // La imagen fija se repite sola para durar lo que pida la toma; el clip se
+    // repite entero cuando se queda corto. `-frames:v` es lo que corta los dos.
+    const bucle = t.movimiento ? '-stream_loop -1 ' : '-loop 1 ';
     p(
       `ffmpeg -y -v error ${bucle}${entradas} ` +
         `-filter_complex ${sh(cadenas.join(';'))} ` +

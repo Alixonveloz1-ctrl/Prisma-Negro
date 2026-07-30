@@ -1416,6 +1416,7 @@ function asegurarReproductor() {
   if (reproductor) return reproductor;
   reproductor = previa.reproductor({
     lienzo: $('previa-imagen'),
+    clip: $('previa-clip'),
     marca: $('previa-marca'),
     alCambiar: (t, k, total, segundo) => {
       $('previa-vacio').style.display = 'none';

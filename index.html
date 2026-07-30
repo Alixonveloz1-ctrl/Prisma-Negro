@@ -241,7 +241,7 @@ nav.pestanas button.on{background:var(--violeta);border-color:var(--violeta);col
   position:relative;aspect-ratio:16/9;background:#06070C;border-radius:var(--r-m);
   overflow:hidden;border:1px solid var(--linea);
 }
-.visor img{width:100%;height:100%;object-fit:contain;display:block}
+.visor img,.visor video{width:100%;height:100%;object-fit:contain;display:block}
 /* La marca va ENCIMA, como el montaje la incrusta dentro de cada toma (§5.7). */
 .marca-visor{
   position:absolute!important;right:2.8%;bottom:4.5%;width:14%!important;height:auto!important;
@@ -275,7 +275,7 @@ nav.pestanas button.on{background:var(--violeta);border-color:var(--violeta);col
    WebAudio. Va DESPUÉS de las reglas de formato para ganarles a especificidad
    igual. La página, quieta: el visor fijo tapa todo y no hay nada que saltar. */
 .visor.cine{position:fixed;inset:0;z-index:1000;aspect-ratio:auto;max-width:none;margin:0;border-radius:0;border:none;background:#000}
-.visor.cine img#previa-imagen{object-fit:contain}
+.visor.cine img#previa-imagen,.visor.cine video#previa-clip{object-fit:contain}
 .btn-cine{
   position:absolute;right:10px;top:10px;z-index:5;appearance:none;cursor:pointer;
   width:38px;height:38px;border-radius:10px;border:1px solid rgba(255,255,255,.25);
@@ -673,6 +673,10 @@ nav.abajo button svg{width:22px;height:22px}
           <h2>Montado <span class="cuenta" id="cuenta-previa"></span></h2>
           <div class="visor" id="visor-montado">
             <img id="previa-imagen" alt="">
+            <!-- Las tomas con clip se ven AQUÍ, en bucle y sin sonido: el visor era solo
+                 un <img>, así que un clip no se veía en la previa —y el montaje sí lo
+                 monta—. El bucle es el mismo que hace el video final. -->
+            <video id="previa-clip" loop muted playsinline style="display:none"></video>
             <img id="previa-marca" class="marca-visor" alt="">
             <div id="previa-vacio" class="visor-vacio">Prepara la previa para ver el documental.</div>
             <button id="b-cine" class="btn-cine" title="Pantalla completa">⛶</button>

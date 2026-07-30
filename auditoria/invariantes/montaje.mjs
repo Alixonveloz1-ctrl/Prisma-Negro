@@ -740,16 +740,53 @@ export const invariantes = [
   },
 
   {
-    nombre: 'el-clip-corto-se-alarga-congelando-el-ultimo-fotograma',
-    dice: 'Los generadores de video tienen listas cerradas de duración: lo que falte se cubre congelando el último fotograma (§6).',
+    nombre: 'el-clip-corto-se-repite-en-vez-de-congelarse',
+    dice: '«Si el audio dura doce segundos pero el video dura ocho, se congela el último fotograma y se queda tieso hasta que termina el audio. Eso se ve horrible.» Y es verdad: cuatro segundos de imagen muerta en medio de un plano que se estaba moviendo se leen como un fallo de reproducción. Los generadores de video tienen listas CERRADAS de duración, así que el clip casi nunca dura lo que dura la locución — se repite, que es lo que se eligió al verlo en la previa.',
     comprobar(ctx) {
       const conMovimiento = ctx.hoja.tomas.filter((t) => t.movimiento);
-      if (!conMovimiento.length) return [];
-      const congelan = [...ctx.guion.matchAll(/tpad=stop_mode=clone/g)].length;
-      return congelan === conMovimiento.length
-        ? []
-        : [`${congelan} clips congelan el último fotograma, para ${conMovimiento.length} con movimiento.`];
+      if (!conMovimiento.length) return ['El proyecto de prueba no trae ninguna toma con clip: esto no estaría comprobando nada.'];
+      const fallos = [];
+
+      // Ni un congelado: era exactamente el defecto.
+      if (/tpad=stop_mode=clone/.test(ctx.guion)) {
+        fallos.push('Vuelve el congelado del último fotograma: cuatro segundos de imagen muerta.');
+      }
+      // El bucle va en la ENTRADA. En el filtro, `loop` guarda los fotogramas en
+      // memoria: un clip de ocho segundos en 1080p son setecientos megas.
+      const conBucle = [...ctx.guion.matchAll(/-stream_loop -1 -i '[^']*_vid\.mp4'/g)].length;
+      if (conBucle !== conMovimiento.length) {
+        fallos.push(`${conBucle} clips se repiten, para ${conMovimiento.length} con movimiento.`);
+      }
+      if (/\bloop=(?!1\b)/.test(ctx.guion)) {
+        fallos.push('El bucle se hace con el filtro `loop`: eso guarda el clip entero en memoria.');
+      }
+      // Y CADA SEGMENTO SIGUE DURANDO LO QUE DICE LA HOJA: repetir sin cortar es
+      // un video infinito. `-frames:v` es lo que lo para.
+      for (const linea of ctx.guion.split('\n')) {
+        if (!/-stream_loop -1/.test(linea) || !/_vid\.mp4/.test(linea)) continue;
+        if (!/-frames:v \d+/.test(linea)) {
+          fallos.push('Un clip se repite sin tope de fotogramas: el segmento no terminaría nunca.');
+        }
+      }
+
+      // Y la previa lo enseña IGUAL: un mp4 dentro de un <img> no se ve, así que
+      // las tomas con clip salían en blanco justo en lo que más costó.
+      const html = ctx.fuentes.get('index.html') || '';
+      const pre = fuente(ctx, 'app/previa.js');
+      if (!/<video id="previa-clip"[^>]*\bloop\b/.test(html)) {
+        fallos.push('El visor de la previa no tiene video en bucle: los clips no se ven.');
+      }
+      if (!/t\.movimiento && clip/.test(pre)) {
+        fallos.push('La previa no manda las tomas con clip al visor de video.');
+      }
+      return fallos;
     },
-    romper: (ctx) => ({ ...ctx, guion: ctx.guion.replace(/,tpad=stop_mode=clone[^,]*/g, '') }),
+    // Se rompe volviendo al congelado.
+    romper: (ctx) => ({
+      ...ctx,
+      guion: ctx.guion
+        .replace(/-stream_loop -1 -i ('[^']*_vid\.mp4')/g, '-i $1')
+        .replace(/(crop=\d+:\d+,fps=\d+),setsar=1/g, '$1,tpad=stop_mode=clone:stop_duration=9,setsar=1'),
+    }),
   },
 ];
