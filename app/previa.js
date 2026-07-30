@@ -70,7 +70,7 @@ export async function preparar({ pieza, config, senal, alAvanzar }) {
 
     tomas.push({
       ...fila,
-      texto: dueña?.texto || '',
+      texto: dueño?.texto || '',
       visual,
       cartel,
       voz,
@@ -137,7 +137,10 @@ export function reproductor({ lienzo, clip, vacio, marca, alCambiar, alTerminar 
     urlActual = null;
     animacion?.cancel();
     if (clip) {
-      clip.pause();
+      // Con `?.`: pintar una toma no puede caerse porque el visor de video no sea
+      // lo que se esperaba. Un fallo aquí para el reloj entero y deja la previa
+      // muda, que es mucho peor que una toma sin vídeo.
+      clip.pause?.();
       clip.removeAttribute('src');
       clip.style.display = 'none';
     }
@@ -179,8 +182,8 @@ export function reproductor({ lienzo, clip, vacio, marca, alCambiar, alTerminar 
       // `currentTime` aquí: sin metadatos todavía, lanza, y una excepción en el
       // pintado deja el visor a medias y para el reloj.
       try {
-        clip.load();
-        clip.play().catch(() => {});
+        clip.load?.();
+        clip.play?.()?.catch?.(() => {});
       } catch {
         /* con el cartel puesto, la toma se ve igual */
       }
@@ -369,7 +372,7 @@ export function reproductor({ lienzo, clip, vacio, marca, alCambiar, alTerminar 
       corriendo = false;
       cancelAnimationFrame(reloj);
       animacion?.cancel();
-      clip?.pause();
+      clip?.pause?.();
       for (const f of fuentes) {
         try {
           f.stop();

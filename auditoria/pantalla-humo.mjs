@@ -124,6 +124,18 @@ class Elemento {
     if (typeof this[`on${t}`] === 'function') salida.push(this[`on${t}`](ev));
     return Promise.all(salida.map((x) => Promise.resolve(x)));
   }
+  // Un <video> o un <audio> traen esto. Sin ellos, el arnés reventaba con
+  // «clip.pause is not a function» en un sitio donde el navegador de verdad no
+  // revienta: el elemento de mentira estaba incompleto, no el código.
+  play() {
+    this.reproduciendo = true;
+    return Promise.resolve();
+  }
+  pause() {
+    this.reproduciendo = false;
+  }
+  load() {}
+
   click() {
     return this.disparar('click');
   }
@@ -334,6 +346,8 @@ export function indexedDbDeMentira(semilla = null) {
  */
 export async function humoDeLaPantalla({
   parche = null,
+  /** Botones que se pulsan después de arrancar, en orden. */
+  pulsa = [],
   proyecto = proyectoYaEmpezado(),
   // Modos a los que la nube de mentira contesta con un error, para comprobar qué
   // queda en pie cuando algo no llega. Con `['*']`, ninguno contesta.
@@ -350,6 +364,9 @@ export async function humoDeLaPantalla({
     sessionStorage: globalThis.sessionStorage,
     localStorage: globalThis.localStorage,
     URL_createObjectURL: URL.createObjectURL,
+    AudioContext: globalThis.AudioContext,
+    requestAnimationFrame: globalThis.requestAnimationFrame,
+    cancelAnimationFrame: globalThis.cancelAnimationFrame,
   };
 
   const ids = idsDelHtml();
@@ -405,7 +422,75 @@ export async function humoDeLaPantalla({
   globalThis.localStorage = comoAlmacen(new Map());
   globalThis.confirm = () => true;
   globalThis.alert = () => {};
-  globalThis.requestAnimationFrame = (f) => queueMicrotask(f);
+  // El bucle de fotogramas del navegador. Con `setTimeout` y no `queueMicrotask`:
+  // un microtask que se vuelve a encolar a sí mismo —que es justo lo que hace el
+  // reloj de la previa— no deja correr nada más y el arnés se cuelga.
+  let rafSiguiente = 1;
+  const rafVivos = new Set();
+  globalThis.requestAnimationFrame = (f) => {
+    const id = rafSiguiente++;
+    rafVivos.add(id);
+    setTimeout(() => {
+      if (rafVivos.delete(id)) f(Date.now());
+    }, 0);
+    return id;
+  };
+  // Existe en cualquier navegador, y faltaba: el reproductor lo llama al parar y
+  // reventaba con «cancelAnimationFrame is not defined» en un sitio donde el
+  // navegador de verdad no revienta.
+  globalThis.cancelAnimationFrame = (id) => rafVivos.delete(id);
+
+  // ── El motor de audio de mentira ────────────────────────────────────────────
+  //
+  // Sin esto, pulsar «Reproducir» moría en la primera línea con «AudioContext is
+  // not a constructor» y todo el reproductor —programar ochenta y tres voces, el
+  // lecho de música, el agachado, el reloj que pinta— se quedaba sin ejecutar
+  // NUNCA fuera del teléfono. No imita cómo suena: imita la FORMA, que es lo que
+  // hace falta para que un fallo de programación salte aquí y no allí.
+  const nodo = () => ({
+    connect(destino) {
+      return destino;
+    },
+    disconnect() {},
+    gain: { value: 1, setValueAtTime() {}, linearRampToValueAtTime() {}, setTargetAtTime() {} },
+    threshold: { value: 0 },
+    knee: { value: 0 },
+    ratio: { value: 1 },
+    attack: { value: 0 },
+    release: { value: 0 },
+  });
+  class AudioContextDeMentira {
+    constructor() {
+      this.currentTime = 0;
+      this.destination = nodo();
+      this.sampleRate = 48000;
+    }
+    resume() {
+      return Promise.resolve();
+    }
+    createGain() {
+      return nodo();
+    }
+    createDynamicsCompressor() {
+      return nodo();
+    }
+    createAnalyser() {
+      return { ...nodo(), fftSize: 512, getFloatTimeDomainData(a) { a.fill(0); } };
+    }
+    createBufferSource() {
+      return { ...nodo(), buffer: null, loop: false, playbackRate: { value: 1 }, start() {}, stop() {} };
+    }
+    createBuffer(canales, largo, frecuencia) {
+      const datos = Array.from({ length: canales }, () => new Float32Array(largo));
+      return { numberOfChannels: canales, length: largo, sampleRate: frecuencia, getChannelData: (c) => datos[c] };
+    }
+    decodeAudioData() {
+      return Promise.resolve(this.createBuffer(1, 24000, 24000));
+    }
+  }
+  globalThis.AudioContext = AudioContextDeMentira;
+  // El reproductor lo busca en `window`, que aquí es un objeto propio.
+  globalThis.window.AudioContext = AudioContextDeMentira;
   URL.createObjectURL = () => 'blob:humo';
   URL.revokeObjectURL = () => {};
 
@@ -434,6 +519,9 @@ export async function humoDeLaPantalla({
   // cargarse: pulsa «entrar» y de ahí sale todo el arranque.
   almacenSesion.set('clave', 'humo');
 
+  // Todo lo que la pantalla dijo en rojo A LO LARGO del recorrido, no solo al
+  // final: un aviso lo pisa el siguiente.
+  const dichas = [];
   const cazar = (e) => fallos.push(`REVIENTA: ${e?.message || e}`);
   process.on('unhandledRejection', cazar);
   process.on('uncaughtException', cazar);
@@ -454,6 +542,41 @@ export async function humoDeLaPantalla({
     // Y una vuelta más de cola para lo que quedó suelto —`cargarModelos()` y
     // `cargarVoces()` no se esperan a propósito: son de adorno hasta que llegan—.
     for (let i = 0; i < 40; i++) await new Promise((r) => setTimeout(r, 5));
+
+    // ── Y AHORA SE PULSA ─────────────────────────────────────────────────────
+    //
+    // «Can't find variable: dueña», en pantalla, al darle a Preparar.
+    //
+    // Lo puso una limpieza que borró la declaración y dejó el uso. `node --check`
+    // no lo ve —es sintaxis válida—, y este arnés tampoco lo veía: ARRANCABA la
+    // aplicación y ahí se quedaba. `preparar()` solo corre cuando alguien pulsa, y
+    // aquí no pulsaba nadie, así que un fallo de programación en cualquier
+    // manejador viajaba entero hasta el teléfono.
+    //
+    // Se pulsa DENTRO de este `try`: al salir se devuelve el navegador de verdad
+    // y los manejadores ya no encontrarían nada.
+    for (const id of pulsa) {
+      const b = elementos.get(id);
+      if (!b) {
+        fallos.push(`no existe el botón ${id}`);
+        continue;
+      }
+      try {
+        await b.disparar('click');
+        for (let i = 0; i < 30; i++) await new Promise((r) => setTimeout(r, 5));
+      } catch (e) {
+        fallos.push(`REVIENTA al pulsar ${id}: ${e?.message || e}`);
+      }
+      // LA QUEJA SE RECOGE AQUÍ, no al final. Los avisos se escriben en la misma
+      // caja, así que el botón siguiente PISA lo que dijo el anterior: mirando
+      // solo el estado final, un «no está definido» al preparar desaparecía en
+      // cuanto se pulsaba reproducir. Se supo porque esta invariante salió ciega.
+      for (const [k, el] of elementos) {
+        if (!k.startsWith('aviso-')) continue;
+        const h = el.innerHTML || '';
+        if (/class="aviso malo"/.test(h)) dichas.push(`${id} → ${k}: ${h.replace(/<[^>]+>/g, '').trim()}`);
+      }
+    }
   } catch (e) {
     fallos.push(`no se pudo ni arrancar: ${e.message}`);
   } finally {
@@ -470,6 +593,9 @@ export async function humoDeLaPantalla({
     globalThis.sessionStorage = antes.sessionStorage;
     globalThis.localStorage = antes.localStorage;
     URL.createObjectURL = antes.URL_createObjectURL;
+    globalThis.AudioContext = antes.AudioContext;
+    globalThis.requestAnimationFrame = antes.requestAnimationFrame;
+    globalThis.cancelAnimationFrame = antes.cancelAnimationFrame;
     // Y no se le deja al siguiente arnés la conexión a ESTA base de mentira,
     // ni una subida a la nube pendiente que dispararía un fetch DE VERDAD
     // cuando el de mentira ya no esté puesto.
@@ -486,6 +612,8 @@ export async function humoDeLaPantalla({
     texto: (id) => elementos.get(id)?.textContent || '',
     html: (id) => elementos.get(id)?.innerHTML || '',
     claseCuerpo: (c) => doc.body.classList.contains(c),
+    /** Las quejas recogidas tras CADA pulsación, con el botón que las provocó. */
+    dichas: () => dichas,
     /**
      * Lo que la pantalla ESTÁ DICIENDO en rojo después de arrancar.
      *

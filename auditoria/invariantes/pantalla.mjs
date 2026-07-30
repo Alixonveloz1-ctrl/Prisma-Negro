@@ -793,6 +793,55 @@ export const invariantes = [
   },
 
   {
+    nombre: 'los-botones-se-pulsan-y-no-revientan',
+    dice: '«Can\'t find variable: dueña», en pantalla, al darle a Preparar. Lo puso una limpieza que borró la declaración y dejó el uso. `node --check` no lo ve —es sintaxis válida— y el arnés tampoco lo veía: ARRANCABA la aplicación y ahí se quedaba, y `preparar()` solo corre cuando alguien pulsa. Un fallo de programación en cualquier manejador viajaba entero hasta el teléfono. Ahora el arnés PULSA, y un error que solo puede ser un fallo de programación —una variable que no existe, algo que no es función— no pasa de aquí.',
+    async comprobar(ctx) {
+      const { humoDeLaPantalla } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+
+      // El camino que recorre quien monta: preparar, reproducir, parar, y las
+      // consultas que no gastan. Todos con el proyecto ya empezado del arnés.
+      const r = await humoDeLaPantalla({
+        parche,
+        pulsa: ['b-preparar-previa', 'b-reproducir', 'b-parar-previa', 'b-inventario', 'b-comprobar'],
+      });
+
+      const fallos = [...r.fallos];
+      // LO QUE SE BUSCA NO ES «UN ERROR»: es un error que SOLO puede ser un fallo
+      // de programación. «Elige un caso primero» es un mensaje escrito a mano y
+      // está bien que salga; «dueña is not defined» no lo escribió nadie.
+      const DE_PROGRAMACION = [
+        /is not defined/i,
+        /Can't find variable/i,
+        /is not a function/i,
+        /is not a constructor/i,
+        /Cannot read propert/i,
+        /undefined is not an object/i,
+        /is not iterable/i,
+        /of undefined/i,
+      ];
+      for (const q of [...r.dichas(), ...r.quejas()]) {
+        if (DE_PROGRAMACION.some((re) => re.test(q))) {
+          fallos.push(`Un manejador revienta por un fallo de programación → ${q}`);
+        }
+      }
+      return fallos;
+    },
+    // Se rompe como se rompió: un nombre que no existe dentro de un manejador.
+    // Es sintaxis válida —`node --check` la da por buena— y solo estalla cuando
+    // alguien pulsa, que es exactamente por lo que llegó al teléfono.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace(
+          "    if (!pieza().tomas.length) throw new Error('Todavía no hay tomas.');",
+          "    if (!piezaQueNadieDeclaro().tomas.length) throw new Error('Todavía no hay tomas.');",
+        ),
+      ),
+  },
+
+  {
     nombre: 'el-formato-elegido-manda-tambien-en-los-visores',
     dice: 'Se eligió 9:16 y la previa salía «en 16:9». El material estaba bien —las imágenes se piden en 9:16 y la hoja intercambia ancho y alto— pero los visores estaban dibujados a 16:9 FIJO en el CSS, y con object-fit:cover recortaban lo vertical para llenar el marco: un 9:16 amputado se lee como «se está generando mal».',
     async comprobar(ctx) {
