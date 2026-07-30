@@ -122,6 +122,9 @@ export const PREDETERMINADA = {
     // Semitonos de gravedad para la voz, aplicados AL MONTAR sobre el audio ya
     // generado: más grave sin regenerar ni una toma. Cero = tal cual salió.
     gravedadVoz: 0,
+    // Llevar todas las tomas al mismo tono, medido sobre el audio ya generado.
+    // Se puede apagar: un igualador que se equivoca suena peor que no igualar.
+    igualarTono: true,
   },
 
   marca: {
@@ -215,6 +218,7 @@ export function normalizar(cruda) {
   }
 
   c.montaje.gravedadVoz = numero(c.montaje.gravedadVoz, -6, 3, 0);
+  c.montaje.igualarTono = c.montaje.igualarTono !== false;
   c.segmentacion.segundosObjetivo = numero(c.segmentacion.segundosObjetivo, 3, 30, 11);
   c.segmentacion.segundosMaximo = Math.max(
     c.segmentacion.segundosObjetivo,

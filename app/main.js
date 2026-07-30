@@ -38,6 +38,7 @@ import * as local from './local.js';
 import { material } from './material.js';
 import { deBase64 } from './imagenes.js';
 import { claveToma, claveMusica, claveFotograma, claveClip } from '../comun/claves.mjs';
+import { referenciaDeTono, correccionDeTono } from '../comun/hoja.mjs';
 
 const $ = (id) => document.getElementById(id);
 
@@ -2671,6 +2672,7 @@ function pintarAjustes() {
   pon('musica-volumen', Math.round(P.config.musica.volumen * 100));
   $('v-musica-volumen').textContent = `${Math.round(P.config.musica.volumen * 100)}%`;
   $('expresivas').checked = !!P.config.narracion.vocesExpresivas;
+  $('igualar-tono').checked = P.config.montaje.igualarTono !== false;
   $('estilo').value = P.config.narracion.estilo || '';
   $('marca-texto').value = P.config.marca.texto;
   $('vertical').value = P.config.formato.vertical ? '1' : '0';
@@ -2715,11 +2717,24 @@ accion(
     // signo se le pone aquí.
     P.config.montaje.gravedadVoz = -Number($('gravedad').value);
     P.config.musica.volumen = Number($('musica-volumen').value) / 100;
+    P.config.montaje.igualarTono = $('igualar-tono').checked;
     // Los dos ajustes que se ELIGEN OYÉNDOLOS llegan a la previa ya preparada: si
     // hubiera que volver a preparar para oír el cambio, el mando parecería roto.
     if (preparada) {
       preparada.hoja.ajustes.gravedadVoz = P.config.montaje.gravedadVoz;
       preparada.hoja.ajustes.volumenMusica = P.config.musica.volumen;
+      // Y el igualador se enciende y se apaga OYÉNDOLO, igual que los otros dos:
+      // si apagarlo exigiera volver a preparar —bajar las 83 tomas otra vez—,
+      // nadie lo probaría, que es justo lo que hace falta cuando el igualador se
+      // equivoca.
+      const referencia = P.config.montaje.igualarTono
+        ? referenciaDeTono(pieza().tomas.map((t) => t.hz))
+        : 0;
+      for (const lista of [preparada.tomas, preparada.hoja.tomas]) {
+        for (const f of lista) {
+          f.ajusteTono = correccionDeTono(pieza().tomas.find((t) => t.i === f.i)?.hz, referencia);
+        }
+      }
     }
     P.config.imagen.estilo = $('estilo-imagen').value;
     P.config.marca.texto = $('marca-texto').value.trim();

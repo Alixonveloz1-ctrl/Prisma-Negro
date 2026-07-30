@@ -1020,6 +1020,94 @@ export const invariantes = [
   },
 
   {
+    nombre: 'el-tono-medido-no-se-va-de-octava',
+    dice: '«Ahora se escucha una toma grave, una normal, una grave, una normal.» El medidor cogía el máximo absoluto de la autocorrelación, y una señal periódica correlaciona casi IGUAL en T que en 2T: elegir entre ellos era echarlo a suertes, y elegir 2T es medir una octava por debajo. Medido: a 165 y 180 Hz devolvía 82,5 y 89,9. Con la mitad de las tomas bien medidas y la otra mitad una octava abajo, la mediana cae en medio de los dos grupos y el igualador hunde unas y deja otras — la alternancia exacta que se oyó.',
+    async comprobar(ctx) {
+      const { tonoDeVoz, referenciaDeTono, correccionDeTono, aLaOctavaDe } = ctx.fn;
+      const fallos = [];
+      const sr = 24000;
+      const vozDe = (f0) => {
+        const x = new Float32Array(sr);
+        for (let i = 0; i < x.length; i++) {
+          const fase = (2 * Math.PI * f0 * i) / sr;
+          x[i] =
+            (Math.sin(fase) + 0.6 * Math.sin(2 * fase) + 0.4 * Math.sin(3 * fase) + 0.2 * Math.sin(4 * fase)) * 0.25;
+        }
+        return x;
+      };
+
+      // 1 · Todo el registro de una voz humana, sin irse de octava. Los agudos
+      // son los que fallaban: por encima de 150 Hz, 2T todavía cabe en el rango
+      // de búsqueda y el máximo absoluto se iba allí.
+      for (const f0 of [75, 90, 110, 125, 140, 150, 165, 180, 200, 240]) {
+        const m = tonoDeVoz(vozDe(f0), sr);
+        const err = Math.abs(m - f0) / f0;
+        if (err > 0.03) {
+          fallos.push(
+            `A ${f0} Hz mide ${m.toFixed(1)}${m < f0 * 0.6 ? ' — una octava por debajo' : ''}: ` +
+              'unas tomas se igualarían y otras no.',
+          );
+        }
+      }
+
+      // 2 · Y sin periodicidad NO se inventa un número: con él se mueve la
+      // referencia de toda la pieza, no solo esa toma.
+      let s = 12345;
+      const ruido = new Float32Array(sr);
+      for (let i = 0; i < ruido.length; i++) {
+        s = (s * 1103515245 + 12345) & 0x7fffffff;
+        ruido[i] = (s / 0x3fffffff - 1) * 0.3;
+      }
+      if (tonoDeVoz(ruido, sr) !== 0) fallos.push('Con ruido sin tono se devuelve un tono igualmente.');
+
+      // 3 · Y si aun así se colara un error de octava, la red de abajo lo hace
+      // inofensivo: se pliega en vez de correr la referencia.
+      if (Math.abs(aLaOctavaDe(55, 110) - 110) > 0.01) fallos.push('Un tono una octava abajo no se pliega.');
+      if (Math.abs(aLaOctavaDe(220, 110) - 110) > 0.01) fallos.push('Un tono una octava arriba no se pliega.');
+      // La mediana de una mezcla bien-medida / octava-abajo tiene que salir en el
+      // grupo bueno, no en medio: en medio es donde nace la alternancia.
+      const mezcla = [110, 55, 112, 56, 108, 54, 111, 57];
+      const ref = referenciaDeTono(mezcla);
+      if (!(ref > 100 && ref < 120)) {
+        fallos.push(`Con medidas mezcladas de octava la referencia sale en ${ref.toFixed(1)} Hz: ni con unas ni con otras.`);
+      }
+      // Y con esa referencia, NINGUNA toma se hunde: ni las buenas ni las
+      // plegadas. Eso es literalmente lo que se oyó.
+      const correcciones = mezcla.map((h) => correccionDeTono(h, ref));
+      const hundidas = correcciones.filter((c) => Math.abs(c) > 1.5);
+      if (hundidas.length) {
+        fallos.push(`${hundidas.length} de ${mezcla.length} tomas se mueven más de un semitono y medio: vuelve «una grave, una normal».`);
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: el máximo absoluto de la autocorrelación.
+    romper: (ctx) =>
+      conFuncion(ctx, 'tonoDeVoz', (x, sr) => {
+        const MIN = Math.max(2, Math.floor(sr / 300));
+        const MAX = Math.floor(sr / 70);
+        const N = 2048;
+        if (x.length < N + MAX) return 0;
+        let mejor = 0;
+        let lag0 = 0;
+        for (let lag = MIN; lag <= MAX; lag++) {
+          let num = 0;
+          let den = 0;
+          for (let i = 0; i < N; i++) {
+            const b = x[i + lag];
+            num += x[i] * b;
+            den += b * b;
+          }
+          const p = den > 0 ? num / Math.sqrt(den) : 0;
+          if (p > mejor) {
+            mejor = p;
+            lag0 = lag;
+          }
+        }
+        return lag0 ? sr / lag0 : 0;
+      }),
+  },
+
+  {
     nombre: 'a-cada-voz-se-le-piden-solo-los-mandos-que-admite',
     dice: '«Las de Chirp no se escuchan.» No era el reproductor: la petición se RECHAZA. Chirp y Journey no admiten SSML, ni velocidad, ni tono —documentado por Google—, y esta casa se los mandaba a todas las voces por igual: el tono va a −1 por defecto y la velocidad estaba en 1,02. Con eso el servicio devuelve un error y no hay audio. Se omite lo que la voz no entiende, y se DICE en pantalla: si no, quedan dos deslizadores que no hacen nada sin explicación.',
     async comprobar(ctx) {

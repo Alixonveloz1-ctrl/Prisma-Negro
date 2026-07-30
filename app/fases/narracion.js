@@ -29,7 +29,7 @@
 
 import { llamar } from '../api.js';
 import { bloquesDeNarracion } from '../cola.js';
-import { leerWav, escribirWav, repartirBloque, periodoDeVoz } from '../../comun/audio.mjs';
+import { leerWav, escribirWav, repartirBloque, tonoDeVoz } from '../../comun/audio.mjs';
 import { claveToma } from '../../comun/claves.mjs';
 import { deBase64, aBase64 } from '../imagenes.js';
 
@@ -158,10 +158,7 @@ export async function narrarBloque({ bloque, pieza, config, senal, alEsperar }) 
       // mano. Con él, el montaje lleva todas las tomas al mismo tono y se acaba el
       // «parece hasta diferentes voces» de una voz que interpreta cada llamada por
       // su cuenta. Sale gratis: el audio ya está descodificado.
-      hz: (() => {
-        const periodo = periodoDeVoz(trozo.muestras, trozo.frecuencia);
-        return periodo > 0 ? +(trozo.frecuencia / periodo).toFixed(2) : 0;
-      })(),
+      hz: +tonoDeVoz(trozo.muestras, trozo.frecuencia).toFixed(2),
     });
   }
 

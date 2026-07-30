@@ -741,6 +741,12 @@ nav.abajo button svg{width:22px;height:22px}
           <input id="musica-volumen" type="range" min="0" max="90" value="55">
           <p class="nota chica">El nivel del lecho cuando NADIE habla. Con voz baja doce decibelios y vuelve al terminar la frase, como en el video final. El que elijas aquí es el que se exporta.</p>
 
+          <label class="interruptor" for="igualar-tono">
+            <input type="checkbox" id="igualar-tono">
+            <span>Igualar el tono entre tomas</span>
+          </label>
+          <p class="nota chica">Se mide el tono de cada toma y se llevan todas al de la pieza, sin regenerar nada: es lo que arregla que unas tomas suenen a un narrador y otras a otro. Si oyes tomas desafinadas, apágalo y vuelve a Preparar.</p>
+
           <label for="gravedad">Gravedad de la voz · <b id="v-gravedad">0 · como salió</b></label>
           <input id="gravedad" type="range" min="-3" max="6" value="0">
           <p class="nota chica">Hacia la <b>derecha, MÁS GRAVE</b>. Iba al contrario —el mando marcaba semitonos, y grave era hacia la izquierda—: buscando gravedad se subía el tono y la voz salía más fina y acelerada. Se aplica sobre la voz ya generada, sin regenerar nada. En la previa se oye frenada un poco, como una cinta, para poder elegirlo sin artefactos; el video final baja el tono manteniendo el ritmo.</p>

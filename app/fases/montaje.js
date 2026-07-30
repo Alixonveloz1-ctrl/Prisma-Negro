@@ -32,6 +32,7 @@ export function hojaDe(pieza, config) {
       gravedadVoz: config.montaje?.gravedadVoz ?? 0,
       // El nivel que el usuario eligió oyéndolo en la previa es el que se exporta.
       volumenMusica: config.musica.volumen,
+      igualarTono: config.montaje?.igualarTono !== false,
       firma: config.marca.activa && config.marca.texto ? undefined : null,
     },
   });

@@ -97,13 +97,13 @@ export function duracion({ muestras, frecuencia, canales = 1 }) {
  * hace `atempo` en ffmpeg, y es justo lo que no cabe en un teléfono con 83
  * tomas—. Se analiza el trozo más sonoro porque un silencio no tiene periodo.
  */
-export function periodoDeVoz(x, sr) {
+function analizarPeriodo(x, sr) {
   const MIN = Math.max(2, Math.floor(sr / 300));
   const MAX = Math.floor(sr / 70);
-  const POR_DEFECTO = Math.round(sr / 110);
   const ANALISIS = 2048;
-  if (x.length < ANALISIS + MAX) return POR_DEFECTO;
+  if (x.length < ANALISIS + MAX) return { periodo: 0, confianza: 0 };
 
+  // El trozo más sonoro: un silencio no tiene periodo.
   let arranque = 0;
   let masEnergia = -1;
   const paso = Math.max(1, Math.floor((x.length - ANALISIS - MAX) / 8));
@@ -116,23 +116,70 @@ export function periodoDeVoz(x, sr) {
     }
   }
 
-  let mejorLag = 0;
-  let mejor = 0;
+  let e0 = 0;
+  for (let i = 0; i < ANALISIS; i++) e0 += x[arranque + i] * x[arranque + i];
+  if (!e0) return { periodo: 0, confianza: 0 };
+
+  // Autocorrelación NORMALIZADA de verdad, en [-1, 1]: así el valor de la cima
+  // significa algo —cuánta periodicidad hay— y se puede exigir un mínimo.
+  const r = new Float64Array(MAX + 1);
+  let cima = 0;
   for (let lag = MIN; lag <= MAX; lag++) {
     let num = 0;
-    let den = 0;
+    let e1 = 0;
     for (let i = 0; i < ANALISIS; i++) {
       const b = x[arranque + i + lag];
       num += x[arranque + i] * b;
-      den += b * b;
+      e1 += b * b;
     }
-    const p = den > 0 ? num / Math.sqrt(den) : 0;
-    if (p > mejor) {
-      mejor = p;
-      mejorLag = lag;
-    }
+    r[lag] = e1 > 0 ? num / Math.sqrt(e0 * e1) : 0;
+    if (r[lag] > cima) cima = r[lag];
   }
-  return mejorLag || POR_DEFECTO;
+  // Sin periodicidad clara no se inventa un tono: vale más no corregir que
+  // corregir con un número inventado.
+  if (cima < 0.45) return { periodo: 0, confianza: cima };
+
+  // EL PRIMER LAG QUE LLEGA AL 90 % DE LA CIMA, no el máximo absoluto.
+  //
+  // «Ahora se escucha una toma grave, una normal, una grave, una normal.»
+  //
+  // Una señal periódica correlaciona casi IGUAL en T, en 2T y en 3T —por
+  // definición—, así que quedarse con el máximo absoluto es echar a suertes entre
+  // ellos. Elegir 2T es medir el tono una octava por debajo, y con la mitad de las
+  // tomas medidas bien y la otra mitad una octava abajo, la mediana cae en medio y
+  // el igualador hunde unas y deja otras: eso es la alternancia que se oyó.
+  // Medido antes de esto: a 165 y 180 Hz devolvía 82,5 y 89,9.
+  for (let lag = MIN; lag <= MAX; lag++) {
+    if (r[lag] < cima * 0.9) continue;
+    // Y desde ahí se sube hasta la cima de ESE lóbulo. El umbral se cruza en la
+    // cuesta, unos puntos antes del vértice, y quedarse en el cruce medía todos
+    // los tonos un 4 % altos —da igual para igualar entre tomas, porque el sesgo
+    // es el mismo en todas, pero un número que dice ser hercios tiene que serlo—.
+    let cumbre = lag;
+    while (cumbre + 1 <= MAX && r[cumbre + 1] > r[cumbre]) cumbre++;
+    return { periodo: cumbre, confianza: r[cumbre] };
+  }
+  return { periodo: 0, confianza: cima };
+}
+
+/**
+ * El periodo de la voz en muestras. Para el agravador, que necesita UNO siempre:
+ * si no se puede medir, el de una voz masculina corriente.
+ */
+export function periodoDeVoz(x, sr) {
+  return analizarPeriodo(x, sr).periodo || Math.round(sr / 110);
+}
+
+/**
+ * El tono de la voz en hercios, o CERO si no se puede medir con confianza.
+ *
+ * Distinto de `periodoDeVoz` a propósito: aquí un número inventado no es
+ * inofensivo. Con él se igualan las tomas entre sí, y una medida mala no
+ * desafina esa toma sola — corre la referencia y desafina la pieza entera.
+ */
+export function tonoDeVoz(x, sr) {
+  const { periodo } = analizarPeriodo(x, sr);
+  return periodo > 0 ? sr / periodo : 0;
 }
 
 /**

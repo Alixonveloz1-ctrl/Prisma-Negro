@@ -18,8 +18,8 @@
 // No cuesta nada: el material ya está pagado y en el almacén.
 
 import { material, tipoDeClave } from './material.js';
-import { construirHoja, correccionDeTono } from '../comun/hoja.mjs';
-import { agravarMuestras, periodoDeVoz, leerWav } from '../comun/audio.mjs';
+import { construirHoja, correccionDeTono, referenciaDeTono } from '../comun/hoja.mjs';
+import { agravarMuestras, tonoDeVoz, leerWav } from '../comun/audio.mjs';
 import { nombreLocal } from '../comun/claves.mjs';
 
 /**
@@ -44,6 +44,7 @@ export async function preparar({ pieza, config, senal, alAvanzar }) {
       gravedadVoz: config.montaje?.gravedadVoz ?? 0,
       // Y el nivel de la música, por lo mismo: se elige oyéndolo o no se elige.
       volumenMusica: config.musica.volumen,
+      igualarTono: config.montaje?.igualarTono !== false,
       firma: config.marca.activa && config.marca.texto ? undefined : null,
     },
   });
@@ -70,13 +71,16 @@ export async function preparar({ pieza, config, senal, alAvanzar }) {
     // que ya existe: quien tiene 83 tomas generadas no tiene que volver a pagarlas
     // para que dejen de sonar a veinte narradores distintos. Queda guardado en la
     // toma, así que el montaje lo encuentra sin volver a bajar el audio.
+    // SE MIDE SIEMPRE, no solo si falta. El medidor se equivocaba de octava por
+    // encima de 150 Hz, así que lo guardado de antes está mal y guardarse de
+    // volver a medir sería conservar el defecto para siempre. Cuesta décimas.
     const dueña = pieza.tomas.find((t) => t.i === fila.i);
-    if (voz && dueña && !(Number(dueña.hz) > 0)) {
+    if (voz && dueña) {
       try {
         const wav = leerWav(await voz.arrayBuffer());
-        const periodo = periodoDeVoz(wav.muestras, wav.frecuencia);
-        if (periodo > 0) {
-          dueña.hz = +(wav.frecuencia / periodo).toFixed(2);
+        const hz = tonoDeVoz(wav.muestras, wav.frecuencia);
+        if (hz > 0 && dueña.hz !== +hz.toFixed(2)) {
+          dueña.hz = +hz.toFixed(2);
           medidas++;
         }
       } catch {
@@ -98,15 +102,8 @@ export async function preparar({ pieza, config, senal, alAvanzar }) {
   // referencia es la MEDIANA de la pieza, así que no se puede saber hasta
   // haberlas visto todas. La hoja se construyó antes de medir.
   if (medidas) {
-    const orden = pieza.tomas
-      .map((t) => Number(t.hz))
-      .filter((h) => h > 0)
-      .sort((a, b) => a - b);
-    const referencia = !orden.length
-      ? 0
-      : orden.length % 2
-        ? orden[(orden.length - 1) / 2]
-        : (orden[orden.length / 2 - 1] + orden[orden.length / 2]) / 2;
+    const referencia =
+      config.montaje?.igualarTono === false ? 0 : referenciaDeTono(pieza.tomas.map((t) => t.hz));
     for (const lista of [tomas, hoja.tomas]) {
       for (const f of lista) {
         f.ajusteTono = correccionDeTono(pieza.tomas.find((t) => t.i === f.i)?.hz, referencia);

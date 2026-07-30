@@ -490,8 +490,27 @@ export const invariantes = [
       // 4 · Se mide donde hay muestras, se guarda, y la previa lo aplica.
       const nar = fuente(ctx, 'app/fases/narracion.js');
       const pre = fuente(ctx, 'app/previa.js');
-      if (!/periodoDeVoz/.test(nar)) fallos.push('La narración no mide el tono: el material nuevo no se podría igualar.');
-      if (!/periodoDeVoz/.test(pre)) fallos.push('Preparar no mide el tono: el material YA pagado nunca se igualaría.');
+      if (!/tonoDeVoz/.test(nar)) fallos.push('La narración no mide el tono: el material nuevo no se podría igualar.');
+      if (!/tonoDeVoz/.test(pre)) fallos.push('Preparar no mide el tono: el material YA pagado nunca se igualaría.');
+      // Y se mide SIEMPRE al preparar. Guardarse de volver a medir conservaría
+      // para siempre las medidas del medidor viejo, que se iba de octava.
+      if (/!\(Number\(dueña\.hz\) > 0\)/.test(pre)) {
+        fallos.push('Preparar solo mide si falta: una medida vieja y mala se quedaría para siempre.');
+      }
+      // Y se puede APAGAR sin volver a preparar: un igualador que se equivoca
+      // suena peor que ninguno, y probarlo no puede costar bajar 83 audios.
+      if (!/igualarTono/.test(pre) || !/id="igualar-tono"/.test(fuente(ctx, 'index.html'))) {
+        fallos.push('El igualador no se puede apagar: si se equivoca, no hay salida.');
+      }
+      const hojaApagada = construirHoja({
+        pieza: 'p01',
+        tomas: [toma(0, 100), toma(1, 110), toma(2, 120)],
+        escenas: [{ n: 0 }],
+        config: { igualarTono: false },
+      });
+      if (hojaApagada.tomas.some((t) => t.ajusteTono !== 0)) {
+        fallos.push('Apagar el igualador no lo apaga.');
+      }
       if (!/gravedad \+ \(Number\(t\.ajusteTono\) \|\| 0\)/.test(pre)) {
         fallos.push('La previa no suma el ajuste de tono: se elegiría oyendo algo distinto de lo que se exporta.');
       }
