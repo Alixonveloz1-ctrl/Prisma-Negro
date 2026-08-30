@@ -106,18 +106,19 @@ export const PREDETERMINADA = {
     // `comun/estilos.mjs` como `ESTILO_DEL_CANAL`. La razón está escrita allí y es
     // económica: con biblioteca permanente, dos estilos son dos bibliotecas.
     //
-    // LA BARRERA DE §8.2, APAGADA — y esto es una decisión, no un descuido.
+    // LA BARRERA DE §8.2, APAGADA PARA SIEMPRE — y esto es una decisión, no un
+    // descuido.
     //
     // Existía para no generar fotorrealismo de personas REALES identificables, que
-    // es el fallo que hunde un canal documental. Con casos construidos no hay
-    // ninguna persona real que proteger: la víctima, el sospechoso y el perito no
-    // existen. Encenderla aquí solo conseguiría que todo se resolviera de espaldas
-    // y en penumbra, que es exactamente el salvapantallas con voz en off.
+    // es el fallo que hunde un canal documental. AQUÍ NO HAY NINGUNA PERSONA REAL
+    // QUE PROTEGER: todos los casos son inventados, y la víctima, el sospechoso y
+    // el perito no existen ni se parecen a nadie. Encenderla solo conseguiría que
+    // todo se resolviera de espaldas y en penumbra, que es exactamente el
+    // salvapantallas con voz en off.
     //
     // Lo que NO se apaga y sigue en todas las imágenes: que las personas son
     // intérpretes anónimos y que nada imita material de archivo auténtico
-    // (`BARRERA_DOCUMENTAL`, en `comun/estilos.mjs`). Un proyecto que siga en modo
-    // documentar puede volver a encender esto a mano.
+    // (`BARRERA_DOCUMENTAL`, en `comun/estilos.mjs`).
     prohibirFotorrealismoDePersonasReales: false,
   },
 
@@ -190,25 +191,12 @@ export const PREDETERMINADA = {
   },
 
   investigacion: {
-    // DOS MODOS, y la fase tiene la misma forma en los dos: devuelve fichas.
-    //
-    //   documentar — sale a internet y trae hechos comprobables con su fuente.
-    //                Es lo que había, y sigue entero.
-    //   construir  — no busca nada: fabrica el expediente de un caso que no
-    //                ocurrió, ficha a ficha, ANTES de escribir. Es lo que evita
-    //                que el detective se llame Roger en el minuto 12 y Robert en
-    //                el 32: si el caso se construye entero primero, el guion no
-    //                puede contradecirse.
-    modo: 'construir',
     // §8.1: sin fichas no hay episodio. Sigue en pie con las construidas — de
     // hecho con más motivo, porque son lo ÚNICO que garantiza la coherencia.
     exigirFichas: true,
     minimoFichasPorEscena: 1,
   },
 };
-
-/** Los dos modos de la fase de investigación. */
-export const MODOS_INVESTIGACION = ['documentar', 'construir'];
 
 function esObjeto(v) {
   return v && typeof v === 'object' && !Array.isArray(v);
@@ -230,10 +218,10 @@ function esObjeto(v) {
  *
  * Llevaba tiempo así y no se veía porque todas las líneas de `normalizar`
  * asignaban el mismo valor que ya tenía el predeterminado —acotar 0.96 entre 0.5
- * y 1.5 devuelve 0.96—, así que la escritura era invisible. La mudanza de modo de
- * investigación fue la primera que escribió algo DISTINTO, y se cazó al instante:
- * un proyecto nuevo salía en «documentar» porque un proyecto viejo cargado antes
- * había dejado ese valor clavado en la tabla de fábrica.
+ * y 1.5 devuelve 0.96—, así que la escritura era invisible. Se cazó con la primera
+ * línea que escribió algo DISTINTO de lo de fábrica: cargar un proyecto viejo
+ * dejaba el valor mudado clavado en la tabla, y a partir de ahí TODOS los
+ * proyectos nuevos de esa sesión nacían ya mudados.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 function mezclar(base, encima) {
@@ -284,11 +272,6 @@ function eleccionDeGenerador(familia, guardado) {
 
 export function normalizar(cruda) {
   const c = mezclar(PREDETERMINADA, cruda || {});
-
-  // LA VERSIÓN GUARDADA, ANTES DE PISARLA. Es lo único que distingue un proyecto
-  // viejo de uno nuevo, y de eso depende que un documental de antes no se
-  // convierta solo en ficción.
-  const versionGuardada = Number(cruda?.version) || 0;
 
   // Las elecciones de generador, traducidas al catálogo actual.
   for (const [familia, campo] of [
@@ -343,35 +326,30 @@ export function normalizar(cruda) {
   // ajuste que sigue ahí sin efecto es la peor clase de configuración.
   delete c.imagen.estilo;
 
+  // ───────────────────────────────────────────────────────────────────────────
+  // LO QUE QUEDA DEL MODO «documentar», BORRADO DE RAÍZ.
+  //
+  // Esto no es limpieza: es el arreglo de un fallo que costó semanas. Hubo un
+  // tiempo en que el proyecto elegía entre documentar un caso real y construir
+  // uno inventado, y la mudanza de la versión 3 dejaba a propósito los proyectos
+  // viejos en `documentar` «para no estropear un documental terminado». El único
+  // proyecto que existía era viejo, así que la herramienta entera —la búsqueda de
+  // casos, el rigor del guion, el pie de fuentes— se quedó clavada meses en un
+  // modo que ya nadie quería, y no había manera de salir desde la pantalla.
+  //
+  // El canal es de ficción y no tiene otro modo. Así que el ajuste guardado se
+  // BORRA y la barrera se fuerza: un valor guardado no puede volver a decidir por
+  // encima de lo que la herramienta hace hoy.
+  // ───────────────────────────────────────────────────────────────────────────
+  delete c.investigacion.modo;
+  c.imagen.prohibirFotorrealismoDePersonasReales = false;
+
   // EL GÉNERO, contra el catálogo. Igual que el estilo: una clave que ya no está
   // en la tabla cae al predeterminado en vez de arrastrar un `undefined` hasta la
   // fase de guion, tres pantallas más allá.
   if (!GENEROS.some((g) => g.id === c.genero)) c.genero = GENERO_POR_DEFECTO;
 
   c.guion.minutos = entero(c.guion.minutos, 3, 40, 30);
-
-  // EL MODO DE INVESTIGACIÓN, Y LA MUDANZA QUE IMPORTA.
-  //
-  // Un proyecto guardado con la versión 3 se investigó documentando: sus fichas
-  // llevan fuente, fecha y cita, y su guion se escribió con la prohibición de
-  // inventar. Dejar que herede el nuevo predeterminado —`construir`— lo
-  // convertiría solo en ficción: la siguiente tanda de fichas se inventaría el
-  // caso y se mezclaría con las reales. Eso no es un cambio de ajuste, es
-  // estropear un documental terminado.
-  //
-  // Así que un proyecto anterior a la versión 4 que no eligió modo se queda en
-  // `documentar`. Uno nuevo, o uno que eligió, manda él.
-  if (!MODOS_INVESTIGACION.includes(c.investigacion.modo)) {
-    c.investigacion.modo = PREDETERMINADA.investigacion.modo;
-  }
-  if (versionGuardada > 0 && versionGuardada < 4 && !cruda?.investigacion?.modo) {
-    c.investigacion.modo = 'documentar';
-  }
-  // Y la barrera de §8.2 iba encendida en aquellos proyectos: se respeta lo que
-  // tuvieran guardado, y si no guardaron nada, lo de entonces.
-  if (versionGuardada > 0 && versionGuardada < 4 && cruda?.imagen?.prohibirFotorrealismoDePersonasReales === undefined) {
-    c.imagen.prohibirFotorrealismoDePersonasReales = true;
-  }
 
   // La política de movimiento. `clipsPorEpisodio` es una CUENTA, no una
   // proporción: ver la cabecera de arriba.

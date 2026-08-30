@@ -572,107 +572,38 @@ export const invariantes = [
   },
 
   {
-    nombre: 'la-busqueda-de-casos-va-acotada-en-tema-y-epoca',
-    dice: 'La época por defecto NO es «cualquiera», y el filtro se aplica también sobre lo que vuelve. Sin acotar, la búsqueda devuelve lo más publicado, que es lo más viejo: salían casos del XIX una y otra vez.',
-    async comprobar(ctx) {
-      const { EPOCAS, EPOCA_POR_DEFECTO, TEMAS } = await import('../../comun/temas.mjs');
-      const inv = ctx.fuentes.get('app/fases/investigacion.js') || '';
-      const fallos = [];
-
-      const porDefecto = EPOCAS.find((e) => e.id === EPOCA_POR_DEFECTO);
-      if (!porDefecto) fallos.push('La época por defecto no existe en el catálogo.');
-      else if (porDefecto.desde() === null) {
-        fallos.push('La época por defecto es «cualquiera»: volverán los casos del XIX.');
-      }
-
-      // Decírselo al modelo no basta: cuela casos viejos igual. El filtro tiene que
-      // aplicarse TAMBIÉN en el código, sobre lo que vuelve.
-      if (!/casos\.filter\(/.test(inv) || !/>= desde/.test(inv)) {
-        fallos.push('El filtro de época no se aplica sobre los casos devueltos, solo se pide en el prompt.');
-      }
-      if (TEMAS.flatMap((g) => g.temas).length < 20) {
-        fallos.push('El catálogo de temas es demasiado corto para elegir de verdad.');
-      }
-      return fallos;
-    },
-    romper: (ctx) =>
-      editando(ctx, 'app/fases/investigacion.js', (t) =>
-        t.replace(/const dentro = casos\.filter\(/, 'const dentro = [].concat(').replace(/>= desde/, '>= 0'),
-      ),
-  },
-
-  {
-    nombre: 'la-investigacion-a-fondo-busca-por-varios-angulos',
-    dice: 'La investigación del caso elegido son VARIAS búsquedas distintas, con fuentes oficiales entre ellas. Una sola pregunta trae una sola versión, y con eso sale un resumen con voz grave, no un documental.',
-    async comprobar(ctx) {
-      const { ANGULOS_DE_INVESTIGACION } = ctx.fn;
-      const fallos = [];
-      if (!Array.isArray(ANGULOS_DE_INVESTIGACION) || ANGULOS_DE_INVESTIGACION.length < 4) {
-        fallos.push('La investigación a fondo no tiene suficientes ángulos distintos.');
-      }
-      const ids = (ANGULOS_DE_INVESTIGACION || []).map((a) => a.id);
-      for (const imprescindible of ['oficial', 'cronologia', 'discutido']) {
-        if (!ids.includes(imprescindible)) {
-          fallos.push(`Falta el ángulo «${imprescindible}», que es de los que sostienen el documental.`);
-        }
-      }
-      const inv = ctx.fuentes.get('app/fases/investigacion.js') || '';
-      if (!/tipoFuente/.test(inv)) {
-        fallos.push('Las fichas no guardan de qué tipo es su fuente: un blog y una sentencia valdrían lo mismo.');
-      }
-      return fallos;
-    },
-    // Se rompe por el contexto: la lista de ángulos entra por ahí justamente para
-    // que un sabotaje la alcance.
-    romper: (ctx) =>
-      conFuncion(ctx, 'ANGULOS_DE_INVESTIGACION', ctx.fn.ANGULOS_DE_INVESTIGACION.slice(0, 1)),
-  },
-
-  {
-    nombre: 'cada-clase-de-ficha-se-escribe-como-lo-que-es',
-    dice: 'Hay dos clases de ficha —documentada y construida— y se escriben distinto: la primera lleva su fuente entre corchetes, que es lo que le dice al guion CÓMO ATRIBUIR; la segunda lleva su rol, que es lo que le dice qué papel juega en el caso. Componer esa lista dentro de cada fase acabó con el guion y el director escribiéndolas de dos maneras, y con una ficha construida saliendo como «fuente:  [otra]» — una fuente vacía que el guion habría atribuido igual, afirmando por un expediente que no existe.',
+    nombre: 'una-ficha-construida-no-finge-tener-fuente',
+    dice: 'Las fichas de un caso inventado no tienen fuente, y escribirlas con un hueco donde iba la fuente —«fuente:  [otra]»— es peor que no ponerlo: el guion lo lee como una atribución vacía y afirma por un expediente que no existe. Lo que sí llevan es su ROL, que es lo que le dice al guion qué papel juega cada pieza y en qué bloque toca sacarla.',
     comprobar(ctx) {
       const { comoLista, ordenarFichas } = ctx.fn;
       const fallos = [];
-
-      const documentadas = [
-        { afirmacion: 'Ardió el puerto.', fuente: 'Sentencia 44/1991', tipoFuente: 'judicial', fecha: '1991', cita: 'quedó probado' },
-        { afirmacion: 'Se dijo que fue el viento.', fuente: 'Blog', tipoFuente: 'otra', fecha: '', cita: '', incierto: true },
-      ];
-      const escritas = comoLista(documentadas);
-      if (!/\[judicial\]/.test(escritas)) {
-        fallos.push('Una ficha documentada se escribe sin su tipo de fuente: el guion no sabría cómo atribuirla.');
-      }
-      if (!/DISPUTADO/.test(escritas)) fallos.push('Una ficha disputada no se marca como tal.');
-      // Y lo más sólido va PRIMERO: el modelo se apoya en lo primero que lee.
-      if (escritas.indexOf('Ardió el puerto') > escritas.indexOf('Se dijo que fue')) {
-        fallos.push('Las fichas documentadas no van de más a menos sólida.');
-      }
-
       const construidas = [
         { afirmacion: 'La ficha de latón número 4417.', rol: 'revelacion', fecha: '2022', cita: '', construida: true, orden: 2 },
         { afirmacion: 'Amparo Iriarte, 34 años, tejedora.', rol: 'victima', fecha: '1981', cita: 'no volvió', construida: true, orden: 0 },
       ];
-      const fabricadas = comoLista(construidas);
-      if (!/\(victima\)/.test(fabricadas) || !/\(revelacion\)/.test(fabricadas)) {
-        fallos.push('Una ficha construida se escribe sin su rol: se pierde qué papel juega en el caso.');
+      const escritas = comoLista(construidas);
+
+      if (!/\(victima\)/.test(escritas) || !/\(revelacion\)/.test(escritas)) {
+        fallos.push('Una ficha se escribe sin su rol: se pierde qué papel juega en el caso.');
       }
-      // Y NO puede insinuar una fuente que no existe.
-      if (/fuente:/.test(fabricadas) || /\[otra\]/.test(fabricadas)) {
+      if (/fuente:/.test(escritas) || /\[otra\]/.test(escritas)) {
         fallos.push('Una ficha construida se escribe con una fuente vacía: el guion la atribuiría a un expediente inventado.');
       }
-      // Se leen EN EL ORDEN EN QUE SE LEVANTÓ EL CASO, no barajadas por una
-      // «solidez» en la que todas empatan.
-      if (fabricadas.indexOf('Amparo') > fabricadas.indexOf('4417')) {
-        fallos.push('Las fichas construidas se reordenan: se pierde el orden en que se construyó el caso.');
+      // Se leen EN EL ORDEN EN QUE SE LEVANTÓ EL CASO —víctima, lugar, fechas,
+      // pista falsa, revelación—, que es el orden en que se va a contar.
+      if (escritas.indexOf('Amparo') > escritas.indexOf('4417')) {
+        fallos.push('Las fichas se reordenan: se pierde el orden en que se construyó el caso.');
       }
       if (ordenarFichas(construidas)[0]?.rol !== 'victima') {
-        fallos.push('El orden de un expediente construido no respeta cómo se levantó.');
+        fallos.push('El orden del expediente no respeta cómo se levantó.');
+      }
+      if (/dijo:/.test(comoLista([{ afirmacion: 'a', rol: 'objeto', construida: true, orden: 0 }]))) {
+        fallos.push('Se escribe una cita donde no la hay.');
       }
       return fallos;
     },
-    // Se rompe como estaba antes de tener una sola puerta: cada fase componiendo
-    // la lista a su manera, con el formato de las documentadas para todo.
+    // Se rompe como estaba cuando cada fase componía la lista a su manera: con el
+    // formato de las documentadas, y la fuente vacía delante.
     romper: (ctx) =>
       conFuncion(ctx, 'comoLista', (fichas, opciones) =>
         ctx.fn
@@ -682,19 +613,24 @@ export const invariantes = [
           .join('\n'),
       ),
   },
-
   {
-    nombre: 'un-caso-construido-se-publica-declarado-como-ficcion',
-    dice: 'El episodio construido se ve EXACTAMENTE igual que un documental: el mismo tono, los mismos planos, los mismos testimonios, la misma voz sobria. Esa es la gracia del formato y es justo lo que lo hace indistinguible de uno real si nadie lo dice. Un caso inventado presentado como caso real es una mentira —da igual que la víctima no exista: lo que se falsea es la naturaleza de la pieza— y hunde el canal el día que alguien lo descubra. Y no puede depender de que el modelo se acuerde de decirlo, ni de un pie que nadie despliega: va compuesta en el código y va la primera.',
-    comprobar(ctx) {
-      const { esFiccion, componerPieDeFuentes, DECLARACION_DE_FICCION, textoDePublicacion } = ctx.fn;
+    nombre: 'todo-episodio-se-publica-declarado-como-ficcion',
+    dice: 'TODOS los casos de este canal están inventados, y el episodio se ve EXACTAMENTE igual que un documental: el mismo tono, los mismos planos, los mismos testimonios, la misma voz sobria. Esa es la gracia del formato y es justo lo que lo hace indistinguible de uno real si nadie lo dice. Presentarlo como caso real es una mentira —da igual que la víctima no exista: lo que se falsea es la naturaleza de la pieza— y hunde el canal el día que alguien lo descubra. No puede depender de que el modelo se acuerde: la declaración se compone en el código y va LA PRIMERA. Y no hay pie de fuentes, porque no hay fuentes: un pie inventado insinúa un respaldo que no existe.',
+    async comprobar(ctx) {
+      const { esFiccion, componerPieDeFuentes, DECLARACION_DE_FICCION, textoDePublicacion, generarMetadatos } = ctx.fn;
       const fallos = [];
 
+      // No hay dos clases de episodio. Ni siquiera unas fichas con pinta de
+      // documentadas —que un proyecto viejo puede traer guardadas— convierten un
+      // episodio en documental: ese modo no existe.
       const construidas = [{ afirmacion: 'a', rol: 'victima', construida: true, fuente: '' }];
-      const documentadas = [{ afirmacion: 'b', fuente: 'Sentencia 44/1991', fecha: '1991', tipoFuente: 'judicial' }];
+      const conPintaDeReales = [{ afirmacion: 'b', fuente: 'Sentencia 44/1991', fecha: '1991', tipoFuente: 'judicial' }];
 
       if (!esFiccion(construidas)) fallos.push('Un expediente construido no se reconoce como ficción.');
-      if (esFiccion(documentadas)) fallos.push('Un expediente documentado se marca como ficción: diría que es falso lo que es real.');
+      if (!esFiccion(conPintaDeReales)) {
+        fallos.push('Unas fichas con fuente apagan la declaración: un episodio inventado saldría sin declarar.');
+      }
+      if (!esFiccion([])) fallos.push('Un episodio sin fichas no se declara ficción.');
 
       // La declaración tiene que decir las tres cosas que importan.
       for (const [qué, re] of [
@@ -705,13 +641,9 @@ export const invariantes = [
         if (!re.test(DECLARACION_DE_FICCION || '')) fallos.push(`La declaración no dice ${qué}.`);
       }
 
-      // Un expediente construido NO lleva pie de fuentes: no las tiene, y un pie
-      // de fuentes vacío o inventado es peor que ninguno.
-      if (componerPieDeFuentes(construidas)) {
-        fallos.push('Un episodio de ficción sale con pie de fuentes: insinúa un respaldo que no existe.');
-      }
-      if (!componerPieDeFuentes(documentadas)) {
-        fallos.push('Un episodio documentado pierde su pie de fuentes: §8.4 no es opcional.');
+      // NUNCA hay pie de fuentes, ni siquiera con fichas que traen fuente guardada.
+      if (componerPieDeFuentes(construidas) || componerPieDeFuentes(conPintaDeReales)) {
+        fallos.push('Un episodio sale con pie de fuentes: insinúa un respaldo que no existe.');
       }
 
       // Y en el texto que se pega al publicar, la declaración va LA PRIMERA de la
@@ -724,11 +656,68 @@ export const invariantes = [
       if (i < 0 || !texto.slice(i, i + 140).includes('FICCIÓN DOCUMENTAL')) {
         fallos.push('La declaración no encabeza la descripción: quedaría enterrada donde no la ve nadie.');
       }
+
+      // ── Y AHORA DE VERDAD ──────────────────────────────────────────────────
+      // Lo anterior mira las piezas. Esto genera los metadatos con la puerta
+      // sustituida, devolviendo la descripción que escribe un modelo cuando lee un
+      // guion que suena a documental: «un caso real que conmocionó a la comarca».
+      // Es lo que sale si nadie lo corrige, y es exactamente lo que no puede
+      // publicarse.
+      const puerta = globalThis.fetch;
+      let pedido = '';
+      globalThis.fetch = async (url, opciones) => {
+        pedido = String(JSON.parse(opciones.body).sistema || '');
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            ok: true,
+            json: {
+              titulos: ['El caso de la carretera'],
+              descripcion: 'Un caso real que conmocionó a la comarca en 1991.',
+              etiquetas: ['crimen'],
+              tituloEscenas: [{ n: 0, titulo: 'La denuncia' }],
+            },
+          }),
+        };
+      };
+      let m = null;
+      try {
+        m = await generarMetadatos({
+          tema: 'x',
+          guion: 'texto',
+          tomas: [{ escena: 0, segundos: 10, medida: true }],
+          escenas: [{ n: 0, titulo: 'La denuncia' }],
+          fichas: conPintaDeReales,
+        });
+      } catch (e) {
+        fallos.push(`Los metadatos no llegan a generarse: ${e.message}`);
+      } finally {
+        globalThis.fetch = puerta;
+      }
+
+      if (m) {
+        if (!m.descripcion.startsWith('FICCIÓN DOCUMENTAL')) {
+          fallos.push(
+            'La descripción publicada no empieza por la declaración: ' +
+              `empieza por «${m.descripcion.slice(0, 60)}…».`,
+          );
+        }
+        if (/\bFuentes:/.test(m.descripcion)) {
+          fallos.push('La descripción publicada lleva pie de fuentes de un caso que está inventado.');
+        }
+        // Y al modelo se le dice, en la misma llamada, que no lo cuente como real:
+        // la declaración de arriba no sirve de nada si la sinopsis de debajo dice
+        // «ocurrió en 1991».
+        if (!/ficci[oó]n/i.test(pedido) || !/inventad/i.test(pedido)) {
+          fallos.push('Al modelo no se le dice que el caso está inventado: la sinopsis lo contará como real.');
+        }
+      }
       return fallos;
     },
-    // Se rompe como estaría sin la distinción: todo pasa por documental, con su
-    // pie de fuentes y sin declarar nada.
-    romper: (ctx) => conFuncion(ctx, 'esFiccion', () => false),
+    // Se rompe como estaba cuando había dos clases de episodio: unas fichas con
+    // fuente lo pasaban por documental, sin declarar nada.
+    romper: (ctx) => conFuncion(ctx, 'esFiccion', (fichas) => !(fichas || []).some((f) => f.fuente)),
   },
 
   {
@@ -2667,16 +2656,14 @@ export const invariantes = [
   },
 
   {
-    nombre: 'el-guion-tiene-oficio-y-cada-modo-su-limite',
-    dice: 'Dos cosas a la vez, y las dos se rompen solas. Las reglas del guion eran todas negativas y con puras prohibiciones sale un noticiero: datos correctos, uno detrás de otro, y nadie llega al minuto tres — falta decirle QUÉ HACER. Y desde que hay dos clases de episodio, el límite de cada uno es distinto y no se pueden mezclar: en un documental inventar un detalle es mentir sobre personas reales, y en ficción declarada prohibirlo deja al guion sin la mitad de su oficio. Si el sistema del modo construir se colara en un proyecto documental, ese documental empezaría a inventar sin que nadie lo pidiera.',
+    nombre: 'el-guion-tiene-oficio-y-la-licencia-trae-su-limite',
+    dice: 'Las reglas del guion eran todas negativas y con puras prohibiciones sale un noticiero: datos correctos, uno detrás de otro, y nadie llega al minuto tres — falta decirle QUÉ HACER. Y la licencia de inventar tiene que venir con su límite: «invéntate el detalle» a secas es el fallo que este canal existe para evitar, porque un nombre que cambia a mitad destruye la pieza entera. Aquí hubo además un bloque contrario —«no inventes datos, fechas, cifras ni nombres»— del modo documental: con los dos puestos el guion recibía una orden y su contraria en el mismo sistema y hacía lo que le parecía.',
     comprobar(ctx) {
       const { sistemaDelGuion } = ctx.fn;
       const fallos = [];
-      const construir = sistemaDelGuion('construir');
-      const documentar = sistemaDelGuion('documentar');
+      const sistema = sistemaDelGuion();
 
-      // 1 · EL OFICIO, en los dos. Es lo que de verdad separa un documental de un
-      // noticiero, punto por punto, y no depende de si el caso es real.
+      // 1 · EL OFICIO. Es lo que de verdad separa un documental de un noticiero.
       for (const [qué, re] of [
         ['contar con detalles concretos en vez de resúmenes', /LO CONCRETO|detalle/i],
         ['retener el significado y responder después', /ADMINISTRA LO QUE SABES|todav[ií]a no ha dicho/i],
@@ -2686,66 +2673,51 @@ export const invariantes = [
         ['anclar cada acto en alguien concreto', /PERSONAS, NO EXPEDIENTES/],
         ['no contar dos veces el mismo hecho', /UNA VEZ EN TODO EL DOCUMENTAL/],
       ]) {
-        for (const [modo, texto] of [['construir', construir], ['documentar', documentar]]) {
-          if (!re.test(texto)) fallos.push(`En modo ${modo} no se le pide ${qué}.`);
-        }
+        if (!re.test(sistema)) fallos.push(`No se le pide ${qué}.`);
       }
-      // Y los adjetivos de opinión, que son lo que convierte un documental en un
-      // canal de contenido: decir que algo es escalofriante es garantizar que no lo sea.
-      for (const [modo, texto] of [['construir', construir], ['documentar', documentar]]) {
-        if (!/escalofriante/i.test(texto) || !/impactante/i.test(texto)) {
-          fallos.push(`En modo ${modo} no se prohíben los adjetivos de opinión.`);
-        }
-        // El formato del texto plano es lo que la segmentación entiende. Sin esto
-        // el guion sale sin escenas y todo el episodio es una sola.
-        if (!/"## "/.test(texto)) fallos.push(`En modo ${modo} no se pide marcar las escenas con «## ».`);
-        if (!/"> "/.test(texto)) fallos.push(`En modo ${modo} no se explica la línea de testimonio «> ».`);
+      if (!/escalofriante/i.test(sistema) || !/impactante/i.test(sistema)) {
+        fallos.push('No se prohíben los adjetivos de opinión: volverían «escalofriante» e «impactante».');
       }
+      // El formato del texto plano es lo que la segmentación entiende.
+      if (!/"## "/.test(sistema)) fallos.push('No se pide marcar las escenas con «## ».');
+      if (!/"> "/.test(sistema)) fallos.push('No se explica la línea de testimonio «> ».');
 
-      // 2 · EL RIGOR, solo en documentar y ENTERO. Si aflojar el tono aflojó las
-      // fuentes, esto no vale nada.
-      for (const [qué, re] of [
-        ['que cada afirmación salga de una ficha', /sale de una ficha/i],
-        ['que no se inventen datos', /No inventes datos/i],
-        ['que se atribuya según el tipo de fuente', /\[judicial\]|\[testimonio\]/],
-        ['que la tensión no salga de insinuar lo que no consta', /nunca de sugerir lo que no consta|no consta/i],
-      ]) {
-        if (!re.test(documentar)) fallos.push(`El modo documentar perdió el rigor: ${qué}.`);
-      }
-
-      // 3 · Y ESE RIGOR NO PUEDE ESTAR EN CONSTRUIR, ni al revés. Son dos límites
-      // incompatibles: con los dos puestos, el guion recibe «inventa el detalle» y
-      // «no inventes datos» en el mismo sistema y hace lo que le parece.
-      if (/No inventes datos/i.test(construir)) {
-        fallos.push('El modo construir arrastra la prohibición de inventar: la licencia y su contraria a la vez.');
-      }
-      if (/el detalle\s+concreto que la escena necesite lo pones t[uú]/i.test(documentar)) {
-        fallos.push(
-          'El modo documentar trae la licencia de inventar detalle: un documental sobre personas reales ' +
-            'se pondría a inventar la hora y la marca de las botas.',
-        );
-      }
-
-      // 4 · LA LICENCIA VIENE CON SU LÍMITE. Sin la coherencia, «invéntate el
-      // detalle» es exactamente el fallo que este modo existe para evitar.
+      // 2 · LA LICENCIA, CON SU LÍMITE.
       for (const [qué, re] of [
         ['que el caso es ficción declarada', /ficci[oó]n, declarada|obra de ficci[oó]n/i],
+        ['que el detalle concreto lo pone el guion', /el detalle\s+concreto que la escena necesite lo pones t[uú]/i],
         ['que el límite es la coherencia', /El l[ií]mite es la coherencia/],
         ['que un nombre o una fecha no cambian', /se escriben una vez y no cambian/],
         ['el gancho en segunda persona del primer acto', /EL GANCHO/],
         ['los testimonios con su convención', /LOS TESTIMONIOS/],
         ['el cierre con una duda concreta sin contestar', /EL CIERRE/],
       ]) {
-        if (!re.test(construir)) fallos.push(`El modo construir no dice ${qué}.`);
+        if (!re.test(sistema)) fallos.push(`No se dice ${qué}.`);
+      }
+
+      // 3 · Y NO PUEDE QUEDAR NI UN RASTRO DE LA ORDEN CONTRARIA. El canal es de
+      // ficción: una regla que prohíbe inventar es media herramienta tirando en
+      // contra de la otra media.
+      for (const [qué, re] of [
+        ['la prohibición de inventar datos', /No inventes datos/i],
+        ['que cada afirmación salga de una ficha', /sale de una ficha/i],
+        ['la atribución por tipo de fuente', /\[judicial\]|\[testimonio\]/],
+      ]) {
+        if (re.test(sistema)) fallos.push(`El sistema del guion arrastra ${qué}: contradice la licencia.`);
       }
       return fallos;
     },
-    // Se rompe como estaba: un solo sistema, sin el bloque que pone el límite de
-    // cada modo. Va por el contexto porque la comprobación EJECUTA
-    // `sistemaDelGuion`, y editar la fuente no la alcanzaría.
-    romper: (ctx) => conFuncion(ctx, 'sistemaDelGuion', () => ctx.fn.sistemaDelGuion('construir')),
+    // Se rompe como estaba: con el bloque del modo documental pegado detrás, que
+    // es la orden contraria en el mismo sistema.
+    romper: (ctx) =>
+      conFuncion(
+        ctx,
+        'sistemaDelGuion',
+        () =>
+          ctx.fn.sistemaDelGuion() +
+          '\nLO QUE NO SE NEGOCIA\n- No inventes datos, fechas, cifras ni nombres que no estén en las fichas.',
+      ),
   },
-
   {
     nombre: 'la-imagen-se-queda-cuando-la-voz-calla',
     dice: 'Cada toma duraba EXACTAMENTE lo que su locución, al fotograma. La última sílaba caía y venía el corte, ciento treinta y cuatro veces seguidas. No había suspense en ninguna parte porque no había SITIO donde ponerlo: al director se le pedía «silencio después del dato duro» y no existía ningún campo donde escribir esa decisión.',

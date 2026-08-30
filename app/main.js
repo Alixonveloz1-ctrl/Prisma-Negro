@@ -457,50 +457,27 @@ function pintarFiltros() {
  * un texto que se va a quedar viejo el día que se añada el tercer modo.
  * ─────────────────────────────────────────────────────────────────────────────
  */
-const DICE_EL_MODO = {
-  construir: {
-    titulo: 'Crea ficción documental',
-    sub: 'De una idea a un episodio terminado, sin salir de aquí.',
-    paso1Titulo: 'El caso',
-    paso1: 'Inventa cinco casos del género que elijas. No sale a internet: los construye. Elige uno.',
-    buscar: 'Inventar casos',
-    epoca: 'Época en la que transcurre',
-    paso2Titulo: 'El expediente',
-    paso2:
-      'Construye el caso entero antes de escribir: víctima, lugar, fechas, el objeto que lo resuelve, ' +
-      'la pista falsa y el culpable. De una sola llamada, para que nada se contradiga.',
-    fondo: 'Construir el expediente',
-    paso6: 'Video final, miniatura, título y descripción — con la declaración de ficción delante.',
-    ajustes:
-      'El caso se INVENTA, con su expediente completo antes de escribir el guion. El guion puede poner ' +
-      'el detalle concreto que la escena pida, y el episodio se publica declarado como ficción.',
-  },
-  documentar: {
-    titulo: 'Crea un documental',
-    sub: 'De un caso real a un video terminado, sin salir de aquí.',
-    paso1Titulo: 'Investigación',
-    paso1: 'Busca en internet casos reales que den para documental. Elige uno.',
-    buscar: 'Buscar casos',
-    epoca: 'Época',
-    paso2Titulo: 'Investigación a fondo',
-    paso2:
-      'Seis búsquedas sobre el caso: cronología, fuentes oficiales, prensa, lo discutido, cifras y ' +
-      'qué pasó después.',
-    fondo: 'Investigar a fondo',
-    paso6: 'Video final, miniatura, título, descripción con tiempos reales y pie de fuentes.',
-    ajustes:
-      'Los casos son REALES y se buscan en internet. El guion no puede inventar ni un dato, una fecha ' +
-      'o un nombre que no esté en las fichas, y el episodio se publica con su pie de fuentes.',
-  },
+const DICE_LA_PANTALLA = {
+  titulo: 'Crea ficción documental',
+  sub: 'De una idea a un episodio terminado, sin salir de aquí.',
+  paso1Titulo: 'El caso',
+  paso1: 'Inventa cinco casos del género que elijas. No sale a internet: los construye. Elige uno.',
+  buscar: 'Inventar casos',
+  epoca: 'Época en la que transcurre',
+  paso2Titulo: 'El expediente',
+  paso2:
+    'Construye el caso entero antes de escribir: víctima, lugar, fechas, el objeto que lo resuelve, ' +
+    'la pista falsa y el culpable. De una sola llamada, para que nada se contradiga.',
+  fondo: 'Construir el expediente',
+  paso6: 'Video final, miniatura, título y descripción — con la declaración de ficción delante.',
 };
 
 function pintarModo() {
-  const modo = P.config.investigacion.modo;
-  const d = DICE_EL_MODO[modo] || DICE_EL_MODO.construir;
   const pon = (id, texto) => {
     const el = $(id);
     if (el) el.textContent = texto;
   };
+  const d = DICE_LA_PANTALLA;
   pon('titulo-inicio', d.titulo);
   pon('sub-inicio', d.sub);
   pon('paso1-titulo', d.paso1Titulo);
@@ -511,8 +488,6 @@ function pintarModo() {
   pon('paso2-dice', d.paso2);
   pon('b-investigar-fondo-texto', d.fondo);
   pon('paso6-dice', d.paso6);
-  pon('modo-dice', d.ajustes);
-  if ($('modo-investigacion')) $('modo-investigacion').value = modo;
 }
 
 /**
@@ -700,37 +675,21 @@ async function buscar() {
   const tema = temaPorId(P.temaId);
   const epoca = epocaPorId(P.epocaId);
   const genero = generoPorId(P.config.genero);
-  const construyendo = P.config.investigacion.modo === 'construir';
   const terreno = P.idea || tema?.nombre || '';
 
   $('zona-casos').innerHTML =
     `<p class="nota" style="margin-top:14px">` +
-    (construyendo
-      ? `Inventando casos de ${escapar(genero.nombre.toLowerCase())}${terreno ? ` · ${escapar(terreno)}` : ''}…`
-      : `Buscando en internet${terreno ? ` · ${escapar(terreno)}` : ''} · ${escapar(epoca.nombre.toLowerCase())}…`) +
+    `Inventando casos de ${escapar(genero.nombre.toLowerCase())}${terreno ? ` · ${escapar(terreno)}` : ''}…` +
     `</p>`;
 
-  // Los dos modos devuelven LO MISMO —una lista de casos con la misma forma— y por
-  // eso todo lo de abajo, incluido `pintarCasos`, no sabe de dónde salieron.
-  const r = construyendo
-    ? await investigacion.proponerCasos({
-        genero,
-        tema: terreno,
-        // La época no se cae en este modo: cambia de significado. Ahí no filtra una
-        // búsqueda —no hay búsqueda— sino que dice CUÁNDO TRANSCURRE el caso que se
-        // inventa, y en un crimen frío eso es medio género: el lapso entre los
-        // hechos y la reapertura es lo que hace que la historia funcione.
-        epoca,
-        evitar: P.casosVistos,
-      })
-    : await investigacion.buscarCasos({
-        // Con idea escrita, el tema del menú pasa a ser el terreno que ella diga.
-        tema: P.idea ? { nombre: P.idea, busca: P.idea } : tema,
-        epoca,
-        // No repetir lo ya descartado: buscar dos veces y que salgan los mismos
-        // cinco es la forma más rápida de que la herramienta parezca rota.
-        evitar: P.casosVistos,
-      });
+  const r = await investigacion.proponerCasos({
+    genero,
+    tema: terreno,
+    // La época no filtra ninguna búsqueda —no hay búsqueda—: dice CUÁNDO
+    // TRANSCURRE el caso que se inventa, y en un crimen frío eso es medio género.
+    epoca,
+    evitar: P.casosVistos,
+  });
   casos = r.casos;
   // SE GUARDAN. Antes vivían en una variable suelta y se perdían al recargar: cinco
   // propuestas pagadas que desaparecían por cerrar la pestaña.
@@ -740,12 +699,7 @@ async function buscar() {
   pintarCasos();
 
   if (!casos.length) {
-    throw new Error(
-      construyendo
-        ? `No salió ninguna premisa para ese género y ese tema. Vuelve a darle, o prueba con otro tema.`
-        : `No salió ningún caso de ${epoca.nombre.toLowerCase()} para ese tema. ` +
-          `Prueba con una época más amplia o con otro tema.`,
-    );
+    throw new Error('No salió ninguna premisa para ese género y ese tema. Vuelve a darle, o prueba con otro tema.');
   }
   // Si se cayeron casos por fecha, se dice: si no, parece que la búsqueda vino floja.
   if (r.descartados) {
@@ -789,7 +743,7 @@ accion(
         porQueFunciona: '',
         imagenSugerida: '',
         documentado: false,
-        construido: P.config.investigacion.modo === 'construir',
+        construido: true,
         fuentes: [],
       },
       titulo,
@@ -978,58 +932,25 @@ accion(
   async () => {
     if (!pieza().caso) throw new Error('Elige un caso primero, en el paso 1.');
 
-    // MODO CONSTRUIR: UNA SOLA LLAMADA, y no es por ahorrar.
-    //
-    // Los seis ángulos existen porque una sola pregunta a internet trae una sola
-    // versión. Construyendo es al revés: seis llamadas fabricarían seis casos que
-    // se contradicen —el detective que se llama Roger en el minuto doce y Robert
-    // en el treinta y dos—, que es justo lo que este modo existe para evitar. El
-    // expediente se levanta entero de una vez o no se sostiene.
-    if (P.config.investigacion.modo === 'construir') {
-      avisar('paso2', 'Construyendo el expediente del caso, entero y de una vez…');
-      const fichas = await investigacion.construirCaso({
-        caso: pieza().caso,
-        genero: generoPorId(P.config.genero),
-      });
-      if (!fichas.length) throw new Error('El expediente salió vacío. Vuelve a darle.');
-      // Se REEMPLAZA, no se fusiona. Fusionar dos expedientes construidos junta dos
-      // casos distintos en uno, y lo único que este modo garantiza es la coherencia.
-      pieza().fichas = fichas;
-      await guardar();
-      pintarFichas();
-      pintarReparto();
-      pintarCasoElegido();
-      pintarPasos();
-      return avisar(
-        'paso2',
-        `Expediente construido: ${fichas.length} fichas. Ya puedes dirigir y escribir el guion.`,
-        'bueno',
-      );
-    }
-
-    const r = await colaInvestiga.ejecutar(
-      'investigación',
-      investigacion.ANGULOS_DE_INVESTIGACION,
-      (angulo, _i, senal) => investigacion.investigarAngulo({ caso: pieza().caso, angulo, senal }),
-      {
-        // Cada ángulo se guarda al terminar: se puede detener a mitad y lo buscado
-        // no se pierde ni se vuelve a pagar (§4).
-        alTerminarUno: async (fichas) => {
-          pieza().fichas = investigacion.fusionarFichas([pieza().fichas, fichas]);
-          await guardar();
-          pintarFichas();
-          pintarReparto();
-        },
-      },
-    );
-
+    // UNA SOLA LLAMADA, y no es por ahorrar. Seis llamadas fabricarían seis
+    // casos que se contradicen —el detective que se llama Roger en el minuto doce
+    // y Robert en el treinta y dos—, que es justo lo que este paso existe para
+    // evitar. El expediente se levanta entero de una vez o no se sostiene.
+    avisar('paso2', 'Construyendo el expediente del caso, entero y de una vez…');
+    const fichas = await investigacion.construirCaso({
+      caso: pieza().caso,
+      genero: generoPorId(P.config.genero),
+    });
+    if (!fichas.length) throw new Error('El expediente salió vacío. Vuelve a darle.');
+    // Se REEMPLAZA, no se fusiona: fusionar dos expedientes junta dos casos
+    // distintos en uno, y lo único que este paso garantiza es la coherencia.
+    pieza().fichas = fichas;
+    await guardar();
+    pintarFichas();
+    pintarReparto();
     pintarCasoElegido();
     pintarPasos();
-    if (r.fallos.length) {
-      avisar('paso2', `${pieza().fichas.length} fichas. ${r.fallos.length} ángulos fallaron; vuelve a darle.`, 'malo');
-      return registro('paso2', r.fallos.map((f) => `· ${f.error}`));
-    }
-    avisar('paso2', `${pieza().fichas.length} fichas de ${r.total} ángulos. Ya puedes generar el guion.`, 'bueno');
+    avisar('paso2', `Expediente construido: ${fichas.length} fichas. Ya puedes dirigir y escribir el guion.`, 'bueno');
   },
   'paso2',
 );
@@ -1159,9 +1080,7 @@ accion(
       fichas: pieza().fichas,
       minutos,
       tratamiento: pieza().tratamiento,
-      // Cómo se hicieron las fichas decide qué puede escribir el guion que no
-      // esté en ellas; el género, la estructura de bloques.
-      modo: P.config.investigacion.modo,
+      // El género trae la estructura de bloques del episodio.
       genero: generoPorId(P.config.genero),
       anteriores: loYaContado(),
       yaEscritos: parcial?.huella === huella && Array.isArray(parcial.partes) ? parcial.partes : [],
@@ -1212,9 +1131,7 @@ accion(
       fichas: pieza().fichas,
       minutos,
       tratamiento: pieza().tratamiento,
-      // Cómo se hicieron las fichas decide qué puede escribir el guion que no
-      // esté en ellas; el género, la estructura de bloques.
-      modo: P.config.investigacion.modo,
+      // El género trae la estructura de bloques del episodio.
       genero: generoPorId(P.config.genero),
       anteriores: loYaContado(),
       yaEscritos: parcial?.huella === huella && Array.isArray(parcial.partes) ? parcial.partes : [],
@@ -3164,19 +3081,6 @@ function pintarAjustes() {
 }
 
 $('clips-episodio').addEventListener('input', (e) => ($('v-clips-episodio').textContent = e.target.value));
-
-// EL MODO SE APLICA AL MOMENTO, sin pasar por «Guardar ajustes».
-//
-// De él dependen la mitad de las fases —de dónde salen los casos, cómo se hace el
-// expediente, qué puede escribir el guion, si se publica declarado como ficción— y
-// la pantalla entera cambia de texto. Si hubiera que guardar primero, se leería la
-// descripción del modo anterior mientras el selector dice otra cosa.
-$('modo-investigacion')?.addEventListener('change', async (e) => {
-  P.config.investigacion.modo = e.target.value;
-  await guardar();
-  pintarModo();
-  pintarPasos();
-});
 $('objetivo').addEventListener('input', (e) => ($('v-objetivo').textContent = e.target.value));
 $('velocidad').addEventListener('input', (e) => ($('v-velocidad').textContent = (e.target.value / 100).toFixed(2)));
 $('musica-volumen').addEventListener('input', (e) => ($('v-musica-volumen').textContent = `${e.target.value}%`));

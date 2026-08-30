@@ -225,8 +225,12 @@ export const DECLARACION_DE_FICCION =
   'cualquier parecido con hechos o personas reales es casualidad. Las imágenes ' +
   'están generadas y las personas que se ven son intérpretes de una dramatización.';
 
-/** ¿El expediente de este episodio está construido? */
-export const esFiccion = (fichas) => (fichas || []).some((f) => f.construida);
+/**
+ * ¿Es ficción? SIEMPRE, y la función se queda para que la afirmación tenga un
+ * sitio y una invariante que la vigile. El canal no tiene otro modo: si algún día
+ * lo tuviera, esto es lo primero que habría que volver a mirar.
+ */
+export const esFiccion = () => true;
 
 /**
  * El pie de fuentes (§8.4).
@@ -238,7 +242,10 @@ export const esFiccion = (fichas) => (fichas || []).some((f) => f.construida);
  * la declaración de ficción, que va arriba del todo y no aquí abajo.
  */
 export function componerPieDeFuentes(fichas) {
-  if (esFiccion(fichas)) return '';
+  // NUNCA HAY PIE DE FUENTES: el caso está inventado y no tiene fuentes. Un pie
+  // vacío o inventado insinúa un respaldo que no existe, que es peor que ninguno.
+  return '';
+  // eslint-disable-next-line no-unreachable
   const utiles = (fichas || []).filter((f) => f.fuente);
   if (!utiles.length) return '';
 

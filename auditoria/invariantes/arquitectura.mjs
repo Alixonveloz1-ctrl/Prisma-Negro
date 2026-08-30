@@ -1149,66 +1149,66 @@ export const invariantes = [
   },
 
   {
-    nombre: 'un-proyecto-documental-viejo-no-se-vuelve-ficcion-solo',
-    dice: 'El predeterminado nuevo es construir el caso: se INVENTA. Un proyecto guardado antes de eso se investigó documentando —sus fichas llevan fuente, fecha y cita, y su guion se escribió con la prohibición de inventar—, y si hereda el predeterminado de hoy, la siguiente tanda de fichas se fabrica un caso y se mezcla con las reales. Eso no es cambiar un ajuste: es estropear un documental terminado, sin avisar y sin forma de volver atrás.',
+    nombre: 'un-ajuste-viejo-no-puede-secuestrar-la-herramienta-de-hoy',
+    dice: 'Hubo un modo «documentar» que investigaba casos reales, y la mudanza dejaba a propósito a los proyectos viejos dentro de él «para no estropear un documental terminado». El único proyecto que existía era viejo: la herramienta entera se quedó meses buscando casos en internet, escribiendo con la prohibición de inventar y pidiendo fuentes, sin manera de salir desde la pantalla. La lección no es que aquella mudanza estuviera mal escrita, es que un valor guardado no puede decidir qué hace la herramienta hoy. Todo resto de aquel modo se BORRA al cargar, y lo que ya no se elige se fuerza.',
     comprobar(ctx) {
       const { normalizar, GENERO_POR_DEFECTO } = ctx.fn;
       const fallos = [];
 
-      // 1 · El proyecto de antes: versión 3, sin haber elegido modo nunca.
-      const viejo = normalizar({ version: 3, narracion: { velocidad: 0.96 } });
-      if (viejo.investigacion.modo !== 'documentar') {
+      // 1 · El proyecto que estuvo secuestrado: versión 3, en modo documentar y
+      // con la barrera de §8.2 puesta. Al cargarlo hoy no queda ni rastro.
+      const viejo = normalizar({
+        version: 3,
+        narracion: { velocidad: 0.96 },
+        investigacion: { modo: 'documentar' },
+        imagen: { prohibirFotorrealismoDePersonasReales: true },
+      });
+      if (viejo.investigacion.modo !== undefined) {
         fallos.push(
-          `Un proyecto de la versión 3 pasa a modo «${viejo.investigacion.modo}»: ` +
-            'se pondría a inventarse el caso que ya estaba investigado.',
+          `Un proyecto viejo sigue guardando el modo «${viejo.investigacion.modo}»: ` +
+            'un ajuste muerto que ya secuestró la herramienta una vez.',
         );
       }
-      if (viejo.imagen.prohibirFotorrealismoDePersonasReales !== true) {
-        fallos.push('Un proyecto documental viejo pierde la barrera de §8.2, que sí tenía puesta.');
+      if (viejo.imagen.prohibirFotorrealismoDePersonasReales !== false) {
+        fallos.push(
+          'Un proyecto viejo conserva la barrera de §8.2 encendida: rodaría de espaldas ' +
+            'y en penumbra para proteger a personas reales que no existen.',
+        );
       }
 
-      // 2 · El proyecto nuevo manda el predeterminado de hoy.
+      // 2 · Y el proyecto nuevo trae lo de hoy.
       const nuevo = normalizar({});
-      if (nuevo.investigacion.modo !== 'construir') {
-        fallos.push(`Un proyecto nuevo no arranca en construir, sino en «${nuevo.investigacion.modo}».`);
+      if (nuevo.investigacion.modo !== undefined) fallos.push('El modo de investigación ha vuelto a los valores de fábrica.');
+      if (nuevo.imagen.prohibirFotorrealismoDePersonasReales !== false) {
+        fallos.push('Un proyecto nuevo nace con la barrera de §8.2 puesta.');
       }
       if (nuevo.guion.minutos !== 30) fallos.push(`La duración objetivo por defecto es ${nuevo.guion.minutos} y no 30.`);
 
-      // 3 · Y una elección EXPRESA se respeta, sea vieja o nueva. Que la mudanza
-      // no pise lo que la persona decidió es la mitad del §7.2.
-      const elegido = normalizar({ version: 3, investigacion: { modo: 'construir' } });
-      if (elegido.investigacion.modo !== 'construir') {
-        fallos.push('Un proyecto viejo que SÍ eligió construir se revierte a documentar: se le cambia la decisión.');
-      }
-
-      // 4 · Idempotente. Normalizar dos veces tiene que dar lo mismo, o la mudanza
-      // se aplicaría otra vez sobre lo ya mudado en cada carga.
+      // 3 · Idempotente. Normalizar dos veces tiene que dar lo mismo, o la limpieza
+      // se aplicaría otra vez sobre lo ya limpio en cada carga.
       const dosVeces = normalizar(viejo);
-      if (dosVeces.investigacion.modo !== 'documentar' || dosVeces.version !== 4) {
-        fallos.push('Normalizar dos veces no da lo mismo: la mudanza no es idempotente.');
+      if (dosVeces.investigacion.modo !== undefined || dosVeces.version !== 4) {
+        fallos.push('Normalizar dos veces no da lo mismo: la limpieza no es idempotente.');
       }
 
-      // 5 · Y NORMALIZAR NO PUEDE ESCRIBIR EN LOS VALORES DE FÁBRICA.
+      // 4 · Y NORMALIZAR NO PUEDE ESCRIBIR EN LOS VALORES DE FÁBRICA.
       //
       // La mezcla era una copia superficial: una rama que el proyecto guardado no
       // mencionaba salía siendo el MISMO objeto que el de `PREDETERMINADA`, y
       // escribir ahí dentro mudaba la tabla de fábrica para toda la sesión. No se
-      // veía porque hasta ahora todas las líneas escribían el mismo valor que ya
+      // veía porque hasta entonces todas las líneas escribían el mismo valor que ya
       // había. Se comprueba cargando un proyecto viejo y mirando qué le pasa al
       // siguiente proyecto NUEVO, que es exactamente como se manifestaba.
-      normalizar({ version: 3 });
+      normalizar({ version: 3, investigacion: { modo: 'documentar', exigirFichas: false } });
       const despues = normalizar({});
-      if (despues.investigacion.modo !== 'construir') {
+      if (despues.investigacion.exigirFichas !== true) {
         fallos.push(
-          'Cargar un proyecto viejo deja el modo clavado en los valores de fábrica: ' +
-            'el siguiente proyecto nuevo nace ya mudado.',
+          'Cargar un proyecto viejo deja sus ajustes clavados en los valores de fábrica: ' +
+            'el siguiente proyecto nuevo nace con la configuración del anterior.',
         );
       }
-      if (despues.imagen.prohibirFotorrealismoDePersonasReales !== false) {
-        fallos.push('Cargar un proyecto viejo le deja la barrera de §8.2 puesta al siguiente proyecto nuevo.');
-      }
 
-      // 6 · El género se valida contra el catálogo y la proporción vieja se borra.
+      // 5 · El género se valida contra el catálogo y la proporción vieja se borra.
       if (normalizar({ genero: 'no-existe' }).genero !== GENERO_POR_DEFECTO) {
         fallos.push('Un género que ya no está en el catálogo no cae al predeterminado.');
       }
@@ -1217,12 +1217,16 @@ export const invariantes = [
       }
       return fallos;
     },
-    // Se rompe como estaría sin la mudanza: el predeterminado de hoy se aplica a
-    // todo el mundo, tuviera lo que tuviera guardado.
+    // Se rompe como estaba: lo guardado manda, y el modo viejo sobrevive a la
+    // carga con la barrera puesta detrás.
     romper: (ctx) =>
       conFuncion(ctx, 'normalizar', (cruda) => {
         const c = ctx.fn.normalizar(cruda);
-        return { ...c, investigacion: { ...c.investigacion, modo: 'construir' } };
+        if (cruda?.investigacion?.modo) {
+          c.investigacion = { ...c.investigacion, modo: cruda.investigacion.modo };
+          c.imagen = { ...c.imagen, prohibirFotorrealismoDePersonasReales: true };
+        }
+        return c;
       }),
   },
 

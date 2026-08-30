@@ -94,41 +94,17 @@ CÓMO NO SE CUENTA — y esto es lo que lo convierte en noticiero
 - Sin moraleja: no cierres explicándole al espectador qué tiene que sentir.`;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LAS DOS LICENCIAS, Y POR QUÉ SON DOS BLOQUES Y NO UNO.
+// LA LICENCIA DE INVENTAR, CON SU LÍMITE.
 //
-// El sistema de arriba —el oficio— vale para las dos clases de episodio. Lo que
-// cambia es qué se puede escribir que no esté en el material, y eso depende de
-// cómo se hicieron las fichas:
+// Aquí hubo dos bloques: este y un `RIGOR` que decía «no inventes datos, fechas,
+// cifras ni nombres que no estén en las fichas», para los episodios de casos
+// reales. Se fue con el modo que lo pedía.
 //
-//   documentar — fichas con fuente, fecha y cita de algo que pasó de verdad.
-//                Inventar un detalle ahí es mentir sobre personas reales, y es
-//                el fallo que hunde un canal. La prohibición se queda ENTERA.
-//   construir  — fichas de un caso que no ocurrió, declarado como ficción en la
-//                cabecera del episodio. No hay a quién mentir: lo que había que
-//                proteger no existe. Lo que sí puede romper la pieza es la
-//                incoherencia, y ese pasa a ser el límite.
-//
-// Que sean dos bloques y no uno reescrito es lo que permite que un proyecto
-// documental viejo siga siendo un documental. Si el guion tuviera un solo
-// sistema, cambiar el modo en Ajustes no bastaría: el episodio ya terminado se
-// reescribiría inventando.
+// No era una regla de más: era la contraria de esta. Con las dos en el mismo
+// sistema el guion recibía «inventa el detalle concreto que la escena pida» y «no
+// inventes datos» a la vez, y hacía lo que le parecía. El canal es de ficción; el
+// límite no es la verdad, es la COHERENCIA.
 // ─────────────────────────────────────────────────────────────────────────────
-
-const RIGOR = `
-LO QUE NO SE NEGOCIA — nada de lo de arriba autoriza a inventar
-- Cada afirmación factual sale de una ficha. Si una ficha marca algo como
-  discutido, el guion lo dice discutido: "según el expediente...", "la versión
-  oficial sostiene...".
-- No inventes datos, fechas, cifras ni nombres que no estén en las fichas. Un
-  detalle concreto que no está en el material no es color: es una mentira.
-- Atribuye según el tipo de fuente que lleva cada ficha entre corchetes: lo que
-  viene de [oficial], [judicial] o [policial] se puede afirmar ("consta en el
-  atestado", "la sentencia declaró probado"); lo de [prensa] se atribuye al medio;
-  lo de [testimonio] u [otra] se cuenta como lo que es ("según relató", "se ha
-  dicho, sin que conste probado").
-- La tensión sale de administrar lo que HAY, nunca de sugerir lo que no consta.
-- Y no le hables al espectador: nada de "imagina que...", ni de "y tú, ¿qué
-  harías?". Aquí los hechos son de alguien y se cuentan, no se recrean encima.`;
 
 const MATERIAL_CONSTRUIDO = `
 EL MATERIAL
@@ -178,14 +154,8 @@ FORMATO
 - Separa con una línea en blanco los bloques que deben ir en tomas distintas. Esa
   línea en blanco es una PAUSA: úsala después de un dato duro, para dejarlo caer.`;
 
-/**
- * Las reglas del guion para el modo en que se hicieron las fichas.
- *
- * `construir` trae la licencia de inventar CON SU LÍMITE; `documentar` trae la
- * prohibición entera. El tronco —el oficio— es el mismo en los dos.
- */
-export const sistemaDelGuion = (modo = 'construir') =>
-  SISTEMA + (modo === 'documentar' ? RIGOR : MATERIAL_CONSTRUIDO) + '\n' + FORMATO;
+/** Las reglas del guion: el oficio, la licencia con su límite, y el formato. */
+export const sistemaDelGuion = () => SISTEMA + MATERIAL_CONSTRUIDO + '\n' + FORMATO;
 
 /**
  * Genera el guion a partir de las fichas (§8.1: el guion se genera A PARTIR DE las
@@ -219,9 +189,6 @@ export async function escribirGuion({
   fichas,
   minutos = 10,
   tratamiento = null,
-  // Cómo se hicieron las fichas, y con eso qué se puede escribir que no esté en
-  // ellas. Ver `sistemaDelGuion`.
-  modo = 'construir',
   // El género, del catálogo. De él sale la estructura de bloques cuando el
   // director no dejó una suya.
   genero = null,
@@ -267,7 +234,7 @@ export async function escribirGuion({
     const r = await llamar(
       'texto',
       {
-        sistema: sistemaDelGuion(modo),
+        sistema: sistemaDelGuion(),
         instruccion:
           `Tema: ${tema}\n` +
           (angulo ? `Ángulo: ${angulo}\n` : '') +
@@ -413,14 +380,14 @@ export function actosDe(tratamiento, minutos, genero = null) {
 }
 
 /** Reescribe una escena sin tocar el resto (§4: cada fase se puede repetir sola). */
-export async function reescribirEscena({ guion, tituloEscena, indicacion, fichas, modo = 'construir', senal }) {
+export async function reescribirEscena({ guion, tituloEscena, indicacion, fichas, senal }) {
   const r = await llamar(
     'texto',
     {
       // El MISMO sistema que escribió el guion, con la misma licencia. Reescribir
       // una escena con otras reglas mete en el episodio un párrafo que juega a
       // otra cosa que el resto.
-      sistema: sistemaDelGuion(modo),
+      sistema: sistemaDelGuion(),
       instruccion:
         `GUION COMPLETO (para contexto):\n${guion}\n\n` +
         `Reescribe ÚNICAMENTE la escena «${tituloEscena}».\n` +
