@@ -85,6 +85,16 @@ export function sanear(bruto) {
   p.temaId = String(p.temaId || '');
   p.epocaId = String(p.epocaId || '');
 
+  // EL REGISTRO DE REPARTO: qué persona y qué versión usó cada episodio.
+  //
+  // `{ p03: { 'personaje:perito': 'v2', 'recurso:carretera-noche': 'v1' } }`.
+  //
+  // Es LA MEMORIA del canal, y por eso vive en el proyecto y no en la pieza: la
+  // pregunta que hay que poder contestar es «¿qué se usó en los dos episodios
+  // ANTERIORES?», y eso no cabe dentro de una pieza. Sin esto, cada episodio
+  // elegiría el primero de la lista y el mismo perito saldría en todos.
+  p.reparto = p.reparto && typeof p.reparto === 'object' && !Array.isArray(p.reparto) ? p.reparto : {};
+
   p.fichas = Array.isArray(p.fichas) ? p.fichas.map(sanearFicha) : [];
   p.piezas = Array.isArray(p.piezas) && p.piezas.length
     ? p.piezas.map((z, n) => sanearPieza(z, n, p))
@@ -324,6 +334,10 @@ function sanearToma(bruto, i, proyecto) {
     // de añadir un género no sabría cuál es cuál y volvería a pagarlo todo.
     clave: String(t.clave || ''),
     recurso: String(t.recurso || ''),
+    // QUÉ VERSIÓN es esta: `v3` del perito, `v1` de la carretera de noche. Es lo
+    // que se anota en el registro de reparto para no repetirla en los dos
+    // episodios siguientes; sin ella, la rotación no sabría qué se usó.
+    variante: String(t.variante || ''),
     genero: String(t.genero || ''),
     // EL ARQUETIPO que sale en esta toma. Va también aquí arriba, y no solo dentro
     // del plano, porque es por donde la herencia busca en la biblioteca: leerlo de

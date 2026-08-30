@@ -20,7 +20,11 @@ export const invariantes = [
     nombre: 'cada-genero-del-catalogo-se-sostiene-solo',
     dice: 'La regla del catálogo de géneros es que uno nuevo se añade a la tabla y no se toca nada más —la misma que el README le aplica al montador—. Eso solo se sostiene si CADA fila está completa: unos pesos que no sumen 1 reparten mal los minutos sin dar error, un bloque sin función manda a escribir «avanzar el relato», y un estilo por defecto que no existe en el catálogo de estilos se cae en silencio al primer episodio. Nada de eso se ve leyendo la tabla, y el que añada el séptimo género no va a acordarse de las cuatro cosas.',
     comprobar(ctx) {
-      const { GENEROS, GENERO_POR_DEFECTO, generoPorId, ESTILOS } = ctx.fn;
+      const {
+        GENEROS, GENERO_POR_DEFECTO, generoPorId, ESTILOS,
+        ELENCO, RECURSOS, VERSIONES_MINIMAS, EPISODIOS_SIN_REPETIR,
+        arquetipoPorId, personajesDe, planoDeVariante, planoDeRecurso,
+      } = ctx.fn;
       const fallos = [];
       if (!GENEROS?.length) return ['El catálogo de géneros está vacío.'];
 
@@ -72,32 +76,83 @@ export const invariantes = [
         }
         if (motivos.some((x) => !String(x || '').trim())) fallos.push(`Hay un motivo en blanco en «${quién}».`);
 
-        // Y LOS ARQUETIPOS, CON SU PLANO ENTERO. Sin el plano, la biblioteca no se
-        // podría generar desde el catálogo y la fase tendría que saberse la
-        // descripción de cada arquetipo — que es lo que la regla del catálogo
-        // prohíbe: un género se añade a la tabla y no se toca nada más.
+        // Y LOS PAPELES: claves del elenco del canal, que tienen que EXISTIR.
+        // Una clave mal escrita aquí no da error en ninguna parte: el género se
+        // queda sin ese papel, el director nunca lo propone, y los testimonios
+        // salen como planos genéricos que se pagan uno a uno.
         const personajes = g?.personajes || [];
         if (personajes.length < 3) {
-          fallos.push(`El género «${quién}» declara ${personajes.length} arquetipos y hacen falta 3 como mínimo.`);
+          fallos.push(`El género «${quién}» declara ${personajes.length} papeles y hacen falta 3 como mínimo.`);
         }
-        const idsPersonaje = new Set();
-        for (const p of personajes) {
-          if (!p?.id || idsPersonaje.has(p.id)) fallos.push(`Arquetipo sin clave propia en «${quién}»: ${p?.id || '(sin id)'}.`);
-          idsPersonaje.add(p?.id);
-          if (!String(p?.nombre || '').trim()) fallos.push(`Un arquetipo de «${quién}» no tiene nombre.`);
-          for (const campo of ['encuadre', 'lugar', 'luz', 'descripcion']) {
-            if (!String(p?.plano?.[campo] || '').trim()) {
-              fallos.push(
-                `El arquetipo «${p?.id}» de «${quién}» no dice su ${campo}: la biblioteca no podría generarlo ` +
-                  'sin que la fase se sepa la descripción de memoria.',
-              );
-            }
+        for (const id of personajes) {
+          if (!arquetipoPorId(id)) {
+            fallos.push(`El género «${quién}» pide el papel «${id}», que no está en el elenco del canal.`);
           }
+        }
+        if (personajesDe(g).length !== personajes.length) {
+          fallos.push(`El género «${quién}» pierde papeles al resolverlos contra el elenco.`);
+        }
+      }
+
+      // ── El elenco del canal ────────────────────────────────────────────────
+      //
+      // Aquí está lo que el usuario pidió con números: «por lo menos cinco
+      // policías, cinco doctores, cinco peritos, al menos unos veinte testigos».
+      // Un papel con una sola persona hace que el mismo señor salga en tres
+      // episodios seguidos, que es exactamente el problema que la biblioteca creó
+      // al resolver el del coste.
+      if (!(EPISODIOS_SIN_REPETIR >= 2)) {
+        fallos.push(`Con ${EPISODIOS_SIN_REPETIR} episodio(s) de margen la alternancia se ve: A, B, A, B.`);
+      }
+      // Una versión menos que el margen y la rotación es imposible: habría que
+      // repetir por fuerza en el episodio siguiente.
+      if (!(VERSIONES_MINIMAS > EPISODIOS_SIN_REPETIR)) {
+        fallos.push('El mínimo de versiones no supera al margen: la rotación no podría cumplirse nunca.');
+      }
+
+      const CUANTOS = { perito: 5, policia: 5, medico: 5, testigo: 20 };
+      const idsPapel = new Set();
+      for (const a of ELENCO || []) {
+        if (!a?.id || idsPapel.has(a.id)) fallos.push(`Papel sin clave propia en el elenco: ${a?.id || '(sin id)'}.`);
+        idsPapel.add(a?.id);
+        if (!String(a?.nombre || '').trim()) fallos.push(`El papel «${a?.id}» no tiene nombre.`);
+        for (const campo of ['encuadre', 'lugar', 'luz', 'descripcion']) {
+          if (!String(a?.plano?.[campo] || '').trim()) {
+            fallos.push(
+              `El papel «${a?.id}» no dice su ${campo}: la biblioteca no podría generarlo sin que la ` +
+                'fase se sepa la descripción de memoria.',
+            );
+          }
+        }
+        const v = a?.variantes || [];
+        const pedidas = CUANTOS[a?.id] || VERSIONES_MINIMAS;
+        if (v.length < pedidas) {
+          fallos.push(
+            `El papel «${a?.id}» tiene ${v.length} persona(s) y hacen falta ${pedidas}: ` +
+              'la misma cara saldría en episodios seguidos.',
+          );
+        }
+        const idsV = new Set();
+        for (const x of v) {
+          if (!x?.id || idsV.has(x.id)) fallos.push(`Persona sin clave propia en «${a?.id}»: ${x?.id || '(sin id)'}.`);
+          idsV.add(x?.id);
+          if (!String(x?.persona || '').trim()) fallos.push(`Una persona de «${a?.id}» no se describe.`);
+        }
+        // Y las personas tienen que ser DISTINGUIBLES entre sí: cinco descripciones
+        // iguales son un papel con una sola cara y un registro de rotación que
+        // miente.
+        if (new Set(v.map((x) => x?.persona)).size !== v.length) {
+          fallos.push(`El papel «${a?.id}» repite la misma descripción de persona: rotaría entre caras idénticas.`);
+        }
+        // La descripción final tiene que llevar a la persona dentro; si no, las
+        // cinco variantes generarían la misma imagen.
+        const plano = planoDeVariante(a, v[0]);
+        if (v[0] && !String(plano?.descripcion || '').includes(v[0].persona)) {
+          fallos.push(`El plano de «${a?.id}» no incorpora a la persona: las cinco variantes saldrían iguales.`);
         }
       }
 
       // Los recursos transversales: no son de ningún género y por eso van sueltos.
-      const { RECURSOS } = ctx.fn;
       if (!RECURSOS?.length || RECURSOS.length < 10) {
         fallos.push(`Hay ${RECURSOS?.length || 0} recursos transversales; con menos de diez la biblioteca no cubre nada.`);
       }
@@ -107,6 +162,22 @@ export const invariantes = [
         idsRecurso.add(r?.id);
         for (const campo of ['lugar', 'encuadre', 'luz', 'descripcion']) {
           if (!String(r?.[campo] || '').trim()) fallos.push(`El recurso «${r?.id}» no dice su ${campo}.`);
+        }
+        // TRES VERSIONES DE CADA UNO, como mínimo: un recurso vuelve en todos los
+        // episodios y es justo el que más canta si es siempre idéntico.
+        const v = r?.variantes || [];
+        if (v.length < VERSIONES_MINIMAS) {
+          fallos.push(
+            `El recurso «${r?.id}» tiene ${v.length} versión(es) y hacen falta ${VERSIONES_MINIMAS}: ` +
+              'el mismo plano exacto en todos los episodios se reconoce enseguida.',
+          );
+        }
+        if (new Set(v.map((x) => x?.matiz)).size !== v.length) {
+          fallos.push(`El recurso «${r?.id}» repite el mismo matiz: sus versiones saldrían iguales.`);
+        }
+        const plano = planoDeRecurso(r, v[0]);
+        if (v[0] && !String(plano?.descripcion || '').includes(v[0].matiz)) {
+          fallos.push(`El plano del recurso «${r?.id}» no incorpora el matiz: sus versiones saldrían iguales.`);
         }
       }
 
@@ -2169,6 +2240,105 @@ export const invariantes = [
           anteriores,
         ),
       ),
+  },
+
+  {
+    nombre: 'el-reparto-rota-y-el-canal-se-acuerda-de-a-quien-uso',
+    dice: '«Si en un documental utilizó un policía, por lo menos en los dos siguientes no debe utilizar el mismo, debe utilizar otro. Y así.» Una biblioteca con un perito resuelve el coste y crea un problema peor: el mismo señor aparece en el episodio 3, en el 4 y en el 5 hablando de casos distintos, y eso se ve a la primera — deja de parecer un canal de documentales y parece lo que es, una plantilla. Y no basta con tener cinco: hay que ACORDARSE de a quién se usó, porque sin memoria cada episodio elige el primero de la lista y los otros cuatro no salen nunca.',
+    comprobar(ctx) {
+      const { elegirVariante, EPISODIOS_SIN_REPETIR, heredables, tomasDeBiblioteca, ID_BIBLIOTECA } = ctx.fn;
+      const fallos = [];
+      const cinco = ['v1', 'v2', 'v3', 'v4', 'v5'].map((id) => ({ id }));
+
+      // 1 · Diez episodios seguidos: nadie repite dentro del margen, y salen todos.
+      const historial = {};
+      const orden = [];
+      const salidas = [];
+      for (let n = 1; n <= 10; n++) {
+        const pieza = `p${String(n).padStart(2, '0')}`;
+        orden.push(pieza);
+        const v = elegirVariante({ clave: 'personaje:policia', disponibles: cinco, historial, orden, pieza });
+        historial[pieza] = { 'personaje:policia': v.id };
+        salidas.push(v.id);
+      }
+      for (let n = 1; n < salidas.length; n++) {
+        const ventana = salidas.slice(Math.max(0, n - EPISODIOS_SIN_REPETIR), n);
+        if (ventana.includes(salidas[n])) {
+          fallos.push(
+            `El policía ${salidas[n]} vuelve en el episodio ${n + 1} habiendo salido en los ` +
+              `${EPISODIOS_SIN_REPETIR} anteriores: ${salidas.join(', ')}.`,
+          );
+          break;
+        }
+      }
+      // Y NO SE QUEDA NADIE FUERA. Con memoria pero sin repartir por uso, saldrían
+      // tres en rotación y los otros dos no aparecerían jamás.
+      if (new Set(salidas).size < cinco.length) {
+        fallos.push(
+          `En diez episodios solo salen ${new Set(salidas).size} de los ${cinco.length} policías: ` +
+            `${salidas.join(', ')}. Se pagaron cinco caras para usar tres.`,
+        );
+      }
+
+      // 2 · SIN MEMORIA NO HAY ROTACIÓN. Es la mitad de la invariante: con el
+      // historial vacío en cada episodio, siempre sale el mismo.
+      const sinMemoria = [1, 2, 3].map((n) =>
+        elegirVariante({ clave: 'personaje:policia', disponibles: cinco, historial: {}, orden: [], pieza: `p0${n}` }).id,
+      );
+      if (new Set(sinMemoria).size !== 1) {
+        fallos.push('La elección no es determinista sin historial: el mismo proyecto daría repartos distintos.');
+      }
+
+      // 3 · Dentro de UN episodio la persona es la misma. Si se eligiera toma a
+      // toma, un episodio con cuatro testimonios del perito tendría cuatro peritos.
+      const biblioteca = {
+        id: ID_BIBLIOTECA,
+        titulo: 'Biblioteca',
+        esBiblioteca: true,
+        tomas: tomasDeBiblioteca().map((t) => ({ ...t, imagen: 'ok', video: t.movimiento ? 'ok' : null })),
+      };
+      const conPerito = [0, 1, 2, 3].map((i) => ({
+        i,
+        personaje: 'perito',
+        plano: { lugar: `sitio ${i}`, encuadre: 'x', luz: 'y', sujetos: [], personaje: 'perito' },
+      }));
+      const r1 = heredables(conPerito, [biblioteca], { historial: {}, orden: ['p01'], pieza: 'p01' });
+      const claves = new Set(r1.filter((x) => x.tipo === 'img').map((x) => x.de.clave));
+      if (claves.size !== 1) {
+        fallos.push(`Cuatro testimonios del perito en un mismo episodio dan ${claves.size} caras distintas.`);
+      }
+      if (!r1.reparto || !r1.reparto['personaje:perito']) {
+        fallos.push('La herencia no dice a quién eligió: el episodio siguiente no sabría a quién no repetir.');
+      }
+
+      // 4 · Y entre DOS episodios, con el primero ya anotado, no se repite.
+      const hist = { p01: r1.reparto };
+      const r2 = heredables(conPerito, [biblioteca], { historial: hist, orden: ['p01', 'p02'], pieza: 'p02' });
+      if (r2.reparto['personaje:perito'] === hist.p01['personaje:perito']) {
+        fallos.push('El episodio siguiente repite al mismo perito: la memoria no se está usando.');
+      }
+      // Y volver a resolver el MISMO episodio no cambia la cara a mitad.
+      const otraVez = heredables(conPerito, [biblioteca], { historial: hist, orden: ['p01', 'p02'], pieza: 'p01' });
+      if (otraVez.reparto['personaje:perito'] !== hist.p01['personaje:perito']) {
+        fallos.push('Volver a dirigir un episodio le cambia el perito: el material ya generado no cuadraría.');
+      }
+
+      // 5 · Y si un papel tuviera menos personas que el margen, se afloja en vez
+      // de quedarse sin plano: perder el plano rompe el episodio, repetir no.
+      const uno = elegirVariante({
+        clave: 'personaje:x',
+        disponibles: [{ id: 'v1' }],
+        historial: { p01: { 'personaje:x': 'v1' }, p02: { 'personaje:x': 'v1' } },
+        orden: ['p01', 'p02', 'p03'],
+        pieza: 'p03',
+      });
+      if (uno?.id !== 'v1') fallos.push('Un papel con una sola persona se queda sin plano en vez de repetirla.');
+      return fallos;
+    },
+    // Se rompe como estaría sin memoria: la primera versión disponible, siempre.
+    // Es exactamente lo que hacía antes de esto, y lo que ponía al mismo perito en
+    // todos los episodios del canal.
+    romper: (ctx) => conFuncion(ctx, 'elegirVariante', ({ disponibles }) => (disponibles || [])[0] || null),
   },
 
   {

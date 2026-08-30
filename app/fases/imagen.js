@@ -19,6 +19,9 @@
 
 import { llamar } from '../api.js';
 import { claveToma, tomaDelFotograma, claveClip, claveFotograma } from '../../comun/claves.mjs';
+// La rotación del reparto vive en la biblioteca: es quien sabe qué usó cada
+// episodio y qué no puede repetirse en los dos siguientes.
+import { elegirVariante } from './biblioteca.js';
 import { reducirReferencias, deBase64 } from '../imagenes.js';
 import {
   estiloPorId,
@@ -77,7 +80,7 @@ export function planificar(tomas, { soloLasQueFaltan = true } = {}) {
  * darte la de noche cuando el guion pide de día es peor que pagar.
  * ─────────────────────────────────────────────────────────────────────────────
  */
-export function heredables(tomas, piezasAnteriores) {
+export function heredables(tomas, piezasAnteriores, reparto = null) {
   // Dos bancos separados: uno de fotogramas y otro de CLIPS. Un clip no sirve
   // como imagen fija ni al revés, así que se buscan por su lado. Y el de clips es
   // el que más ahorra: un clip cuesta muchas veces lo que una imagen.
@@ -96,24 +99,37 @@ export function heredables(tomas, piezasAnteriores) {
   // perito de la biblioteca aunque el texto no se parezca en nada. Es lo que
   // convierte la biblioteca en algo que se usa solo, en vez de en un banco que
   // hay que acertar.
+  // Y OTRO POR RECURSO, por lo mismo: «la carretera comarcal de noche» es una
+  // clave del catálogo y «una carretera de noche con lluvia» es una redacción.
+  //
+  // Los dos guardan TODAS las versiones que hay de cada clave, no la primera: de
+  // ahí sale la rotación, que es lo que impide que el mismo perito salga en tres
+  // episodios seguidos.
   const porArquetipo = new Map();
+  const porRecurso = new Map();
+  const guardar = (mapa, clave, z, t) => {
+    if (!clave) return;
+    const conVid = t.video === 'ok' || !!t.heredadoVid;
+    const conImg = t.imagen === 'ok' || !!t.heredado;
+    if (!conVid && !conImg) return;
+    if (!mapa.has(clave)) mapa.set(clave, []);
+    mapa.get(clave).push({
+      // La versión concreta —`v3`—, que es lo que se anota en el reparto para no
+      // repetirla en los dos episodios siguientes.
+      id: t.variante || `t${t.i}`,
+      pieza: z.id,
+      i: t.i,
+      titulo: z.titulo,
+      vid: conVid ? t.heredadoVid || claveToma(z.id, t.i, 'vid') : null,
+      img: conImg ? t.heredado || claveToma(z.id, t.i, 'img') : null,
+    });
+  };
+
   for (const z of piezasAnteriores) {
     for (const t of z.tomas || []) {
       if (!t.plano) continue;
-      const arquetipo = String(t.personaje || t.plano?.personaje || '').trim().toLowerCase();
-      if (arquetipo && !porArquetipo.has(arquetipo)) {
-        const conVid = t.video === 'ok' || !!t.heredadoVid;
-        const conImg = t.imagen === 'ok' || !!t.heredado;
-        if (conVid || conImg) {
-          porArquetipo.set(arquetipo, {
-            pieza: z.id,
-            i: t.i,
-            titulo: z.titulo,
-            vid: conVid ? t.heredadoVid || claveToma(z.id, t.i, 'vid') : null,
-            img: conImg ? t.heredado || claveToma(z.id, t.i, 'img') : null,
-          });
-        }
-      }
+      guardar(porArquetipo, String(t.personaje || t.plano?.personaje || '').trim().toLowerCase(), z, t);
+      guardar(porRecurso, String(t.recurso || t.plano?.recurso || '').trim().toLowerCase(), z, t);
       const k = huellaDePlano(t);
       if (!k) continue;
 
@@ -178,17 +194,40 @@ export function heredables(tomas, piezasAnteriores) {
   // ella, la previa la usa de cartel, y sin ella la toma apuntaría a un fotograma
   // local que nadie generó.
   // ─────────────────────────────────────────────────────────────────────────────
+  // EL REPARTO DE ESTE EPISODIO, decidido UNA VEZ para toda la pieza.
+  //
+  // Se elige aquí arriba y no dentro del bucle a propósito: si el perito se
+  // eligiera toma a toma, un episodio con cuatro testimonios del perito tendría
+  // cuatro peritos distintos. Dentro de un episodio la persona es la misma; lo
+  // que rota es de un episodio al siguiente.
+  const elegidas = new Map();
+  const elegir = (mapa, clave) => {
+    if (!clave || !mapa.has(clave)) return null;
+    const marca = `${mapa === porArquetipo ? 'personaje' : 'recurso'}:${clave}`;
+    if (elegidas.has(marca)) return elegidas.get(marca);
+    const v = elegirVariante({
+      clave: marca,
+      disponibles: mapa.get(clave),
+      historial: reparto?.historial || {},
+      orden: reparto?.orden || [],
+      pieza: reparto?.pieza || '',
+    });
+    elegidas.set(marca, v);
+    return v;
+  };
+
   const salida = [];
   for (const t of tomas) {
     if (!t.plano) continue;
     const k = huellaDePlano(t);
 
-    // EL ARQUETIPO MANDA SOBRE LA HUELLA. Si esta toma es el testimonio del
-    // perito y la biblioteca tiene al perito, ese es el plano — da igual cómo se
+    // LA CLAVE DE CATÁLOGO MANDA SOBRE LA HUELLA. Si esta toma es el testimonio
+    // del perito y la biblioteca tiene peritos, ese es el plano — da igual cómo se
     // haya redactado el lugar en este episodio. Es la resolución que de verdad
     // ahorra, porque no depende de que dos textos coincidan.
-    const arquetipo = String(t.personaje || t.plano?.personaje || '').trim().toLowerCase();
-    const dela = arquetipo ? porArquetipo.get(arquetipo) : null;
+    const dela =
+      elegir(porArquetipo, String(t.personaje || t.plano?.personaje || '').trim().toLowerCase()) ||
+      elegir(porRecurso, String(t.recurso || t.plano?.recurso || '').trim().toLowerCase());
 
     if (!t.heredadoVid && t.video !== 'ok') {
       const c = dela?.vid ? { ...dela, clave: dela.vid } : clips.get(k);
@@ -199,6 +238,10 @@ export function heredables(tomas, piezasAnteriores) {
       if (g) salida.push({ i: t.i, de: g, tipo: 'img' });
     }
   }
+
+  // Lo elegido se devuelve aparte para que quien llama lo ANOTE en el registro:
+  // sin anotarlo, el episodio siguiente no sabría a quién no puede repetir.
+  salida.reparto = Object.fromEntries([...elegidas].filter(([, v]) => v).map(([m, v]) => [m, v.id]));
   return salida;
 }
 

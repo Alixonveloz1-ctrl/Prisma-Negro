@@ -20,103 +20,104 @@
 //
 // Dos secciones:
 //
-//   REPARTO  — un plano por arquetipo de personaje y por género. El perito en su
-//              laboratorio, el detective en su despacho, el testigo en su cocina,
-//              la familiar en su salón. Declarando, mudos: la voz es siempre la
-//              del narrador, así que en pantalla se ve a alguien hablando y se
-//              oye al narrador — que es como funciona la referencia.
-//   RECURSOS — los planos transversales que sirven a todos los géneros: la
-//              carretera de noche, el precinto, el archivador, las manos pasando
-//              hojas de un expediente.
+//   REPARTO  — CADA PERSONA del elenco del canal. No un perito: los cinco. No un
+//              testigo: los veinte. Declarando, mudos: la voz es siempre la del
+//              narrador, así que en pantalla se ve a alguien hablando y se oye al
+//              narrador — que es como funciona la referencia.
+//   RECURSOS — cada VERSIÓN de cada plano transversal: la carretera de noche con
+//              llovizna, con niebla y de madrugada. Tres de cada uno.
 //
-// Lo que cuesta: se paga UNA VEZ, para todos los episodios que vengan. Un
-// episodio de treinta minutos con 165 tomas pasa de unas 144 imágenes a unas 45
-// cuando los motivos van a 15–20 × 5–8 y la biblioteca cubre un cuarto.
+// ─────────────────────────────────────────────────────────────────────────────
+// POR QUÉ VARIAS VERSIONES, Y NO UNA
+//
+// «Hay que tener por lo menos cinco policías, cinco doctores, cinco peritos, al
+//  menos unos veinte testigos… si en un documental utilizó un policía, por lo
+//  menos en los dos siguientes no debe utilizar el mismo.»
+//
+// Una biblioteca con un perito resuelve el coste y crea un problema peor: el
+// mismo señor aparece en el episodio 3, en el 4 y en el 5 hablando de casos
+// distintos. Eso se ve a la primera y convierte el canal en una plantilla.
+//
+// Por eso el elenco tiene varias personas por papel y cada recurso varias
+// versiones, y la elección de cuál toca NO ES LA PRIMERA NI AL AZAR: se lleva un
+// registro de qué usó cada episodio y se rota (ver `elegirVariante`).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { GENEROS, RECURSOS } from '../../comun/generos.mjs';
+import {
+  ELENCO,
+  RECURSOS,
+  EPISODIOS_SIN_REPETIR,
+  planoDeVariante,
+  planoDeRecurso,
+} from '../../comun/elenco.mjs';
 
 /** La pieza de la biblioteca se llama así y no cambia nunca. */
 export const ID_BIBLIOTECA = 'biblioteca';
 
+/** `perito` + `v3` → `personaje:perito:v3`. La clave que ata una toma a su entrada. */
+export const claveDePersona = (arquetipo, variante) => `personaje:${arquetipo}:${variante}`;
+export const claveDeRecurso = (recurso, variante) => `recurso:${recurso}:${variante}`;
+
 /**
  * Las tomas de la biblioteca, compuestas desde el catálogo.
  *
- * DETERMINISTA sobre el catálogo, y eso es lo que la hace utilizable: añadir un
- * género añade sus arquetipos al final y no mueve ni un índice de los que ya
- * están. Si los índices se movieran, las claves de todo lo ya generado apuntarían
- * a otro plano y habría que volver a pagar la biblioteca entera.
- *
- * Por eso el orden es: primero los recursos —que son fijos y no dependen de
- * cuántos géneros haya— y después los arquetipos, género por género en el orden
- * del catálogo.
+ * El orden es solo el de partida: quien manda sobre el índice de cada toma es
+ * `sincronizarBiblioteca`, que conserva el de las claves que ya existen. Sin eso,
+ * añadir una persona a un papel movería el índice de todas las de después y todo
+ * lo ya pagado apuntaría a otra cara.
  */
-export function tomasDeBiblioteca({ generos = GENEROS, recursos = RECURSOS } = {}) {
+export function tomasDeBiblioteca({ elenco = ELENCO, recursos = RECURSOS } = {}) {
   const salida = [];
 
   for (const r of recursos) {
-    salida.push({
-      i: salida.length,
-      escena: 0,
-      texto: '',
-      segundos: 6,
-      medida: false,
-      clave: `recurso:${r.id}`,
-      recurso: r.id,
-      personaje: '',
-      plano: {
-        encuadre: r.encuadre,
-        movimientoCamara: 'fijo',
-        lugar: r.lugar,
-        luz: r.luz,
-        sujetos: [],
-        descripcion: r.descripcion,
+    for (const v of r.variantes || []) {
+      salida.push({
+        i: salida.length,
+        escena: 0,
+        texto: '',
+        segundos: 6,
+        medida: false,
+        clave: claveDeRecurso(r.id, v.id),
+        recurso: r.id,
+        variante: v.id,
         personaje: '',
-      },
-      // Un recurso es un plano de recurso: paisaje, objeto, textura. Sin gente.
-      tipoImagen: 'reconstruccion',
-      claseVisual: 'recurso',
-      // LOS RECURSOS NO LLEVAN CLIP. Son fondos y objetos: un archivador quieto
-      // con un recorrido de cámara se ve igual de bien y cuesta cero.
-      movimiento: false,
-      reusa: null,
-      audio: null,
-      imagen: null,
-      video: null,
-    });
+        plano: planoDeRecurso(r, v),
+        tipoImagen: 'reconstruccion',
+        claseVisual: 'recurso',
+        // LOS RECURSOS NO LLEVAN CLIP. Son fondos y objetos: un archivador quieto
+        // con un recorrido de cámara se ve igual de bien y cuesta cero.
+        movimiento: false,
+        reusa: null,
+        audio: null,
+        imagen: null,
+        video: null,
+      });
+    }
   }
 
-  for (const g of generos) {
-    for (const p of g.personajes || []) {
+  for (const a of elenco) {
+    for (const v of a.variantes || []) {
       salida.push({
         i: salida.length,
         escena: 1,
         texto: '',
         segundos: 6,
         medida: false,
-        clave: `personaje:${g.id}:${p.id}`,
+        clave: claveDePersona(a.id, v.id),
         recurso: '',
-        // La clave por la que un episodio lo encuentra. Se guarda en minúsculas
-        // porque es lo que escribe el director y lo que compara la herencia: dos
-        // grafías del mismo arquetipo son dos planos pagados donde bastaba uno.
-        personaje: String(p.id).toLowerCase(),
-        genero: g.id,
-        plano: {
-          encuadre: p.plano.encuadre,
-          movimientoCamara: 'fijo',
-          lugar: p.plano.lugar,
-          luz: p.plano.luz,
-          sujetos: [p.nombre],
-          descripcion: p.plano.descripcion,
-          personaje: String(p.id).toLowerCase(),
-        },
+        variante: v.id,
+        // La clave por la que un episodio lo encuentra. En minúsculas porque es lo
+        // que escribe el director y lo que compara la herencia: dos grafías del
+        // mismo papel son dos planos pagados donde bastaba uno.
+        personaje: String(a.id).toLowerCase(),
+        plano: { ...planoDeVariante(a, v), personaje: String(a.id).toLowerCase() },
         tipoImagen: 'reconstruccion',
         claseVisual: 'dramatizacion',
-        // LOS ARQUETIPOS SÍ LLEVAN CLIP, y es la inversión que da sentido a todo
-        // esto: un plano de alguien declarando tiene que MOVERSE o se nota que es
-        // una foto. Se paga una vez y sirve para todos sus testimonios de todos
-        // los episodios — el montaje repite la entrada con `-stream_loop -1`, así
-        // que un clip de seis segundos cubre una toma de veinticinco.
+        // EL REPARTO SÍ LLEVA CLIP, y es la inversión que da sentido a todo esto:
+        // un plano de alguien declarando tiene que MOVERSE o se nota que es una
+        // foto. Se paga una vez y sirve para todos sus testimonios de todos los
+        // episodios — el montaje repite la entrada con `-stream_loop -1`, así que
+        // un clip de seis segundos cubre una toma de veinticinco.
         movimiento: true,
         reusa: null,
         audio: null,
@@ -142,6 +143,8 @@ export function resumenBiblioteca(tomas, { bibliotecaConVideo = true } = {}) {
     total: lista.length,
     recursos: lista.filter((t) => t.recurso).length,
     personajes: lista.filter((t) => t.personaje).length,
+    papeles: new Set(lista.filter((t) => t.personaje).map((t) => t.personaje)).size,
+    sitios: new Set(lista.filter((t) => t.recurso).map((t) => t.recurso)).size,
     imagenesFaltan: lista.filter((t) => t.imagen !== 'ok').length,
     clips: conClip.length,
     clipsFaltan: conClip.filter((t) => t.video !== 'ok').length,
@@ -151,26 +154,39 @@ export function resumenBiblioteca(tomas, { bibliotecaConVideo = true } = {}) {
 /**
  * La pieza de biblioteca, creada o puesta al día.
  *
- * Se llama al abrirla y cada vez que crece el catálogo. NO PISA lo ya generado:
- * las tomas que existen conservan su estado —`imagen: 'ok'`, `video: 'ok'`— y
- * solo se añaden las que faltan. Volver a abrir la biblioteca después de añadir
- * un género no puede costar dinero por sí solo.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * EL ÍNDICE DE UNA TOMA YA GENERADA NO SE MUEVE NUNCA.
+ *
+ * La clave de un archivo es `biblioteca/tNNN/img`, y NNN es el índice de la toma.
+ * Si al añadir una persona al elenco los índices se recolocaran, la toma que
+ * antes era el perito Salgado pasaría a ser otra cara y todo lo pagado apuntaría
+ * al sitio equivocado — sin dar ningún error, que es lo peor: saldría el episodio
+ * con el perito cambiado a mitad.
+ *
+ * Así que quien manda es lo GUARDADO: cada clave conserva el índice que ya tenía,
+ * y las claves nuevas se numeran a partir del mayor. El catálogo se puede
+ * reordenar entero sin que pase nada.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 export function sincronizarBiblioteca(pieza) {
-  const previas = new Map((pieza?.tomas || []).map((t) => [t.clave, t]));
+  const previas = new Map((pieza?.tomas || []).filter((t) => t.clave).map((t) => [t.clave, t]));
+  let siguiente = Math.max(-1, ...[...previas.values()].map((t) => Number(t.i) || 0)) + 1;
+
   const tomas = tomasDeBiblioteca().map((nueva) => {
     const vieja = previas.get(nueva.clave);
-    if (!vieja) return nueva;
-    // Se conserva LO GENERADO y lo heredado; el plano vuelve a salir del
-    // catálogo, que es la fuente de verdad de cómo se ve cada arquetipo.
+    if (!vieja) return { ...nueva, i: siguiente++ };
+    // Se conserva EL ÍNDICE y LO GENERADO; el plano vuelve a salir del catálogo,
+    // que es la fuente de verdad de cómo se ve cada persona.
     return {
       ...nueva,
+      i: vieja.i,
       imagen: vieja.imagen || null,
       video: vieja.video || null,
       heredado: vieja.heredado || null,
       heredadoVid: vieja.heredadoVid || null,
     };
   });
+
   return {
     ...(pieza || {}),
     id: ID_BIBLIOTECA,
@@ -182,6 +198,81 @@ export function sincronizarBiblioteca(pieza) {
       { n: 0, titulo: 'Recursos' },
       { n: 1, titulo: 'Reparto' },
     ],
-    tomas,
+    tomas: tomas.sort((a, b) => a.i - b.i),
   };
+}
+
+/**
+ * Cuál de las versiones toca en este episodio.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Si en un documental utilizó un policía, por lo menos en los dos siguientes no
+ *  debe utilizar el mismo, debe utilizar otro. Y así.»
+ *
+ * Dos reglas, en este orden:
+ *
+ *   1. NO SE REPITE lo que se usó en los últimos `EPISODIOS_SIN_REPETIR`
+ *      episodios. Es una prohibición dura, no una preferencia.
+ *   2. Entre las que quedan, la MENOS USADA en toda la historia del canal, y a
+ *      igualdad la que lleva más tiempo sin salir. Sin esto, la número 1 saldría
+ *      siempre que estuviera permitida y las últimas del elenco no saldrían nunca.
+ *
+ * Y si la prohibición no deja ninguna —porque el papel tiene menos personas que
+ * episodios de margen—, se afloja en vez de fallar: se coge la que lleva más
+ * tiempo sin salir. Quedarse sin plano por una regla de reparto sería cambiar un
+ * problema estético por uno que rompe el episodio.
+ *
+ * DETERMINISTA sobre `(disponibles, historial, pieza)`: el mismo proyecto da
+ * siempre el mismo reparto, así que volver a dirigir no cambia quién sale.
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * `historial` es `{ [idPieza]: { [clave]: idVariante } }` y `orden` la lista de
+ * episodios del más viejo al más nuevo.
+ */
+export function elegirVariante({
+  clave,
+  disponibles,
+  historial = {},
+  orden = [],
+  pieza = '',
+  sinRepetir = EPISODIOS_SIN_REPETIR,
+}) {
+  const lista = (disponibles || []).filter(Boolean);
+  if (!lista.length) return null;
+
+  // Si este episodio ya eligió, MANDA LO ELEGIDO. Volver a dirigir no puede
+  // cambiar la cara del perito a mitad de un episodio ya generado.
+  const yaElegida = historial?.[pieza]?.[clave];
+  const anterior = lista.find((v) => v.id === yaElegida);
+  if (anterior) return anterior;
+
+  // Los episodios anteriores a este, del más nuevo al más viejo.
+  const previos = orden.filter((z) => z !== pieza);
+  const recientes = previos.slice(-sinRepetir);
+  const prohibidas = new Set(recientes.map((z) => historial?.[z]?.[clave]).filter(Boolean));
+
+  const usos = new Map(lista.map((v) => [v.id, 0]));
+  const ultimoUso = new Map(lista.map((v) => [v.id, -1]));
+  previos.forEach((z, n) => {
+    const v = historial?.[z]?.[clave];
+    if (v === undefined || !usos.has(v)) return;
+    usos.set(v, usos.get(v) + 1);
+    ultimoUso.set(v, n);
+  });
+
+  const mejor = (candidatas) =>
+    [...candidatas].sort(
+      (a, b) =>
+        usos.get(a.id) - usos.get(b.id) ||
+        ultimoUso.get(a.id) - ultimoUso.get(b.id) ||
+        lista.indexOf(a) - lista.indexOf(b),
+    )[0];
+
+  const permitidas = lista.filter((v) => !prohibidas.has(v.id));
+  return mejor(permitidas.length ? permitidas : lista);
+}
+
+/** El reparto de un episodio, en texto, para poder enseñarlo. */
+export function repartoDe(historial, pieza) {
+  return Object.entries(historial?.[pieza] || {}).map(([clave, variante]) => `${clave} → ${variante}`);
 }

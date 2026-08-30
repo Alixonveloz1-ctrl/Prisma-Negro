@@ -44,7 +44,7 @@ NAVEGADOR                FUNCIÓN                  NUBE DEL USUARIO
   claves, la segmentación, el audio y **la hoja de montaje**.
 - **`montador/`** — el contenedor de ffmpeg. No conoce **ningún** archivo por su
   nombre: recibe una lista `origen → destino` y copia.
-- **`auditoria/`** — 133 invariantes sobre cómo tiene que estar construido el sistema.
+- **`auditoria/`** — 134 invariantes sobre cómo tiene que estar construido el sistema.
 - **`banco/`** — el banco de pruebas con material de mentira.
 
 ### Por qué la hoja de montaje está en `comun/`
@@ -194,12 +194,45 @@ encadenados. Con 165 tomas:
 |---|---|
 | Sin nada | ~165 |
 | **Motivos** — 15–20 planos que vuelven 5–8 veces, repartidos por el código con seis tomas de separación garantizadas | ~57 |
-| **+ Biblioteca** — arquetipos y recursos que valen para todos los episodios, pagados una vez | ~43 |
+| **+ Biblioteca** — elenco y sitios que valen para todos los episodios, pagados una vez | ~43 |
 
 Y el movimiento **deja de ser un porcentaje**: es una cuenta —doce clips por
-episodio— más los arquetipos de la biblioteca, que llevan video siempre porque se
-pagan una vez. Los motivos nunca llevan clip: su valor está en volver costando
-cero, y animarlos sería pagar la fase más cara justo por lo que ya salía gratis.
+episodio— más el reparto de la biblioteca, que lleva video siempre porque se paga
+una vez. Los motivos nunca llevan clip: su valor está en volver costando cero, y
+animarlos sería pagar la fase más cara justo por lo que ya salía gratis.
+
+---
+
+## El elenco del canal, y por qué rota
+
+Una biblioteca con **un** perito resuelve el coste y crea un problema peor: el
+mismo señor aparece en el episodio 3, en el 4 y en el 5 hablando de casos
+distintos. Eso se ve a la primera y convierte el canal en una plantilla.
+
+Así que `comun/elenco.mjs` tiene **varias personas por papel** —cinco peritos,
+cinco policías, cinco médicos, veinte testigos— y **tres versiones de cada sitio**
+—la carretera de noche con llovizna, con niebla y de madrugada—. El plano es del
+papel; la persona es de la variante.
+
+Y el proyecto lleva un **registro de reparto**: qué persona y qué versión usó cada
+episodio. Al resolver uno nuevo:
+
+1. Se descarta lo usado en los **dos episodios anteriores**. Es una prohibición
+   dura, no una preferencia.
+2. Entre las que quedan, la **menos usada** en toda la historia del canal, y a
+   igualdad la que lleva más tiempo sin salir. Sin esto la primera saldría siempre
+   que estuviera permitida y las últimas no saldrían nunca.
+
+Dentro de un episodio la persona es **la misma**: si se eligiera toma a toma, un
+episodio con cuatro testimonios del perito tendría cuatro peritos. Y volver a
+dirigir no cambia la cara a mitad, porque lo ya elegido manda.
+
+| La inversión, una sola vez | |
+|---|---|
+| Personas del elenco | 81, en 16 papeles |
+| Versiones de sitios | 60, de 20 sitios |
+| Imágenes de biblioteca | 141 |
+| Clips del reparto | 81 |
 
 ---
 
@@ -212,7 +245,7 @@ npm run banco            # monta con material de mentira
 npm run prueba           # las dos cosas
 ```
 
-`auditar` comprueba 133 afirmaciones sobre cómo tiene que estar construido el
+`auditar` comprueba 134 afirmaciones sobre cómo tiene que estar construido el
 sistema: «ninguna imagen viaja sin reducir», «el montador no nombra ningún archivo
 del guion», «todos los caminos de carga normalizan la configuración», «la lista de
 descargas cubre todos los archivos que abre el montaje», «un proyecto documental

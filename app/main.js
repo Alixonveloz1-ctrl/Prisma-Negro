@@ -1347,9 +1347,20 @@ function pintarBiblioteca() {
     `<div class="reparto">` +
     `<span class="pastilla ${r.imagenesFaltan ? '' : 'p-ok'}">${r.total - r.imagenesFaltan} de ${r.total} imágenes</span>` +
     `<span class="pastilla ${r.clipsFaltan ? '' : 'p-ok'}">${r.clips - r.clipsFaltan} de ${r.clips} clips</span>` +
-    `<span class="pastilla">${r.recursos} recursos</span>` +
-    `<span class="pastilla">${r.personajes} arquetipos</span>` +
-    `</div>`;
+    `<span class="pastilla">${r.personajes} personas en ${r.papeles} papeles</span>` +
+    `<span class="pastilla">${r.recursos} versiones de ${r.sitios} sitios</span>` +
+    `</div>` +
+    // Qué le tocó a este episodio, y a los anteriores: es lo que hace visible que
+    // la rotación existe. Sin enseñarlo, «no repite» es un acto de fe.
+    (Object.keys(P.reparto || {}).length
+      ? `<p class="nota chica" style="margin-top:8px">Reparto por episodio: ` +
+        ordenDeEpisodios()
+          .filter((id) => P.reparto[id])
+          .slice(-4)
+          .map((id) => `<b>${escapar(id)}</b> ${Object.values(P.reparto[id]).length} elegidos`)
+          .join(' · ') +
+        `</p>`
+      : '');
 }
 
 accion(
@@ -2481,6 +2492,30 @@ accion(
  * clip no marcaba `movimiento`, y la hoja se montaba con la imagen fija teniendo
  * el clip comprado al lado.
  */
+function ordenDeEpisodios() {
+  return estado
+    .episodiosDe(P)
+    .slice()
+    .sort((a, b) => (a.creado || 0) - (b.creado || 0))
+    .map((z) => z.id);
+}
+
+/**
+ * El contexto de reparto que necesita la herencia: qué usó cada episodio y en qué
+ * orden salieron. Es LA MEMORIA que impide que el mismo perito salga en tres
+ * episodios seguidos.
+ */
+function contextoDeReparto(z) {
+  return { historial: P.reparto, orden: ordenDeEpisodios(), pieza: z.id };
+}
+
+/** Anota qué persona y qué versión le tocaron a este episodio. */
+async function anotarReparto(z, elegido) {
+  if (!elegido || !Object.keys(elegido).length) return;
+  P.reparto[z.id] = { ...(P.reparto[z.id] || {}), ...elegido };
+  await guardar();
+}
+
 function aplicarHerencia(z, lista) {
   for (const { i, de, tipo } of lista) {
     const t = z.tomas.find((x) => x.i === i);
@@ -2516,9 +2551,10 @@ function aplicarHerencia(z, lista) {
 async function resolverContraBiblioteca(z) {
   const b = estado.bibliotecaDe(P);
   if (!b || !z.tomas.length) return 0;
-  const puede = imagenFase.heredables(z.tomas, [b]);
+  const puede = imagenFase.heredables(z.tomas, [b], contextoDeReparto(z));
   if (!puede.length) return 0;
   aplicarHerencia(z, puede);
+  await anotarReparto(z, puede.reparto);
   await guardar();
   return puede.length;
 }
@@ -2539,7 +2575,7 @@ accion(
       throw new Error('Todavía no hay otros casos de los que reutilizar nada.');
     }
 
-    const puede = imagenFase.heredables(z.tomas, otras);
+    const puede = imagenFase.heredables(z.tomas, otras, contextoDeReparto(z));
     if (!puede.length) {
       return avisar(
         'tomas',
@@ -2548,6 +2584,7 @@ accion(
       );
     }
     aplicarHerencia(z, puede);
+    await anotarReparto(z, puede.reparto);
     await guardar();
     pintarTodo();
     avisar(

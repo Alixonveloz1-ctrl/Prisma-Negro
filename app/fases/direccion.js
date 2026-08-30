@@ -25,6 +25,7 @@
 
 import { llamar } from '../api.js';
 import { comoInstruccion } from './director.js';
+import { RECURSOS, personajesDe } from '../../comun/generos.mjs';
 
 /** Tomas por llamada. Ver la cabecera: ni una ni todas. */
 export const POR_LOTE = 18;
@@ -93,6 +94,13 @@ const ESQUEMA = {
           // Sale del catálogo del género, y es lo que permite resolver el plano
           // contra la biblioteca permanente en vez de generarlo.
           personaje: { type: 'string' },
+          // EL RECURSO del canal al que corresponde este plano, por su clave.
+          //
+          // Lo mismo que `personaje` pero para los sitios: «la carretera comarcal
+          // de noche» es una clave del catálogo y «una carretera oscura con
+          // lluvia» es una redacción. Buscando por la redacción no se encuentra
+          // nunca lo ya pagado; buscando por la clave, siempre.
+          recurso: { type: 'string' },
           // Cuánto se queda la imagen DESPUÉS de la última palabra. Va en palabras
           // y no en segundos a propósito: un número libre sale disparatado, y lo
           // que se decide aquí no es una cifra, es si esta toma pesa o no pesa.
@@ -261,9 +269,11 @@ export async function dirigir({ tomas, escenas, tema, config, tratamiento = null
               `sea uno de ellos, escritos LETRA POR LETRA IGUAL:\n` +
               genero.motivos.map((m) => `- ${m}`).join('\n') +
               `\nPuedes añadir motivos propios de este caso; escríbelos igual en todas sus vueltas.\n\n` +
-              `ARQUETIPOS QUE DECLARAN. Cuando una toma sea un testimonio, «personaje» ` +
-              `lleva una de estas claves y el plano se describe TAL CUAL viene aquí:\n` +
-              genero.personajes
+              `PAPELES QUE DECLARAN. Cuando una toma sea un testimonio, «personaje» ` +
+              `lleva una de estas claves y el plano se describe TAL CUAL viene aquí. ` +
+              `NO describas a la persona —quién la hace lo decide el reparto del ` +
+              `canal, que rota para que no salga la misma en episodios seguidos—:\n` +
+              personajesDe(genero)
                 .map(
                   (p) =>
                     `- ${p.id} (${p.nombre}): ${p.plano.encuadre} · ${p.plano.lugar} · ` +
@@ -272,6 +282,17 @@ export async function dirigir({ tomas, escenas, tema, config, tratamiento = null
                 .join('\n') +
               `\n\n`
             : '') +
+          // LOS RECURSOS DEL CANAL, por su clave.
+          //
+          // Sin esta lista, el director escribe «una carretera oscura con lluvia»
+          // y la biblioteca tiene «la carretera comarcal de noche»: no coinciden,
+          // no se hereda nada, y se paga otra vez un plano que ya existe en tres
+          // versiones. La clave es lo único que sí coincide siempre.
+          `SITIOS DEL CANAL YA GENERADOS. Si un plano es uno de estos, pon su clave ` +
+          `en «recurso» y describe el sitio tal cual; ya existe en varias versiones ` +
+          `y no se vuelve a pagar:\n` +
+          RECURSOS.map((r) => `- ${r.id}: ${r.lugar} · ${r.encuadre} · ${r.luz}`).join('\n') +
+          `\nSi el plano NO es ninguno de estos, deja «recurso» vacío.\n\n` +
           grupo
             .map(
               (t) =>
@@ -479,6 +500,8 @@ function resolver(tomas, planos, config) {
       // plano porque es parte de qué se ve, y es por donde se resuelve contra la
       // biblioteca permanente del canal.
       personaje: String(p.personaje || '').trim().toLowerCase(),
+      // Y el sitio del canal, por lo mismo.
+      recurso: String(p.recurso || '').trim().toLowerCase(),
     };
 
     // SI EL PLANO CAMBIÓ, LA IMAGEN VIEJA YA NO ES DE ESTA TOMA.
@@ -669,6 +692,7 @@ function fichaDe(t) {
     // sus motivos al reanudar y el reparto saldría distinto.
     motivo: t.motivo || (t.reusa !== null && t.reusa !== undefined ? huellaDeFicha(t.plano) : ''),
     personaje: t.plano?.personaje || '',
+    recurso: t.recurso || t.plano?.recurso || '',
     respiro,
   };
 }
