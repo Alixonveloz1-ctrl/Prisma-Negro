@@ -2469,8 +2469,10 @@ export const invariantes = [
       };
 
       // El aspecto es del canal y hay uno solo, así que esto se comprueba una vez.
-      // Lo que NO puede pasar es que estas exigencias vivan dentro del texto del
-      // estilo: van sueltas para que cambiar el aspecto del canal no se las lleve.
+      //
+      // La prohibición de texto legible va SUELTA y no dentro del aspecto: es una
+      // regla del generador —no sabe escribir— y no una decisión de cómo se ve el
+      // canal, así que tiene que sobrevivir a cualquier cambio de aspecto.
       {
         const estilo = { id: 'canal' };
         const p = componerInstruccion(toma, ctx.config, { tratamiento: null });
@@ -2483,15 +2485,25 @@ export const invariantes = [
         if (!/escorzo|fuera de foco|cortad/i.test(p)) {
           fallos.push(`Estilo «${estilo.id}»: se prohíbe el texto sin decir cómo encuadrar un documento.`);
         }
-        if (!/FOTOGRAMA de documental, no una foto de banco/.test(p)) {
+        if (!/FOTOGRAMA de una serie documental|no una foto de banco de im[aá]genes/.test(p)) {
           fallos.push(`Estilo «${estilo.id}»: no se pide un fotograma, así que sale una foto de catálogo.`);
         }
-        // Los tres puntos concretos que separan un fotograma de una foto de stock.
-        // «Que sea cinematográfico» no significa nada para un generador.
+        // Los puntos CONCRETOS que separan un fotograma de una foto de stock.
+        // «Que sea cinematográfico» no significa nada para un generador: si no le
+        // dices otra cosa te da la foto media de internet —sujeto centrado, todo
+        // enfocado, todo iluminado por igual, el sitio recién ordenado—, y cada uno
+        // de estos es lo contrario de uno de esos puntos.
         for (const [qué, re] of [
           ['un primer término que tape parte del cuadro', /primer t[eé]rmino/i],
+          ['el sujeto descentrado', /descentrado/i],
           ['una sola fuente de luz con dirección', /una sola fuente de luz|UNA sola fuente/i],
+          ['que lo que no alcanza la luz se quede en negro', /se queda en negro|sin relleno/i],
           ['textura en el aire', /polvo|vaho|llovizna/i],
+          ['foco selectivo', /foco selectivo|profundidad de campo corta/i],
+          ['grano de película y negros densos', /grano de pel[ií]cula/i],
+          ['que el sitio esté vivido', /vivido|marcas de uso/i],
+          ['una imperfección de cámara', /destello en el objetivo|vi[ñn]eta/i],
+          ['que no parezca un render', /no de render|nunca de render/i],
         ]) {
           if (!re.test(p)) fallos.push(`Estilo «${estilo.id}»: no se pide ${qué}.`);
         }

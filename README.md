@@ -163,10 +163,26 @@ restante —el oficio cinematográfico, la prohibición de texto legible, la bar
 documental, la descripción del plano y la paleta del director— era idéntico en los
 seis. No eran seis mundos: eran seis acentos sobre el mismo aspecto.
 
-Así que hay **un solo aspecto**, en `comun/estilos.mjs` como `ESTILO_DEL_CANAL`:
-reconstrucción documental, material rodado y no render. Lo que hace que un episodio
-no se parezca al anterior sigue vivo y no cuesta nada: la **identidad visual** que
-el director decide para cada caso y el **elenco que rota**.
+Así que hay **un solo aspecto**, en `comun/estilos.mjs` como `ESTILO_DEL_CANAL`, y
+es el cinematográfico: fotograma de serie documental rodada con cámara de cine,
+óptica esférica y foco selectivo, rodado a través de algo, una sola fuente de luz
+motivada con los negros sin relleno, aire con textura, grano de película y sitios
+vividos. Nunca render, nunca 3D, nunca iluminación plana de estudio.
+
+Son **puntos concretos, no adjetivos**: «que sea cinematográfico» no significa nada
+para un generador — si no le dices otra cosa te da la foto media de internet, con
+el sujeto centrado, todo enfocado y el sitio recién ordenado. Cada frase de ese
+bloque es lo contrario de uno de esos puntos, dicha de forma que se pueda ejecutar.
+
+Antes eran **dos** textos —el «estilo» y el «oficio cinematográfico»— separados
+para que el segundo sobreviviera a los seis estilos. Con uno solo esa razón
+desaparece y lo que quedaba era peor: los dos decían lo mismo dos veces (grano de
+película, profundidad de campo corta, nada de saturación de anuncio), y repetir una
+instrucción no la refuerza, la diluye.
+
+Lo que hace que un episodio no se parezca al anterior sigue vivo y no cuesta nada:
+la **identidad visual** que el director decide para cada caso y el **elenco que
+rota**.
 
 Los clips nunca se multiplicaron, ni con seis estilos: un clip parte de su
 fotograma y se le pide «mantén exactamente la composición, la paleta y la luz de la

@@ -23,12 +23,7 @@ import { claveToma, tomaDelFotograma, claveClip, claveFotograma } from '../../co
 // episodio y qué no puede repetirse en los dos siguientes.
 import { elegirVariante } from './biblioteca.js';
 import { reducirReferencias, deBase64 } from '../imagenes.js';
-import {
-  ESTILO_DEL_CANAL,
-  BARRERA_DOCUMENTAL,
-  SIN_TEXTO_LEGIBLE,
-  OFICIO_CINEMATOGRAFICO,
-} from '../../comun/estilos.mjs';
+import { ESTILO_DEL_CANAL, BARRERA_DOCUMENTAL, SIN_TEXTO_LEGIBLE } from '../../comun/estilos.mjs';
 import * as local from '../local.js';
 import { material } from '../material.js';
 
@@ -391,11 +386,10 @@ export function componerInstruccion(toma, config, { conReferencias = false, trat
     ESTILO_DEL_CANAL,
     v ? `Paleta: ${v.paleta}. Luz general: ${v.luz}. Textura: ${v.textura}.` : '',
     v?.queEvitar ? `Evitar: ${v.queEvitar}.` : '',
-    // Lo que hace que sea un fotograma y no una foto de catálogo, y lo que impide
-    // los garabatos donde debería haber un expediente. Van en todas las imágenes,
-    // sea cual sea el estilo: son las dos cosas que el usuario vio mal de un
-    // vistazo, y ninguna de las dos la arregla el estilo por su cuenta.
-    OFICIO_CINEMATOGRAFICO,
+    // Y lo que impide los garabatos donde debería haber un expediente. Va aparte
+    // del aspecto a propósito: es una regla del generador —no sabe escribir—, no
+    // una decisión de cómo se ve el canal, y tiene que sobrevivir a cualquier
+    // cambio de aspecto.
     SIN_TEXTO_LEGIBLE,
     BARRERA_DOCUMENTAL,
     'Decide tú la puesta en escena: la distancia exacta, la posición de los sujetos y hacia dónde miran.',

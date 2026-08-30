@@ -89,12 +89,28 @@ export async function generarClip({ toma, tomas, pieza, config, tratamiento = nu
   // emitir». Mandarlo entero no mejora nada y gasta presupuesto de petición.
   const fotograma = await reducirFotogramaDePartida(fot.blob, config.formato.ancho);
 
+  // EL ASPECTO NO SE VUELVE A PEDIR AQUÍ, Y ES A PROPÓSITO.
+  //
+  // El clip parte del fotograma ya generado, así que la óptica, la luz, el grano y
+  // la paleta vienen dentro de la imagen: repetirlos en el texto haría que el
+  // generador de video los reinterpretara y el clip saldría distinto de su propio
+  // fotograma. Por eso la línea que importa es «mantén exactamente lo de la imagen
+  // de partida», y es también lo que hace que el aspecto del canal no multiplique
+  // el coste de los clips: son los mismos con un aspecto que con seis.
+  //
+  // Lo que sí hay que decir es CÓMO SE MUEVE, porque eso no está en la imagen. Un
+  // generador sin instrucción de cámara mete deriva de dron y aceleraciones de
+  // videojuego, y eso delata la pieza más que cualquier otra cosa.
   const p = toma.plano || {};
   const instruccion = [
     p.descripcion,
     p.movimientoCamara && p.movimientoCamara !== 'fijo' ? `Cámara: ${p.movimientoCamara}.` : '',
     'Movimiento sutil y continuo dentro del cuadro. Sin cortes, sin transiciones, sin texto.',
-    'Mantén exactamente la composición, la paleta y la luz de la imagen de partida.',
+    'La cámara se mueve como en una serie documental rodada de verdad: muy poco, a ' +
+      'velocidad constante, sobre trípode o con estabilizador. Nada de deriva de ' +
+      'dron, nada de zooms bruscos, nada de aceleraciones ni de movimiento de ' +
+      'videojuego.',
+    'Mantén exactamente la composición, la paleta, el grano y la luz de la imagen de partida.',
   ]
     .filter(Boolean)
     .join(' ');
