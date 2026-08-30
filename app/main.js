@@ -23,6 +23,7 @@ import { pintarSelector } from './config.js';
 import { segmentarVerificado } from '../comun/segmentar.mjs';
 import { TEMAS, EPOCAS, EPOCA_POR_DEFECTO, temaPorId, epocaPorId } from '../comun/temas.mjs';
 import { GENEROS, generoPorId } from '../comun/generos.mjs';
+import * as elenco from '../comun/elenco.mjs';
 import * as investigacion from './fases/investigacion.js';
 import * as guionFase from './fases/guion.js';
 import * as direccion from './fases/direccion.js';
@@ -1466,12 +1467,15 @@ function laBiblioteca() {
 function pintarBiblioteca() {
   const caja = $('resumen-biblioteca');
   if (!caja) return;
-  const z = estado.bibliotecaDe(P);
-  const tomas = z ? z.tomas : bibliotecaFase.tomasDeBiblioteca();
+  const tomas = tomasParaPintar();
   const r = bibliotecaFase.resumenBiblioteca(tomas, P.config.movimiento.politica);
   caja.innerHTML =
     `<div class="reparto">` +
     `<span class="pastilla ${r.imagenesFaltan ? '' : 'p-ok'}">${r.total - r.imagenesFaltan} de ${r.total} imágenes</span>` +
+    // GENERADA NO ES BUENA, y por eso son dos cifras y no una. La de en medio es la
+    // que faltaba: cuántas he mirado yo.
+    `<span class="pastilla ${r.porRevisar ? 'p-aviso' : 'p-ok'}">${r.aprobadas} aprobadas</span>` +
+    (r.porRevisar ? `<span class="pastilla p-aviso">${r.porRevisar} por revisar</span>` : '') +
     `<span class="pastilla ${r.clipsFaltan ? '' : 'p-ok'}">${r.clips - r.clipsFaltan} de ${r.clips} clips</span>` +
     `<span class="pastilla">${r.personajes} personas en ${r.papeles} papeles</span>` +
     `<span class="pastilla">${r.recursos} versiones de ${r.sitios} sitios</span>` +
@@ -1487,7 +1491,296 @@ function pintarBiblioteca() {
           .join(' · ') +
         `</p>`
       : '');
+  pintarGaleriaBiblioteca();
 }
+
+// ── La galería de la biblioteca ───────────────────────────────────────────────
+//
+// «Solamente puedo darle al botón de generar todo, y genera las imágenes que le da
+//  la gana; yo no puedo ver lo que está generando. Si una imagen sale deforme, así
+//  se queda, porque yo no tengo control sobre eso. Cada imagen, para poder verla,
+//  con su botón de reintentar.»
+//
+// La biblioteca tenía dos botones de generar todo y NINGUNA manera de ver lo
+// generado. Eso no es un descuido de interfaz: la biblioteca es permanente, así
+// que una cara deforme sale en todos los episodios del canal, para siempre, y
+// además se convierte en clip —la fase más cara— sin que nadie la haya mirado.
+//
+// Aquí está cada una: se ve, se rehace la que salga mal, y se le da el visto bueno
+// a la que valga. Y el clip solo se ofrece sobre lo aprobado (`clipsPosibles`).
+
+/**
+ * Las tomas que se pintan: el catálogo completo, con lo guardado encima.
+ *
+ * SIN MUTAR NADA. Pintar no puede escribir en el proyecto —se repinta muchas veces
+ * y por muchos motivos—, pero la lista tiene que estar entera: si se pintara solo
+ * lo guardado, una biblioteca a medias enseñaría cuatro fichas y las 137 que faltan
+ * no existirían en pantalla, que es no poder generarlas. `sincronizarBiblioteca`
+ * conserva los índices de lo ya pagado, así que lo que se ve y lo que se genera
+ * hablan de la misma toma.
+ */
+function tomasParaPintar() {
+  return bibliotecaFase.sincronizarBiblioteca(estado.bibliotecaDe(P)).tomas;
+}
+
+const filtroBiblioteca = { estado: 'todas', grupo: '', tope: 24 };
+
+const FILTROS_BIBLIOTECA = [
+  ['todas', 'Todas'],
+  ['faltan', 'Sin generar'],
+  ['porRevisar', 'Por revisar'],
+  ['aprobadas', 'Aprobadas'],
+  ['conClip', 'Con clip'],
+];
+
+/** Cómo se llama esta toma en pantalla: «perito forense · v3», «el precinto · v1». */
+function rotuloDeBiblioteca(t) {
+  const a = t.personaje ? elenco.arquetipoPorId(t.personaje) : null;
+  const r = t.recurso ? elenco.recursoPorId(t.recurso) : null;
+  const nombre = a?.nombre || r?.lugar || t.clave || `toma ${t.i + 1}`;
+  const v = (a || r)?.variantes?.find((x) => x.id === t.variante);
+  return { nombre, detalle: v?.persona || v?.matiz || '', variante: t.variante };
+}
+
+/**
+ * ¿Entra esta toma en lo que se está mirando?
+ *
+ * Toma el filtro POR PARÁMETRO y no del estado global: el rótulo de cada pastilla
+ * lleva su cuenta —«Por revisar (37)»—, y calcularlas empujando y devolviendo el
+ * filtro global era dejar la pantalla en el filtro equivocado en cuanto una de
+ * esas cuentas fallara a mitad.
+ */
+function pasaElFiltro(t, { estado = 'todas', grupo = '' } = {}) {
+  if (grupo === 'recursos' ? !t.recurso : grupo && t.personaje !== grupo) return false;
+  switch (estado) {
+    case 'faltan':
+      return t.imagen !== 'ok';
+    case 'porRevisar':
+      return t.imagen === 'ok' && !t.aprobada;
+    case 'aprobadas':
+      return !!t.aprobada;
+    case 'conClip':
+      return t.video === 'ok';
+    default:
+      return true;
+  }
+}
+
+let versionBiblioteca = 0;
+
+function pintarGaleriaBiblioteca() {
+  const g = $('galeria-biblioteca');
+  if (!g) return;
+  const mia = ++versionBiblioteca;
+  const tomas = tomasParaPintar();
+
+  // Los filtros, y el grupo. Con 141 tarjetas, «ver las que faltan por revisar» es
+  // la diferencia entre repasar la biblioteca y no repasarla nunca.
+  const chips = $('filtros-biblioteca');
+  if (chips) {
+    chips.innerHTML = '';
+    for (const [id, rotulo] of FILTROS_BIBLIOTECA) {
+      const b = document.createElement('button');
+      b.className = `chip${filtroBiblioteca.estado === id ? ' on' : ''}`;
+      const cuantas = tomas.filter((t) => pasaElFiltro(t, { estado: id, grupo: filtroBiblioteca.grupo })).length;
+      b.textContent = `${rotulo} (${cuantas})`;
+      b.onclick = () => {
+        filtroBiblioteca.estado = id;
+        filtroBiblioteca.tope = 24;
+        pintarGaleriaBiblioteca();
+      };
+      chips.appendChild(b);
+    }
+  }
+
+  const sel = $('grupo-biblioteca');
+  if (sel) {
+    const papeles = [...new Set(tomas.filter((t) => t.personaje).map((t) => t.personaje))];
+    const opciones = [
+      { id: '', etiqueta: 'Todo el catálogo' },
+      { id: 'recursos', etiqueta: 'Sitios y objetos' },
+      ...papeles.map((p) => ({ id: p, etiqueta: elenco.arquetipoPorId(p)?.nombre || p })),
+    ];
+    // §7.3: el selector devuelve con qué se quedó y quien lo pinta lo escribe.
+    filtroBiblioteca.grupo = pintarSelector(sel, opciones, filtroBiblioteca.grupo);
+    sel.onchange = () => {
+      filtroBiblioteca.grupo = sel.value;
+      filtroBiblioteca.tope = 24;
+      pintarGaleriaBiblioteca();
+    };
+  }
+
+  const todas = tomas.filter((t) => pasaElFiltro(t, filtroBiblioteca));
+  const visibles = todas.slice(0, filtroBiblioteca.tope);
+  g.innerHTML = '';
+  if (!todas.length) {
+    g.innerHTML = '<p class="nota">No hay nada aquí con ese filtro.</p>';
+  }
+
+  for (const x of visibles) {
+    g.appendChild(tarjetaDeBiblioteca(x, tomas, mia));
+  }
+
+  const mas = $('b-biblioteca-mas');
+  if (mas) {
+    mas.style.display = todas.length > visibles.length ? '' : 'none';
+    mas.textContent = `Ver más (${todas.length - visibles.length} restantes)`;
+  }
+}
+
+/** Una tarjeta: la imagen, lo que es, y los tres mandos que faltaban. */
+function tarjetaDeBiblioteca(x, tomas, mia) {
+  const d = document.createElement('div');
+  d.className = `pieza-mat${x.aprobada ? ' aprobada' : ''}`;
+  const hay = x.imagen === 'ok';
+  const { nombre, detalle, variante } = rotuloDeBiblioteca(x);
+
+  const visual = document.createElement('div');
+  visual.className = 'sin';
+  visual.textContent = hay ? 'cargando…' : 'sin generar';
+  d.appendChild(visual);
+
+  const cuerpo = document.createElement('div');
+  cuerpo.className = 'cuerpo';
+  cuerpo.innerHTML =
+    `<p><b>${escapar(nombre)}</b> · ${escapar(variante)}<br>${escapar(detalle.slice(0, 90))}</p>` +
+    (x.aprobada ? '<span class="pastilla p-ok">aprobada</span>' : hay ? '<span class="pastilla p-aviso">por revisar</span>' : '') +
+    (x.video === 'ok'
+      ? '<span class="pastilla p-ok">clip listo</span>'
+      : x.movimiento
+        ? '<span class="pastilla">lleva clip</span>'
+        : '');
+  d.appendChild(cuerpo);
+
+  if (hay) {
+    materialLocal(claveFotograma(bibliotecaFase.ID_BIBLIOTECA, x, tomas), 'image/png').then((blob) => {
+      if (mia !== versionBiblioteca) return;
+      if (!blob) {
+        visual.textContent = 'no se pudo cargar';
+        return;
+      }
+      const img = document.createElement('img');
+      img.src = URL.createObjectURL(blob);
+      img.alt = '';
+      img.loading = 'lazy';
+      d.replaceChild(img, visual);
+    });
+  }
+
+  // 1 · GENERAR / REHACER. El botón que faltaba: una imagen deforme deja de ser
+  // definitiva.
+  const b = document.createElement('button');
+  b.className = 'btn chico fantasma';
+  b.textContent = hay ? 'Rehacer' : 'Generar';
+  b.onclick = async () => {
+    b.disabled = true;
+    const rotulo = b.textContent;
+    b.textContent = '…';
+    try {
+      await rehacerImagenBiblioteca(x.i);
+    } catch (e) {
+      avisar('biblioteca', e.message, 'malo');
+      b.textContent = rotulo;
+      b.disabled = false;
+    }
+  };
+  cuerpo.appendChild(b);
+
+  // 2 · EL VISTO BUENO. De él cuelga el gasto en clips, así que es un botón y no
+  // una casilla escondida.
+  if (hay) {
+    const v = document.createElement('button');
+    v.className = 'btn chico fantasma';
+    v.textContent = x.aprobada ? 'Quitar el visto bueno' : 'Está bien';
+    v.onclick = async () => {
+      v.disabled = true;
+      try {
+        await aprobarBiblioteca(x.i, !x.aprobada);
+      } catch (e) {
+        avisar('biblioteca', e.message, 'malo');
+        v.disabled = false;
+      }
+    };
+    cuerpo.appendChild(v);
+  }
+
+  // 3 · EL CLIP, y SOLO sobre lo aprobado. Ver `clipsPosibles`: sale de la imagen
+  // y es la fase más cara, así que primero se mira la imagen.
+  if (x.movimiento && x.video !== 'ok' && P.config.movimiento.politica.bibliotecaConVideo) {
+    const c = document.createElement('button');
+    c.className = 'btn chico fantasma';
+    const enFila = estadoEnFilaBiblioteca(x.i);
+    const rotulo = enFila || (hay ? (x.aprobada ? 'Generar su clip' : 'Apruébala para el clip') : 'Primero la imagen');
+    c.textContent = rotulo;
+    c.disabled = !!enFila || !hay || !x.aprobada;
+    c.onclick = async () => {
+      c.disabled = true;
+      c.textContent = '…';
+      try {
+        await clipDeBiblioteca(x.i, (m) => (c.textContent = m.length > 22 ? `${m.slice(0, 20)}…` : m));
+      } catch (e) {
+        avisar('biblioteca', e.message, 'malo');
+        c.textContent = rotulo;
+        c.disabled = false;
+      }
+    };
+    cuerpo.appendChild(c);
+  }
+  return d;
+}
+
+/**
+ * Rehacer UNA imagen de la biblioteca.
+ *
+ * El visto bueno se cae solo: lo que se aprobó era la imagen anterior, y una
+ * aprobación heredada por la siguiente sería exactamente el agujero por el que se
+ * cuela un clip pagado sobre una cara deforme.
+ */
+async function rehacerImagenBiblioteca(i) {
+  const z = laBiblioteca();
+  const k = z.tomas.findIndex((t) => t.i === i);
+  if (k < 0) throw new Error('No encuentro esa toma de la biblioteca.');
+  if (z.tomas[k].video === 'ok' && !confirm('Esta ya tiene su clip, y el clip salió de la imagen de ahora. Si la rehaces, el clip deja de corresponderse con ella y habría que rehacerlo también (se paga otra vez). ¿Sigo?')) {
+    return;
+  }
+  avisar('biblioteca', `Rehaciendo «${rotuloDeBiblioteca(z.tomas[k]).nombre}»…`);
+  const clave = claveFotograma(bibliotecaFase.ID_BIBLIOTECA, z.tomas[k], z.tomas);
+  const nueva = await imagenFase.generarImagen({
+    toma: z.tomas[k],
+    tomas: z.tomas,
+    pieza: bibliotecaFase.ID_BIBLIOTECA,
+    config: P.config,
+    tratamiento: null,
+  });
+  z.tomas[k] = { ...nueva, aprobada: false };
+  await refrescar(clave);
+  await guardar();
+  pintarBiblioteca();
+  avisar('biblioteca', 'Imagen rehecha. Míralas y dale «Está bien» si vale.', 'bueno');
+}
+
+/** El visto bueno, o quitarlo. */
+async function aprobarBiblioteca(i, si) {
+  const z = laBiblioteca();
+  const k = z.tomas.findIndex((t) => t.i === i);
+  if (k < 0) throw new Error('No encuentro esa toma de la biblioteca.');
+  if (si && z.tomas[k].imagen !== 'ok') throw new Error('No hay imagen que aprobar todavía.');
+  z.tomas[k].aprobada = !!si;
+  await guardar();
+  pintarBiblioteca();
+}
+
+// Se enseñan de veinticuatro en veinticuatro: ciento cuarenta y una miniaturas de
+// golpe son ciento cuarenta y una lecturas del almacén nada más abrir el Inicio, y
+// eso en un teléfono es la pantalla en blanco durante medio minuto.
+accion(
+  'b-biblioteca-mas',
+  async () => {
+    filtroBiblioteca.tope += 24;
+    pintarGaleriaBiblioteca();
+  },
+  'biblioteca',
+);
 
 accion(
   'b-biblioteca-imagenes',
@@ -1536,12 +1829,28 @@ accion(
     if (!P.config.movimiento.politica.bibliotecaConVideo) {
       return avisar('biblioteca', 'Los clips de la biblioteca están apagados en la política de movimiento.');
     }
-    const pendientes = z.tomas.filter((t) => t.movimiento && t.video !== 'ok');
-    if (!pendientes.length) return avisar('biblioteca', 'El reparto ya tiene todos sus clips.', 'bueno');
+    // SOLO LO APROBADO. Antes cogía toda toma con `movimiento` mirara o no si su
+    // imagen existía, así que el botón podía ponerse a pagar clips de imágenes que
+    // nadie había visto —o que no estaban—. Ver `clipsPosibles`.
+    const pendientes = bibliotecaFase.clipsPosibles(z.tomas, P.config.movimiento.politica);
+    if (!pendientes.length) {
+      const r = bibliotecaFase.resumenBiblioteca(z.tomas, P.config.movimiento.politica);
+      if (r.porRevisar) {
+        return avisar(
+          'biblioteca',
+          `Hay ${r.porRevisar} imágenes sin revisar. Míralas abajo y dale «Está bien» a las que valgan: ` +
+            'el clip sale de la imagen y es lo más caro que se genera aquí.',
+        );
+      }
+      if (r.imagenesFaltan) {
+        return avisar('biblioteca', `Faltan ${r.imagenesFaltan} imágenes por generar. El clip sale de la imagen.`);
+      }
+      return avisar('biblioteca', 'El reparto aprobado ya tiene todos sus clips.', 'bueno');
+    }
     if (
       !confirm(
-        `Son ${pendientes.length} clips del reparto. Se pagan UNA VEZ y valen para todos los ` +
-          `episodios que vengan, pero es la fase más cara. ¿Sigo?`,
+        `Son ${pendientes.length} clips, de las imágenes que ya has aprobado. Se pagan UNA VEZ y ` +
+          `valen para todos los episodios que vengan, pero es la fase más cara. ¿Sigo?`,
       )
     ) {
       return;
@@ -2338,21 +2647,31 @@ async function rehacerImagen(i) {
 // en uno — el mismo ritmo en fila que ya usan las fases por lotes. El teléfono se
 // puede soltar; cada clip terminado se guarda, se empareja con sus gemelas y
 // repinta antes de empezar el siguiente.
+//
+// LA FILA ES UNA SOLA PARA TODO, episodio y biblioteca, y por eso cada entrada
+// lleva de qué pieza es. Dos filas independientes volverían a disparar dos
+// llamadas a la vez en cuanto alguien pidiera un clip del reparto mientras corría
+// uno del episodio, que es justo el límite de peticiones que esto vino a evitar.
 
 const filaClips = [];
 let bombeandoClips = false;
 
+/** La pieza de una entrada de la fila: el episodio abierto, o la biblioteca. */
+const piezaDeFila = (zid) => (zid === bibliotecaFase.ID_BIBLIOTECA ? estado.bibliotecaDe(P) : pieza());
+
 /** En qué está una toma dentro de la fila: 'generando', 'en cola (n.º)' o nada. */
-function estadoEnFila(i) {
-  const k = filaClips.findIndex((x) => x.i === i);
+function estadoEnFila(i, zid = P.id) {
+  const k = filaClips.findIndex((x) => x.i === i && x.zid === zid);
   if (k < 0) return null;
   return k === 0 && bombeandoClips ? 'Generando…' : `En cola (${k + 1}º)`;
 }
 
+const estadoEnFilaBiblioteca = (i) => estadoEnFila(i, bibliotecaFase.ID_BIBLIOTECA);
+
 async function convertirEnClip(i, decir = () => {}) {
   const k = pieza().tomas.findIndex((t) => t.i === i);
   if (k < 0) throw new Error('No encuentro esa toma.');
-  if (filaClips.some((x) => x.i === i)) return;
+  if (filaClips.some((x) => x.i === i && x.zid === P.id)) return;
 
   const segundos = movimiento.duracionMasCercana(
     pieza().tomas[k].segundos || 6,
@@ -2369,8 +2688,41 @@ async function convertirEnClip(i, decir = () => {}) {
   pieza().tomas[k].movimiento = true;
   await guardar();
 
-  filaClips.push({ i, decir });
+  filaClips.push({ zid: P.id, i, decir });
   decir(estadoEnFila(i) || 'En cola');
+  bombearFilaDeClips();
+}
+
+/**
+ * El clip de UNA entrada de la biblioteca, desde su tarjeta.
+ *
+ * Las tres condiciones se comprueban AQUÍ y no solo en el botón: el botón se pinta
+ * una vez y el estado cambia debajo —se rehace la imagen, se quita el visto
+ * bueno—, y lo que no puede pasar es que un clip de la biblioteca permanente se
+ * pague sobre una imagen que nadie ha aprobado.
+ */
+async function clipDeBiblioteca(i, decir = () => {}) {
+  const z = laBiblioteca();
+  const k = z.tomas.findIndex((t) => t.i === i);
+  if (k < 0) throw new Error('No encuentro esa toma de la biblioteca.');
+  const t = z.tomas[k];
+  if (t.imagen !== 'ok') throw new Error('Primero hay que generar su imagen: el clip sale de ella.');
+  if (!t.aprobada) throw new Error('Dale antes el visto bueno a la imagen: el clip hereda lo que tenga.');
+  if (t.video === 'ok') throw new Error('Esta ya tiene su clip.');
+  if (filaClips.some((x) => x.i === i && x.zid === bibliotecaFase.ID_BIBLIOTECA)) return;
+
+  const segundos = movimiento.duracionMasCercana(t.segundos || 6, P.config.videoModelo?.modelo);
+  if (
+    !confirm(
+      `Clip de ${segundos} s de «${rotuloDeBiblioteca(t).nombre} · ${t.variante}».\n\n` +
+        'Es la fase más cara, y este se paga UNA VEZ para todos los episodios que vengan. ¿Sigo?',
+    )
+  ) {
+    return;
+  }
+  await guardar();
+  filaClips.push({ zid: bibliotecaFase.ID_BIBLIOTECA, i, decir });
+  decir(estadoEnFilaBiblioteca(i) || 'En cola');
   bombearFilaDeClips();
 }
 
@@ -2380,31 +2732,47 @@ async function bombearFilaDeClips() {
   bombeandoClips = true;
   try {
     while (filaClips.length) {
-      const { i, decir } = filaClips[0];
+      const { zid, i, decir } = filaClips[0];
+      // De la biblioteca o del episodio: cambia dónde se guarda, dónde se avisa y
+      // qué se repinta. Lo demás —una llamada cada vez— es lo mismo para las dos.
+      const esBiblioteca = zid === bibliotecaFase.ID_BIBLIOTECA;
+      const donde = esBiblioteca ? 'biblioteca' : 'previa';
+      const z = piezaDeFila(zid);
       filaClips.slice(1).forEach((x, n) => x.decir?.(`En cola (${n + 2}º)`));
       decir?.('Generando…');
-      avisar('previa', `Generando el clip de la toma ${i + 1}… (${filaClips.length - 1} en cola)`);
+      const k = z ? z.tomas.findIndex((t) => t.i === i) : -1;
+      const comoSeLlama = esBiblioteca
+        ? k >= 0
+          ? `«${rotuloDeBiblioteca(z.tomas[k]).nombre} · ${z.tomas[k].variante}»`
+          : 'esa entrada'
+        : `la toma ${i + 1}`;
+      avisar(donde, `Generando el clip de ${comoSeLlama}… (${filaClips.length - 1} en cola)`);
       try {
-        const k = pieza().tomas.findIndex((t) => t.i === i);
+        if (k < 0) throw new Error('La toma ya no está.');
         const nueva = await movimiento.generarClip({
-          toma: pieza().tomas[k],
-          tomas: pieza().tomas,
-          pieza: P.id,
+          toma: z.tomas[k],
+          tomas: z.tomas,
+          pieza: zid,
           config: P.config,
-          tratamiento: pieza().tratamiento,
+          // La biblioteca sirve a TODOS los episodios: atarla al tratamiento de uno
+          // concreto la ataría a ese caso.
+          tratamiento: esBiblioteca ? null : z.tratamiento,
           aviso: (m) => decir?.(m.length > 24 ? `${m.slice(0, 22)}…` : m),
         });
-        pieza().tomas[k] = nueva;
-        await refrescar(claveToma(P.id, i, 'vid'));
+        z.tomas[k] = nueva;
+        await refrescar(claveToma(zid, i, 'vid'));
         await guardar();
-        await emparejarGemelos();
-        avisar('previa', `Clip de la toma ${i + 1} listo${filaClips.length > 1 ? `; sigue la fila (${filaClips.length - 1})` : ''}.`, 'bueno');
+        // Emparejar gemelas es cosa del episodio: en la biblioteca cada entrada es
+        // una persona distinta y no hay nada que compartir.
+        if (!esBiblioteca) await emparejarGemelos();
+        avisar(donde, `Clip de ${comoSeLlama} listo${filaClips.length > 1 ? `; sigue la fila (${filaClips.length - 1})` : ''}.`, 'bueno');
       } catch (e) {
         // Un clip que falla no tumba la fila: se anota y sigue el siguiente (§4).
-        avisar('previa', `Toma ${i + 1}: ${e.message}`, 'malo');
+        avisar(donde, `${comoSeLlama}: ${e.message}`, 'malo');
       }
       filaClips.shift();
-      pintarPorTipo();
+      if (esBiblioteca) pintarBiblioteca();
+      else pintarPorTipo();
     }
   } finally {
     bombeandoClips = false;

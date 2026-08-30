@@ -153,6 +153,28 @@ class Elemento {
   }
 }
 
+/** Todos los botones colgando de un nodo, a cualquier profundidad. */
+function botonesDentro(nodo) {
+  if (!nodo) return [];
+  const salida = [];
+  const mirar = (n) => {
+    for (const h of n.children || []) {
+      if (h.tagName === 'BUTTON') salida.push(h);
+      mirar(h);
+    }
+  };
+  mirar(nodo);
+  return salida;
+}
+
+/** El texto de un nodo y de todo lo que cuelga de él, incluido su innerHTML. */
+function textoDeArbol(nodo) {
+  if (!nodo) return '';
+  const trozos = [String(nodo.innerHTML || ''), String(nodo.textContent || '')];
+  for (const h of nodo.children || []) trozos.push(textoDeArbol(h));
+  return trozos.filter(Boolean).join(' ');
+}
+
 /** Lo que contesta la nube de mentira a cada modo. */
 function respuestaDe(modo, cuerpo, nube = null) {
   switch (modo) {
@@ -555,8 +577,18 @@ export async function humoDeLaPantalla({
     //
     // Se pulsa DENTRO de este `try`: al salir se devuelve el navegador de verdad
     // y los manejadores ya no encontrarían nada.
-    for (const id of pulsa) {
-      const b = elementos.get(id);
+    for (const orden of pulsa) {
+      // Un id suelto es un botón del HTML. Y `{ dentro, rotulo }` es un botón que
+      // PINTA la aplicación —los de cada tarjeta de la galería—: esos no tienen id,
+      // se buscan por lo que dicen, y sin poder pulsarlos no se comprueba nada de
+      // lo que hay dentro de una lista pintada.
+      const id = typeof orden === 'string' ? orden : `${orden.rotulo} (en ${orden.dentro})`;
+      const b =
+        typeof orden === 'string'
+          ? elementos.get(orden)
+          : botonesDentro(elementos.get(orden.dentro)).filter((x) =>
+              String(x.textContent || '').includes(orden.rotulo),
+            )[orden.n || 0];
       if (!b) {
         fallos.push(`no existe el botón ${id}`);
         continue;
@@ -611,6 +643,16 @@ export async function humoDeLaPantalla({
     opcionesDe: (id) => elementos.get(id)?.children.length || 0,
     texto: (id) => elementos.get(id)?.textContent || '',
     html: (id) => elementos.get(id)?.innerHTML || '',
+    /** Cuántas fichas pintó la aplicación dentro de una caja. */
+    hijosDe: (id) => elementos.get(id)?.children.length || 0,
+    /** Los botones que PINTA la aplicación dentro de una caja, con su estado. */
+    botonesDe: (id) =>
+      botonesDentro(elementos.get(id)).map((b) => ({
+        texto: String(b.textContent || ''),
+        deshabilitado: b.disabled === true,
+      })),
+    /** Todo lo escrito dentro de una caja, tarjetas incluidas. */
+    textoDentro: (id) => textoDeArbol(elementos.get(id)),
     claseCuerpo: (c) => doc.body.classList.contains(c),
     /** Las quejas recogidas tras CADA pulsación, con el botón que las provocó. */
     dichas: () => dichas,

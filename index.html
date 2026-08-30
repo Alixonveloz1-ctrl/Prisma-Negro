@@ -227,6 +227,21 @@ nav.pestanas button.on{background:var(--violeta);border-color:var(--violeta);col
 .pieza-mat img,.pieza-mat video{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#0B0C12}
 .pieza-mat .cuerpo{padding:8px 9px 10px}
 .pieza-mat .cuerpo p{margin:0 0 7px;font-size:11.5px;color:var(--tinta-2);line-height:1.45}
+/* El hueco de la imagen mientras carga o cuando no hay. Sin esto la tarjeta se
+   encoge hasta la nada y la cuadrícula queda a saltos. */
+.pieza-mat .sin{
+  width:100%;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;
+  background:#0B0C12;color:var(--tinta-3);font-size:10.5px;text-align:center;padding:0 8px
+}
+/* El visto bueno se ve DESDE FUERA, sin abrir la tarjeta: con 141 imágenes, saber
+   cuáles quedan por mirar no puede exigir leer 141 rótulos. */
+.pieza-mat.aprobada{border-color:var(--verde);box-shadow:0 0 0 1px var(--verde)}
+.pieza-mat .cuerpo .btn{margin:0 5px 5px 0}
+.chip{
+  padding:6px 11px;border:1px solid var(--linea);border-radius:999px;background:var(--fondo-2);
+  color:var(--tinta-2);font:inherit;font-size:12px;cursor:pointer
+}
+.chip.on{border-color:var(--violeta);background:rgba(124,92,255,.10);color:var(--tinta)}
 .fila-mat{
   display:flex;gap:10px;align-items:center;padding:11px 0;border-bottom:1px solid var(--linea);
 }
@@ -463,12 +478,30 @@ nav.abajo button svg{width:22px;height:22px}
           testigos— y <b>tres versiones de cada sitio</b>. Se paga una vez y ningún
           episodio lo vuelve a pagar. La aplicación se acuerda de a quién usó: si un
           episodio saca a un perito, los dos siguientes sacan a otro.</p>
+          <p class="nota chica">El orden es: <b>generar las imágenes</b> → <b>mirarlas
+          una a una</b> y rehacer la que salga mal → <b>«Está bien»</b> a la que valga →
+          <b>clip</b>. El clip sale de la imagen y es lo más caro que se genera aquí,
+          así que solo se ofrece sobre lo que ya has aprobado.</p>
           <div id="resumen-biblioteca" class="nota chica"></div>
           <div class="fila-btn" style="margin-top:10px">
             <button class="btn primario" id="b-biblioteca-imagenes">Generar imágenes que faltan</button>
-            <button class="btn fantasma" id="b-biblioteca-clips">Generar clips del reparto</button>
+            <button class="btn fantasma" id="b-biblioteca-clips">Generar clips de lo aprobado</button>
           </div>
           <div id="aviso-biblioteca"></div>
+
+          <!-- LA GALERÍA. «Solamente puedo darle al botón de generar todo, y genera
+               las imágenes que le da la gana; yo no puedo ver lo que está generando.
+               Si una imagen sale deforme, así se queda.»
+
+               Aquí se ve cada una, se rehace la que salga mal y se le da el visto
+               bueno a la que valga. Y el clip SOLO se ofrece sobre lo aprobado: es
+               la fase más cara y sale de la imagen. -->
+          <div class="fila-btn" id="filtros-biblioteca" style="margin-top:14px"></div>
+          <select id="grupo-biblioteca" style="margin-top:8px"></select>
+          <div id="galeria-biblioteca" class="galeria"></div>
+          <div class="fila-btn" style="margin-top:8px">
+            <button class="btn fantasma chico" id="b-biblioteca-mas">Ver más</button>
+          </div>
         </div>
 
         <!-- TUS EPISODIOS: abrir, ver en qué estado están, y borrar. Estaba en

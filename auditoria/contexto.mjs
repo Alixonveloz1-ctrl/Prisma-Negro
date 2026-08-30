@@ -198,6 +198,7 @@ async function funcionesPuras() {
     tomasDeBiblioteca: bib.tomasDeBiblioteca,
     sincronizarBiblioteca: bib.sincronizarBiblioteca,
     resumenBiblioteca: bib.resumenBiblioteca,
+    clipsPosibles: bib.clipsPosibles,
     ID_BIBLIOTECA: bib.ID_BIBLIOTECA,
     elegirVariante: bib.elegirVariante,
     claveDePersona: bib.claveDePersona,

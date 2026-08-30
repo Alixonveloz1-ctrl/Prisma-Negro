@@ -2596,11 +2596,22 @@ export const invariantes = [
       // contra el rate limit: había que esperar pegado al teléfono a que terminara
       // un clip para poder pedir el siguiente. Tocar el botón ENCOLA, y una sola
       // bomba los genera de uno en uno.
-      if (!/filaClips\.some\(\(x\) => x\.i === i\)/.test(cuerpo)) {
+      if (!/filaClips\.some\(\(x\) => x\.i === i && x\.zid === /.test(cuerpo)) {
         fallos.push('Tocar dos veces el mismo botón encolaría el clip dos veces: se pagaría doble.');
       }
       if (!/filaClips\.push\(/.test(cuerpo)) {
         fallos.push('El botón no encola: dispara la llamada al instante y en paralelo, contra el rate limit.');
+      }
+      // LA FILA ES UNA SOLA para el episodio y para la biblioteca, así que cada
+      // entrada tiene que decir DE QUÉ PIEZA es y la bomba tiene que hacerle caso.
+      // Con la pieza fija en `P.id`, un clip del reparto se guardaría bajo el
+      // episodio abierto: el archivo caro acabaría donde nadie lo busca y la
+      // biblioteca seguiría diciendo que le falta.
+      if (!/filaClips\.push\(\{ zid:/.test(cuerpo)) {
+        fallos.push('Lo encolado no dice de qué pieza es: un clip de la biblioteca se guardaría bajo el episodio.');
+      }
+      if (!/pieza: zid/.test(bomba)) {
+        fallos.push('La bomba genera siempre contra la pieza activa: el clip de la biblioteca acabaría en el episodio.');
       }
       if (!/if \(bombeandoClips\) return;/.test(bomba)) {
         fallos.push('Puede arrancar más de una bomba a la vez: la fila deja de ser de uno en uno.');

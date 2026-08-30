@@ -91,6 +91,9 @@ export function tomasDeBiblioteca({ elenco = ELENCO, recursos = RECURSOS } = {})
         audio: null,
         imagen: null,
         video: null,
+        // El visto bueno. Ver `clipsPosibles`: sin esto, un archivador deforme se
+        // queda deforme para siempre en todos los episodios del canal.
+        aprobada: false,
       });
     }
   }
@@ -123,6 +126,7 @@ export function tomasDeBiblioteca({ elenco = ELENCO, recursos = RECURSOS } = {})
         audio: null,
         imagen: null,
         video: null,
+        aprobada: false,
       });
     }
   }
@@ -139,6 +143,7 @@ export function tomasDeBiblioteca({ elenco = ELENCO, recursos = RECURSOS } = {})
 export function resumenBiblioteca(tomas, { bibliotecaConVideo = true } = {}) {
   const lista = tomas || [];
   const conClip = lista.filter((t) => t.movimiento && bibliotecaConVideo);
+  const hechas = lista.filter((t) => t.imagen === 'ok');
   return {
     total: lista.length,
     recursos: lista.filter((t) => t.recurso).length,
@@ -146,9 +151,42 @@ export function resumenBiblioteca(tomas, { bibliotecaConVideo = true } = {}) {
     papeles: new Set(lista.filter((t) => t.personaje).map((t) => t.personaje)).size,
     sitios: new Set(lista.filter((t) => t.recurso).map((t) => t.recurso)).size,
     imagenesFaltan: lista.filter((t) => t.imagen !== 'ok').length,
+    // Generada NO es lo mismo que buena. Estas dos cifras separan «la máquina
+    // contestó» de «la miré y vale», que es justo lo que faltaba.
+    aprobadas: hechas.filter((t) => t.aprobada).length,
+    porRevisar: hechas.filter((t) => !t.aprobada).length,
     clips: conClip.length,
     clipsFaltan: conClip.filter((t) => t.video !== 'ok').length,
+    clipsPosibles: clipsPosibles(lista, { bibliotecaConVideo }).length,
   };
+}
+
+/**
+ * De qué se puede generar clip AHORA MISMO.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Se manda a generar los clips, ¿y de dónde van a salir los clips? Primero se
+ *  deben generar las imágenes. Si yo veo que la imagen está correcta, pues le
+ *  genero clip.»
+ *
+ * Tenía toda la razón, y era peor de lo que parecía. El botón de clips cogía toda
+ * toma con `movimiento`, mirara o no si su imagen existía y mirara o no si la
+ * imagen era buena. Un clip es la fase MÁS CARA de todas y sale DE la imagen: si
+ * la imagen tiene tres manos, el clip tiene tres manos moviéndose, se paga igual,
+ * y encima queda en la biblioteca permanente del canal para todos los episodios
+ * que vengan.
+ *
+ * Así que hacen falta las tres condiciones, y no una:
+ *   1. La imagen EXISTE. Sin imagen no hay clip: no hay de dónde sacarlo.
+ *   2. La imagen está APROBADA — vista por una persona, con el pulgar arriba.
+ *   3. No tiene clip ya. Volver a pedirlo es pagarlo dos veces.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export function clipsPosibles(tomas, { bibliotecaConVideo = true } = {}) {
+  if (!bibliotecaConVideo) return [];
+  return (tomas || []).filter(
+    (t) => t.movimiento && t.imagen === 'ok' && t.aprobada && t.video !== 'ok',
+  );
 }
 
 /**
@@ -184,6 +222,10 @@ export function sincronizarBiblioteca(pieza) {
       video: vieja.video || null,
       heredado: vieja.heredado || null,
       heredadoVid: vieja.heredadoVid || null,
+      // El visto bueno se conserva, pero SOLO mientras haya imagen que avale. Un
+      // «aprobada» sobre una imagen que ya no está diría que alguien miró algo que
+      // no existe, y con eso se podría pagar un clip a ciegas.
+      aprobada: vieja.imagen === 'ok' && vieja.aprobada === true,
     };
   });
 

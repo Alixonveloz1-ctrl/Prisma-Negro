@@ -399,6 +399,12 @@ function sanearToma(bruto, i, proyecto) {
     // muere en cada carga —la avería de `heredado` otra vez— y con él se perdería
     // el plano del que declara y su resolución contra la biblioteca.
     testimonio: String(t.testimonio || ''),
+    // EL VISTO BUENO de la biblioteca: alguien miró esta imagen y dijo que vale.
+    // Tiene que estar en esta lista blanca —la avería de `heredado` otra vez— o
+    // cada recarga borraría la revisión de las 141 imágenes y habría que volver a
+    // mirarlas una por una. Y va atado a que la imagen exista: un visto bueno sin
+    // imagen detrás avalaría algo que no está, y de él cuelga pagar clips.
+    aprobada: t.aprobada === true && t.imagen === 'ok',
     // §8.1: cada toma conserva la referencia a la ficha que la respalda.
     fichas: Array.isArray(t.fichas) ? t.fichas : [],
     corteForzado: t.corteForzado === true,

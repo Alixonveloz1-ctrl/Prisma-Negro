@@ -413,6 +413,151 @@ export const invariantes = [
   },
 
   {
+    nombre: 'un-clip-de-la-biblioteca-sale-de-una-imagen-aprobada',
+    dice: '«Se manda a generar los clips, ¿y de dónde van a salir los clips? Primero se deben generar las imágenes. Si yo veo que la imagen está correcta, pues le genero clip.» El botón de clips cogía TODA toma con movimiento, mirara o no si su imagen existía y mirara o no si alguien la había visto. Un clip es la fase más cara y sale DE la imagen: si la imagen tiene tres manos, el clip tiene tres manos moviéndose, cuesta lo mismo, y queda en la biblioteca permanente para todos los episodios que vengan. Tres condiciones, no una: que la imagen exista, que una persona la haya aprobado, y que no esté pagada ya.',
+    comprobar(ctx) {
+      const { clipsPosibles } = ctx.fn;
+      const fallos = [];
+      const base = { i: 0, movimiento: true, imagen: 'ok', aprobada: true, video: null };
+
+      for (const [qué, toma] of [
+        ['sin imagen generada', { ...base, imagen: null }],
+        ['sin el visto bueno', { ...base, aprobada: false }],
+        ['con el clip ya pagado', { ...base, video: 'ok' }],
+      ]) {
+        if (clipsPosibles([toma]).length) fallos.push(`Se ofrece pagar un clip de una imagen ${qué}.`);
+      }
+      if (clipsPosibles([base]).length !== 1) {
+        fallos.push('Una imagen generada y aprobada no puede pasar a clip: no queda forma de gastar donde toca.');
+      }
+      if (clipsPosibles([base], { bibliotecaConVideo: false }).length) {
+        fallos.push('Con los clips de biblioteca apagados en la política, se siguen ofreciendo.');
+      }
+      // Y una toma que el catálogo NO manda animar —los sitios y los objetos— no
+      // entra por aprobarla: su valor está justo en costar cero.
+      if (clipsPosibles([{ ...base, movimiento: false }]).length) {
+        fallos.push('Un recurso sin movimiento entra en el gasto de clips solo por estar aprobado.');
+      }
+
+      // Y el resumen tiene que separar «generada» de «aprobada», o la pantalla
+      // volvería a decir que la biblioteca está lista con 141 imágenes sin mirar.
+      const r = ctx.fn.resumenBiblioteca([base, { ...base, i: 1, aprobada: false }]);
+      if (r.aprobadas !== 1 || r.porRevisar !== 1) {
+        fallos.push(`El resumen no distingue lo aprobado de lo generado: ${r.aprobadas} y ${r.porRevisar}.`);
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: todo lo que lleve movimiento, mirara o no la imagen.
+    romper: (ctx) => conFuncion(ctx, 'clipsPosibles', (tomas) => (tomas || []).filter((t) => t.movimiento)),
+  },
+
+  {
+    nombre: 'la-biblioteca-se-mira-imagen-a-imagen-desde-la-pantalla',
+    dice: '«Yo no puedo entrar a generar nada, solamente puedo darle al botón de generar todo, y genera las imágenes que le da la gana; yo no puedo ver lo que está generando. Si una imagen sale deforme, así se queda, porque no tengo control sobre eso. Cada imagen, para poder verla, con su botón de reintentar.» La biblioteca tenía dos botones de generar todo y NINGUNA manera de ver lo generado. En la biblioteca permanente eso es lo más caro que puede pasar: una cara deforme sale en todos los episodios del canal, para siempre, y de ella cuelga además el clip. Cada entrada se ve, se rehace y se aprueba desde su ficha.',
+    async comprobar(ctx) {
+      const { ID_BIBLIOTECA } = ctx.fn;
+      const { humoDeLaPantalla, proyectoYaEmpezado } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+      const fallos = [];
+
+      // Se arranca la aplicación con una biblioteca a medias: una recién generada
+      // sin mirar, una ya aprobada, y una sin generar.
+      const conBiblioteca = (extra = {}) => {
+        const p = proyectoYaEmpezado();
+        p.piezas.push({
+          id: ID_BIBLIOTECA,
+          titulo: 'Biblioteca del canal',
+          esBiblioteca: true,
+          escenas: [{ n: 0, titulo: 'Recursos' }, { n: 1, titulo: 'Reparto' }],
+          tomas: [
+            // Un sitio ya generado y sin mirar; un perito aprobado; otro generado y
+            // sin aprobar; y uno sin generar. Los cuatro estados que hay.
+            { i: 0, clave: 'recurso:carretera-noche:v1', recurso: 'carretera-noche', variante: 'v1', imagen: 'ok', aprobada: false },
+            { i: 1, clave: 'personaje:perito:v1', personaje: 'perito', variante: 'v1', imagen: 'ok', aprobada: true },
+            { i: 2, clave: 'personaje:perito:v2', personaje: 'perito', variante: 'v2', imagen: 'ok', aprobada: false },
+            { i: 3, clave: 'personaje:perito:v3', personaje: 'perito', variante: 'v3', imagen: null },
+          ],
+        });
+        return { parche, proyecto: p, ...extra };
+      };
+
+      const r = await humoDeLaPantalla(conBiblioteca());
+      fallos.push(...r.fallos);
+
+      // La galería existe y tiene una ficha por entrada, no un resumen.
+      if (r.hijosDe('galeria-biblioteca') < 4) {
+        fallos.push(
+          `La galería de la biblioteca pinta ${r.hijosDe('galeria-biblioteca')} fichas: ` +
+            'no se puede ver lo que se está generando.',
+        );
+      }
+      const botones = r.botonesDe('galeria-biblioteca');
+      // CADA UNA CON SU BOTÓN DE REINTENTAR. Sin esto, una imagen deforme es
+      // definitiva.
+      if (!botones.some((b) => /Rehacer/.test(b.texto))) {
+        fallos.push('Ninguna ficha tiene botón de rehacer: una imagen deforme se queda deforme.');
+      }
+      if (!botones.some((b) => /Generar$/.test(b.texto))) {
+        fallos.push('No se puede generar una entrada suelta: o todas o ninguna.');
+      }
+      // Y CON SU VISTO BUENO, que es de lo que cuelga el gasto.
+      if (!botones.some((b) => /Está bien/.test(b.texto))) {
+        fallos.push('No hay forma de aprobar una imagen: el visto bueno no existe en pantalla.');
+      }
+      // La que no está aprobada no ofrece clip; la que sí, lo ofrece.
+      const sinAprobar = botones.find((b) => /Apruébala para el clip/.test(b.texto));
+      if (!sinAprobar || !sinAprobar.deshabilitado) {
+        fallos.push('Se puede pedir el clip de una imagen que nadie ha aprobado: el gasto más caro, a ciegas.');
+      }
+      const listo = botones.find((b) => /Generar su clip/.test(b.texto));
+      if (!listo || listo.deshabilitado) {
+        fallos.push('Una imagen ya aprobada no ofrece su clip: aprobar no sirve de nada.');
+      }
+      // Y la que no tiene imagen, ni eso.
+      if (!botones.some((b) => /Primero la imagen/.test(b.texto))) {
+        fallos.push('Una entrada sin imagen ofrece clip: no hay de dónde sacarlo.');
+      }
+
+      // ── 3 · SE APRUEBA, Y CAMBIA ─────────────────────────────────────────────
+      // Se pulsa «Está bien» de verdad en la ficha del perito sin aprobar, y se
+      // mira si el botón de su clip se abre. Sin esto, aprobar sería un adorno.
+      const tras = await humoDeLaPantalla(
+        conBiblioteca({ pulsa: [{ dentro: 'galeria-biblioteca', rotulo: 'Está bien', n: 1 }] }),
+      );
+      fallos.push(...tras.fallos);
+      const despues = tras.botonesDe('galeria-biblioteca');
+      if (despues.filter((b) => /Quitar el visto bueno/.test(b.texto)).length < 2) {
+        fallos.push('Aprobar una imagen no queda reflejado en su ficha: no se sabe cuáles quedan por mirar.');
+      }
+      if (despues.filter((b) => /Generar su clip/.test(b.texto)).length < 2) {
+        fallos.push('Aprobar una imagen no abre su clip: el visto bueno no sirve para nada.');
+      }
+
+      // ── 4 · Y EL BOTÓN DE GENERAR TODO respeta lo mismo ──────────────────────
+      // Sigue estando —«obviamente, debería poder mandar a generar todo»— pero
+      // gasta por la misma regla que las fichas.
+      const main = fuente(ctx, 'app/main.js');
+      const i = main.indexOf(`'b-biblioteca-clips'`);
+      const cuerpo = i < 0 ? '' : main.slice(i, i + 2000);
+      if (!/clipsPosibles\(/.test(cuerpo)) {
+        fallos.push('El botón de generar todos los clips no mira si las imágenes están aprobadas.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: el botón del clip de cada ficha, sin mirar el visto
+    // bueno. Va por el contexto —parchea la fuente que el arnés arranca— porque lo
+    // que se mide es lo que se puede pulsar en pantalla.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t
+          .replace(/c\.disabled = !!enFila \|\| !hay \|\| !x\.aprobada;/, 'c.disabled = !!enFila;')
+          .replace(/x\.aprobada \? 'Generar su clip' : 'Apruébala para el clip'/, "'Generar su clip'"),
+      ),
+  },
+
+  {
     nombre: 'la-pantalla-nunca-promete-un-caso-real',
     dice: '«¿Por qué está buscando en Internet los casos? Se supone que estamos hablando de casos inventados.» El motor pasó a construir casos y la pantalla se quedó entera hablando de lo de antes: «Busca en internet casos reales», «Seis búsquedas: cronología, fuentes oficiales, prensa», «De un caso real a un video terminado». Y a un caso INVENTADO le pintaba una pastilla ámbar de «poco documentado», que es al revés de lo que es. Un texto que describe lo que la herramienta hacía ANTES no es un texto viejo: es una mentira sobre lo que va a pasar cuando pulses. Y no puede depender de nada guardado: un proyecto de cuando existían dos modos sigue abierto ahí.',
     async comprobar(ctx) {
