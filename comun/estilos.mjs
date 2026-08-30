@@ -4,81 +4,45 @@
 // forma de saber cuál era sin generar ochenta imágenes. Eso es pagar para
 // enterarte, que es exactamente al revés de como tiene que ser.
 //
-// Cada estilo es un párrafo que se antepone a la descripción de la toma. El
+// El estilo es un párrafo que se antepone a la descripción de la toma. El
 // tratamiento del director le añade encima la paleta, la luz y la textura de ESTA
-// pieza, así que dos documentales del mismo estilo no salen iguales: el estilo dice
-// de qué CLASE es la imagen, el director dice cómo es la de este caso.
+// pieza, así que dos documentales no salen iguales: el estilo dice de qué CLASE es
+// la imagen, el director dice cómo es la de este caso.
 //
-// §8.2: ninguno de estos genera fotorrealismo de personas reales identificables, y
-// ninguno imita material de archivo auténtico. Un documental que pasa una imagen
-// generada por archivo real está mintiendo, y eso hunde un canal.
+// §8.2: no genera fotorrealismo de personas reales identificables y no imita
+// material de archivo auténtico. Un documental que pasa una imagen generada por
+// archivo real está mintiendo, y eso hunde un canal.
 
-export const ESTILOS = [
-  {
-    id: 'reconstruccion',
-    nombre: 'Reconstrucción documental',
-    resumen: 'Como si una cámara hubiera estado allí. Es el estilo por defecto.',
-    prompt:
-      'Fotografía de reconstrucción documental. Cámara en mano sutil, luz natural ' +
-      'motivada por fuentes visibles en el cuadro, grano fino de película, ' +
-      'profundidad de campo corta. Aspecto de material rodado, no de render. ' +
-      'Nada de brillos artificiales ni de saturación de anuncio.',
-  },
-  {
-    id: 'noir',
-    nombre: 'Cine negro',
-    resumen: 'Contraste duro, sombras largas, noche. Para crimen y desapariciones.',
-    prompt:
-      'Fotografía de cine negro contemporáneo. Contraste alto, negros profundos, ' +
-      'luz lateral dura que deja media cara en sombra, humedad y reflejos en el ' +
-      'suelo, niebla o vapor. Predominio de la noche y los interiores mal ' +
-      'iluminados. Composición con mucho aire vacío alrededor del sujeto.',
-  },
-  {
-    id: 'forense',
-    nombre: 'Forense y evidencia',
-    resumen: 'Objetos, documentos, detalles. Frío y clínico.',
-    prompt:
-      'Fotografía forense y de evidencia. Luz plana y neutra, fondos lisos, objetos ' +
-      'centrados y aislados: documentos, prendas, herramientas, huellas, mapas sobre ' +
-      'mesa. Paleta desaturada, casi gris. Aspecto de informe, no de fotografía ' +
-      'artística. Sin personas.',
-  },
-  {
-    id: 'archivo',
-    nombre: 'Época estilizada',
-    resumen: 'Sabor de otra década, pero DECLARADAMENTE recreado.',
-    prompt:
-      'Recreación estilizada de una época, claramente recreada y no confundible con ' +
-      'material de archivo auténtico: color virado y limpio, sin rayas de película ' +
-      'falsas, sin marcas de agua de agencia, sin sellos de fecha simulados. ' +
-      'Vestuario y objetos de la época, encuadres de la época, acabado moderno.',
-  },
-  {
-    id: 'ilustrado',
-    nombre: 'Ilustración editorial',
-    resumen: 'Dibujado. La opción más segura cuando hay personas reales.',
-    prompt:
-      'Ilustración editorial de prensa. Trazo visible, texturas de tinta y aguada, ' +
-      'paleta reducida a tres o cuatro colores, composición gráfica y sintética. ' +
-      'Claramente dibujado, nunca confundible con una fotografía.',
-  },
-  {
-    id: 'grafico',
-    nombre: 'Mapas y esquemas',
-    resumen: 'Diagramas, líneas de tiempo, planos. Para explicar.',
-    prompt:
-      'Infografía documental sobria. Mapas, planos, cortes, líneas de tiempo y ' +
-      'diagramas sobre fondo oscuro. Líneas finas, tipografía de palo seco discreta, ' +
-      'un solo color de acento. Aspecto de gráfico de periódico serio, no de ' +
-      'presentación corporativa.',
-  },
-];
+// ─────────────────────────────────────────────────────────────────────────────
+// UN SOLO ESTILO PARA TODO EL CANAL, Y ESTA ES LA CUENTA QUE LO DECIDE.
+//
+// Había seis estilos y se elegía uno por proyecto. Con la biblioteca permanente
+// eso deja de ser una preferencia y pasa a ser dinero: la biblioteca son 141
+// imágenes, y un canal que trabaja en dos estilos necesita la biblioteca DOS
+// VECES o se mezcla —un perito en cine negro dentro de un episodio rodado en
+// reconstrucción, sin que nada avise—.
+//
+// Y lo que se ganaba era menos de lo que parecía. Medido sobre la instrucción que
+// sale de verdad hacia el generador: el estilo aportaba unos 270 caracteres de
+// 2.660, un DIEZ POR CIENTO. El noventa restante —el oficio cinematográfico, la
+// prohibición de texto legible, la barrera documental, la descripción del plano y
+// la paleta que decide el director para cada caso— era idéntico en los seis. No
+// eran seis mundos distintos: eran seis acentos sobre el mismo aspecto, y el
+// acento no vale una biblioteca entera.
+//
+// Así que el estilo deja de ser una elección por proyecto. Lo que da variedad
+// entre episodios sigue vivo y no cuesta nada: la identidad visual que el director
+// decide para cada caso —paleta, luz, textura— y el elenco que rota.
+//
+// Si algún día hace falta otro aspecto, se cambia ESTE texto y se vuelve a generar
+// la biblioteca. Es una decisión de canal, no de proyecto, y así está puesta.
+// ─────────────────────────────────────────────────────────────────────────────
 
-export const ESTILO_POR_DEFECTO = 'reconstruccion';
-
-export const estiloPorId = (id) =>
-  ESTILOS.find((e) => e.id === id) || ESTILOS.find((e) => e.id === ESTILO_POR_DEFECTO);
+export const ESTILO_DEL_CANAL =
+  'Fotografía de reconstrucción documental. Cámara en mano sutil, luz natural ' +
+  'motivada por fuentes visibles en el cuadro, grano fino de película, ' +
+  'profundidad de campo corta. Aspecto de material rodado, no de render. ' +
+  'Nada de brillos artificiales ni de saturación de anuncio.';
 
 /**
  * La barrera de §8.2, aparte del estilo y siempre presente.

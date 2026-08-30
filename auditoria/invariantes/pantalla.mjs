@@ -334,49 +334,64 @@ export const invariantes = [
   },
 
   {
-    nombre: 'los-estilos-se-eligen-mirandolos-todos',
-    dice: 'El estilo se decide ANTES de generar las ochenta imágenes del documental, y comparando. Solo se podía probar el que estuviera puesto, de uno en uno: para comparar seis había que cambiar el desplegable seis veces y fiarse de la memoria.',
-    async comprobar(ctx) {
+    nombre: 'el-aspecto-es-del-canal-y-no-se-elige-por-proyecto',
+    dice: 'Había seis estilos y se elegía uno por proyecto, con un muestrario para comparar. Con la biblioteca permanente eso deja de ser una preferencia y pasa a ser dinero: dos estilos son DOS bibliotecas de 141 imágenes, o una mezcla que no avisa —un perito en cine negro dentro de un episodio rodado en reconstrucción—. Y lo que se ganaba era un diez por ciento de la instrucción: el resto —el oficio cinematográfico, la prohibición de texto legible, la barrera documental y la paleta del director— era idéntico en los seis. Si alguien vuelve a meter un estilo por proyecto, la biblioteca se mezcla en silencio.',
+    comprobar(ctx) {
+      const { componerInstruccion, ESTILO_DEL_CANAL } = ctx.fn;
       const html = fuente(ctx, 'index.html');
       const main = fuente(ctx, 'app/main.js');
-      const img = fuente(ctx, 'app/fases/imagen.js');
-      const { ESTILOS } = await import('../../comun/estilos.mjs');
       const fallos = [];
+      const toma = {
+        i: 0,
+        plano: { encuadre: 'plano medio', lugar: 'el laboratorio', luz: 'fluorescente', sujetos: [], descripcion: 'Una mesa de acero.' },
+      };
 
-      if (!/id="b-muestrario"/.test(html)) fallos.push('No hay forma de ver todos los estilos.');
-      if (!/id="muestrario"/.test(html)) fallos.push('No hay dónde enseñarlos.');
+      // 1 · EL ASPECTO SALE EN LA INSTRUCCIÓN, venga la configuración que venga.
+      // Es lo que garantiza que la biblioteca y los episodios se vean igual.
+      for (const config of [
+        ctx.config,
+        { ...ctx.config, imagen: { ...ctx.config.imagen, estilo: 'noir' } },
+        { ...ctx.config, imagen: {} },
+        {},
+      ]) {
+        const p = componerInstruccion(toma, config, { tratamiento: null });
+        if (!p.includes(ESTILO_DEL_CANAL)) {
+          fallos.push('El aspecto del canal no llega a la instrucción con alguna configuración: se vería distinto.');
+          break;
+        }
+      }
+      // Y un «estilo» guardado en la configuración NO puede cambiar nada: si
+      // cambiara, la biblioteca generada con uno se mezclaría con episodios del otro.
+      const conEstilo = componerInstruccion(toma, { ...ctx.config, imagen: { ...ctx.config.imagen, estilo: 'noir' } }, { tratamiento: null });
+      const sinEstilo = componerInstruccion(toma, ctx.config, { tratamiento: null });
+      if (conEstilo !== sinEstilo) {
+        fallos.push('Un estilo guardado en la configuración todavía cambia la imagen: vuelve el eje que multiplica la biblioteca.');
+      }
 
-      // Una muestra POR ESTILO, y con el estilo de esa muestra, no con el puesto.
-      const i = img.indexOf('export async function muestrarioDeEstilos');
-      if (i < 0) return [...fallos, 'No existe el muestrario.'];
-      const cuerpo = img.slice(i, img.indexOf('\nexport const claveMuestra', i));
-      if (!/for \(const \[n, estilo\] of ESTILOS/.test(cuerpo)) {
-        fallos.push('El muestrario no recorre todos los estilos.');
+      // 2 · Y NO HAY DÓNDE ELEGIRLO. Un selector que no hace nada es peor que
+      // ninguno: haría creer que el aspecto es por proyecto.
+      if (/id="estilo-imagen"/.test(html)) fallos.push('Sigue habiendo un selector de estilo en la pantalla.');
+      if (/id="b-muestrario"|id="muestrario"/.test(html)) fallos.push('Sigue estando el muestrario de estilos.');
+      if (/P\.config\.imagen\.estilo\s*=/.test(main)) {
+        fallos.push('La pantalla todavía escribe un estilo en la configuración.');
       }
-      if (!/estilo: estilo\.id/.test(cuerpo)) {
-        fallos.push('Cada muestra se genera con el estilo puesto, no con el suyo: saldrían seis iguales.');
-      }
-      // Y cada una con su clave, o se pisarían entre ellas.
-      if (!/claveMuestra\(pieza, estilo\.id\)/.test(cuerpo)) {
-        fallos.push('Las muestras comparten clave: cada una borraría la anterior.');
-      }
-      // Guardadas: volver a la pantalla no puede volver a cobrar seis imágenes. Se
-      // consigue bajándolas con el descargador común, que deja copia local.
-      if (!/await material\(clave/.test(cuerpo)) {
-        fallos.push('Las muestras no se bajan con el descargador común: no quedaría copia y se pagarían cada vez.');
-      }
-      if (!/muestrasGuardadas/.test(main)) fallos.push('La pantalla no enseña las muestras ya pagadas.');
 
-      // Y elegir una tiene que ESCRIBIR la elección (§7.3).
-      if (!/P\.config\.imagen\.estilo = m\.estilo\.id/.test(main)) {
-        fallos.push('Tocar una muestra no cambia el estilo que se va a usar.');
+      // 3 · PERO SE TIENE QUE PODER VER ANTES DE PAGAR. Esa razón no ha cambiado:
+      // son 141 imágenes de biblioteca, y mirarlas después es tarde.
+      if (!/id="b-probar-estilo"/.test(html)) {
+        fallos.push('No hay forma de ver cómo queda antes de pagar la biblioteca entera.');
       }
-      if (ESTILOS.length < 2) fallos.push('No hay estilos que comparar.');
+      if (!/id="b-ver-prompt"/.test(html)) {
+        fallos.push('No se puede leer la instrucción que va a salir: se gastaría a ciegas.');
+      }
       return fallos;
     },
+    // Se rompe como estaba: el estilo saliendo de la configuración del proyecto.
+    // Va por el contexto porque la comprobación EJECUTA `componerInstruccion`.
     romper: (ctx) =>
-      editando(ctx, 'app/fases/imagen.js', (t) =>
-        t.replace('estilo: estilo.id', 'estilo: config.imagen.estilo'),
+      conFuncion(ctx, 'componerInstruccion', (toma, config, opciones) =>
+        `${config?.imagen?.estilo || 'reconstruccion'}. ` +
+        ctx.fn.componerInstruccion(toma, config, opciones).replace(ctx.fn.ESTILO_DEL_CANAL, ''),
       ),
   },
 

@@ -15,7 +15,6 @@
 // La auditoría comprueba que no hay un cuarto camino que se la salte.
 
 import { PREDETERMINADO as SEGMENTACION } from '../comun/segmentar.mjs';
-import { ESTILOS, ESTILO_POR_DEFECTO } from '../comun/estilos.mjs';
 import { GENEROS, GENERO_POR_DEFECTO } from '../comun/generos.mjs';
 import { PREDETERMINADO as MODELO, claveDe, grafiasDe } from '../comun/modelos.mjs';
 
@@ -32,10 +31,9 @@ export const PREDETERMINADA = {
 
   // EL GÉNERO, del catálogo de `comun/generos.mjs`.
   //
-  // Se guarda solo la clave, igual que el estilo y el generador: la tabla se puede
-  // reescribir entera sin tocar un proyecto guardado. De él salen la estructura de
-  // bloques del episodio, los motivos que vuelven, los arquetipos de la biblioteca
-  // y el estilo visual por defecto.
+  // Se guarda solo la clave, igual que el generador: la tabla se puede reescribir
+  // entera sin tocar un proyecto guardado. De él salen la estructura de bloques
+  // del episodio, los motivos que vuelven y los papeles del elenco que declaran.
   genero: GENERO_POR_DEFECTO,
 
   formato: {
@@ -104,10 +102,10 @@ export const PREDETERMINADA = {
     // §8.2: la decisión de diseño más importante de un proyecto documental.
     // El valor por defecto es el seguro.
     tipoPorDefecto: 'reconstruccion',
-    // El estilo visual, del catálogo de comun/estilos.mjs. Vacío = manda el del
-    // género; el catálogo de géneros trae `estiloPorDefecto` y esa es la elección
-    // razonable mientras nadie diga otra cosa.
-    estilo: ESTILO_POR_DEFECTO,
+    // EL ESTILO YA NO SE ELIGE POR PROYECTO. Es del canal, y vive en
+    // `comun/estilos.mjs` como `ESTILO_DEL_CANAL`. La razón está escrita allí y es
+    // económica: con biblioteca permanente, dos estilos son dos bibliotecas.
+    //
     // LA BARRERA DE §8.2, APAGADA — y esto es una decisión, no un descuido.
     //
     // Existía para no generar fotorrealismo de personas REALES identificables, que
@@ -341,7 +339,9 @@ export function normalizar(cruda) {
   if (!['generada', 'archivo', 'reconstruccion'].includes(c.imagen.tipoPorDefecto)) {
     c.imagen.tipoPorDefecto = 'reconstruccion';
   }
-  if (!ESTILOS.some((e) => e.id === c.imagen.estilo)) c.imagen.estilo = ESTILO_POR_DEFECTO;
+  // El estilo guardado de los proyectos viejos se borra: ya no lo lee nadie, y un
+  // ajuste que sigue ahí sin efecto es la peor clase de configuración.
+  delete c.imagen.estilo;
 
   // EL GÉNERO, contra el catálogo. Igual que el estilo: una clave que ya no está
   // en la tabla cae al predeterminado en vez de arrastrar un `undefined` hasta la

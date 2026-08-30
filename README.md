@@ -150,6 +150,28 @@ guion, no uno reescrito. Eso es lo que permite que **un proyecto documental
 anterior siga siendo un documental**: la mudanza de configuración deja en
 `documentar` todo lo guardado antes de la versión 4.
 
+### El aspecto es del canal, no del proyecto
+
+Había seis estilos visuales y se elegía uno por proyecto. Con la biblioteca
+permanente eso deja de ser una preferencia y pasa a ser dinero: **dos estilos son
+dos bibliotecas de 141 imágenes**, o una mezcla que no avisa — un perito en cine
+negro dentro de un episodio rodado en reconstrucción.
+
+Y lo que se ganaba era poco. Medido sobre la instrucción que sale de verdad hacia
+el generador, el estilo aportaba unos **270 caracteres de 2.660: un 10 %**. El 90 %
+restante —el oficio cinematográfico, la prohibición de texto legible, la barrera
+documental, la descripción del plano y la paleta del director— era idéntico en los
+seis. No eran seis mundos: eran seis acentos sobre el mismo aspecto.
+
+Así que hay **un solo aspecto**, en `comun/estilos.mjs` como `ESTILO_DEL_CANAL`:
+reconstrucción documental, material rodado y no render. Lo que hace que un episodio
+no se parezca al anterior sigue vivo y no cuesta nada: la **identidad visual** que
+el director decide para cada caso y el **elenco que rota**.
+
+Los clips nunca se multiplicaron, ni con seis estilos: un clip parte de su
+fotograma y se le pide «mantén exactamente la composición, la paleta y la luz de la
+imagen de partida». El estilo no vuelve a entrar.
+
 ### Lo que no cambia en ningún modo
 
 - Las personas que aparecen son **intérpretes de una dramatización**, con rostros

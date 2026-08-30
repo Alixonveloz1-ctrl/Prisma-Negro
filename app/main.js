@@ -23,7 +23,6 @@ import { pintarSelector } from './config.js';
 import { segmentarVerificado } from '../comun/segmentar.mjs';
 import { TEMAS, EPOCAS, EPOCA_POR_DEFECTO, temaPorId, epocaPorId } from '../comun/temas.mjs';
 import { GENEROS, generoPorId } from '../comun/generos.mjs';
-import { ESTILOS, estiloPorId } from '../comun/estilos.mjs';
 import * as investigacion from './fases/investigacion.js';
 import * as guionFase from './fases/guion.js';
 import * as direccion from './fases/direccion.js';
@@ -446,7 +445,6 @@ function pintarTodo() {
   pintarPestanas();
   pintarHistorial();
   pintarContinuacion();
-  cargarMuestrario();
   // La previa preparada es de la pieza que estaba abierta: al cambiar de caso ya no
   // vale, y dejarla puesta enseñaría el documental anterior como si fuera este.
   if (preparada && preparada.hoja?.pieza !== pieza().id) {
@@ -1778,8 +1776,8 @@ function abrirHoja(id) {
  *
  * El audio se carga AL PEDIRLO (`cargar`), no al pintar la lista: ochenta y tres
  * tomas de voz bajadas de golpe por abrir una pestaña es exactamente lo que un
- * teléfono no aguanta. Con blob directo (el muestrario, material ya en mano)
- * sigue funcionando igual que siempre.
+ * teléfono no aguanta. Con blob directo (material ya en mano) sigue funcionando
+ * igual que siempre.
  */
 function filaAudio({ titulo, texto, blob, cargar, alRehacer, alEditar, etiqueta = 'Rehacer' }) {
   const d = document.createElement('div');
@@ -2828,110 +2826,26 @@ accion(
 // ── Ajustes ───────────────────────────────────────────────────────────────────
 
 /**
- * El estilo visual, con una prueba de UNA imagen antes de pagar ochenta.
+ * El aspecto es DEL CANAL, no del proyecto.
  *
- * «Tengo que gastar primero para saber el estilo» era cierto y era el problema.
+ * Había seis estilos, un desplegable y un muestrario que generaba una imagen por
+ * estilo para elegir mirando. Con la biblioteca permanente eso deja de ser una
+ * preferencia y pasa a ser dinero: dos estilos son DOS BIBLIOTECAS de 141 imágenes,
+ * o una mezcla silenciosa —un perito en cine negro dentro de un episodio rodado en
+ * reconstrucción, sin que nada avise—.
+ *
+ * Y lo que se ganaba era poco: medido sobre la instrucción que sale de verdad, el
+ * estilo aportaba unos 270 caracteres de 2.660. Un diez por ciento. Lo que hace que
+ * un episodio no se parezca al anterior sigue vivo y no cuesta nada: la identidad
+ * visual que el director decide para cada caso, y el elenco que rota.
+ *
+ * Queda «Probar cómo se ve», que genera UNA imagen: eso no era para comparar
+ * estilos, era para no gastar ochenta a ciegas, y esa razón sigue en pie.
  */
-function pintarEstilos() {
-  const sel = $('estilo-imagen');
-  if (!sel.options.length) {
-    for (const e of ESTILOS) {
-      const o = document.createElement('option');
-      o.value = e.id;
-      o.textContent = e.nombre;
-      sel.appendChild(o);
-    }
-    sel.addEventListener('change', () => {
-      $('estilo-resumen').textContent = estiloPorId(sel.value).resumen;
-    });
-  }
-  sel.value = P.config.imagen.estilo;
-  $('estilo-resumen').textContent = estiloPorId(sel.value).resumen;
-}
-
-/**
- * El muestrario: una imagen por estilo, para elegir mirando.
- *
- * Es el orden en que se decide y antes estaba al revés: solo se podía probar el
- * estilo que estuviera puesto, de uno en uno, así que para comparar seis había que
- * cambiar el desplegable seis veces y fiarse de lo que uno recordara de la
- * anterior. Y el estilo se elige ANTES de generar las ochenta imágenes del
- * documental, no después.
- *
- * Cada muestra se guarda: volver aquí las enseña sin volver a pagarlas.
- */
-function pintarMuestrario(muestras) {
-  const caja = $('muestrario');
-  caja.innerHTML = '';
-  for (const m of muestras) {
-    const elegido = m.estilo.id === P.config.imagen.estilo;
-    const d = document.createElement('div');
-    d.className = 'pieza-mat' + (elegido ? ' elegido' : '');
-    d.innerHTML =
-      (m.blob ? `<img src="${URL.createObjectURL(m.blob)}" alt="">` : '<div class="sin">sin imagen</div>') +
-      `<div class="cuerpo"><p><b>${escapar(m.estilo.nombre)}</b>${elegido ? ' · elegido' : ''}</p></div>`;
-
-    const b = document.createElement('button');
-    b.className = 'btn chico' + (elegido ? ' primario' : ' fantasma');
-    b.textContent = elegido ? 'En uso' : 'Usar este';
-    b.onclick = async () => {
-      P.config.imagen.estilo = m.estilo.id;
-      $('estilo-imagen').value = m.estilo.id;
-      $('estilo-resumen').textContent = m.estilo.resumen;
-      await guardar();
-      pintarMuestrario(muestras);
-      avisar('estilos', `Estilo elegido: ${m.estilo.nombre}. Las imágenes del documental saldrán así.`, 'bueno');
-    };
-    d.querySelector('.cuerpo').appendChild(b);
-    caja.appendChild(d);
-  }
-}
-
-/** Enseña las muestras que ya estén guardadas, sin generar ni pagar nada. */
-async function cargarMuestrario() {
-  try {
-    const ya = await imagenFase.muestrasGuardadas(P.id);
-    if (ya.length) pintarMuestrario(ya);
-  } catch {
-    /* si la copia local falla, el botón sigue estando */
-  }
-}
-
-accion(
-  'b-muestrario',
-  async () => {
-    const faltan = 6 - (await imagenFase.muestrasGuardadas(P.id)).length;
-    if (faltan > 0 && !confirm(`Se generan ${faltan} ${faltan === 1 ? 'imagen' : 'imágenes'}, una por estilo. ¿Sigo?`)) {
-      return;
-    }
-    const muestras = await imagenFase.muestrarioDeEstilos({
-      tomas: pieza().tomas,
-      config: { ...P.config, __pieza: P.id },
-      caso: pieza().caso,
-      tratamiento: pieza().tratamiento,
-      pieza: P.id,
-      alAvanzar: (n, total) => avisar('estilos', `Generando el estilo ${n} de ${total}…`),
-    });
-    pintarMuestrario(muestras);
-    const conToma = muestras.some((m) => m.deLaToma !== null && m.deLaToma !== undefined);
-    avisar(
-      'estilos',
-      `${muestras.length} estilos, ${conToma ? 'con una toma de tu documental' : 'con una escena de ejemplo'}. ` +
-        'Toca «Usar este» en el que te guste: las imágenes del documental saldrán así.',
-      'bueno',
-    );
-  },
-  'estilos',
-);
 
 accion(
   'b-probar-estilo',
   async () => {
-    // Se guarda el estilo elegido ANTES de probar: si no, se probaría el anterior y
-    // la muestra no sería de lo que se está mirando.
-    P.config.imagen.estilo = $('estilo-imagen').value;
-    await guardar();
-
     avisar('estilo', 'Generando una imagen de muestra…');
     const r = await imagenFase.probarEstilo({
       tomas: pieza().tomas,
@@ -2958,18 +2872,13 @@ accion(
   async () => {
     const toma = pieza().tomas.find((t) => t.plano);
     if (!toma) throw new Error('Dirige la pieza primero: sin ficha de plano no hay instrucción que enseñar.');
-    const txt = imagenFase.componerInstruccion(
-      toma,
-      { ...P.config, imagen: { ...P.config.imagen, estilo: $('estilo-imagen').value } },
-      { tratamiento: pieza().tratamiento },
-    );
+    const txt = imagenFase.componerInstruccion(toma, P.config, { tratamiento: pieza().tratamiento });
     registro('estilo', [txt]);
   },
   'estilo',
 );
 
 function pintarAjustes() {
-  pintarEstilos();
   pintarBiblioteca();
   // Los selectores de imagen y clips los llena `cargarModelos` con lo que el
   // proyecto tiene de verdad; aquí solo se refleja lo guardado.
@@ -3027,7 +2936,6 @@ accion(
     // Los dos ajustes que se ELIGEN OYÉNDOLOS llegan a la previa ya preparada: si
     // hubiera que volver a preparar para oír el cambio, el mando parecería roto.
     if (preparada) preparada.hoja.ajustes.volumenMusica = P.config.musica.volumen;
-    P.config.imagen.estilo = $('estilo-imagen').value;
     P.config.marca.texto = $('marca-texto').value.trim();
     P.config.formato.vertical = $('vertical').value === '1';
     if ($('voz').value) P.config.narracion.nombreVoz = $('voz').value;

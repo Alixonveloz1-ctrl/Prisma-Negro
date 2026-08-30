@@ -1,5 +1,10 @@
 // El catálogo de géneros.
 //
+// (El estilo visual NO está aquí: es del canal entero y vive en `comun/estilos.mjs`
+// como `ESTILO_DEL_CANAL`. Cada género traía un `estiloPorDefecto` que no leía
+// ninguna fase —una declaración que parecía conectada y no lo estaba— y se quitó al
+// fijar el estilo del canal.)
+//
 // Una estructura de bloques —gancho, hallazgo, peritaje, muro, pista falsa,
 // archivo, tecnología, cierre— es LO QUE HACE QUE UN EPISODIO FUNCIONE, y por eso
 // mismo no puede vivir dentro del director. Escrita ahí dentro sería invisible: no
@@ -18,7 +23,7 @@
 // esta tabla y NO SE TOCA NADA MÁS. Si añadir un género obliga a editar una fase,
 // el diseño está mal y hay que arreglar el diseño, no el género.
 //
-// Cada género declara cuatro cosas:
+// Cada género declara tres cosas:
 //
 //   bloques      — la estructura del episodio, en proporciones que suman 1. Los
 //                  minutos que pida el usuario se reparten con esos pesos.
@@ -29,7 +34,6 @@
 //                  canal y no de un género: un perito forense es el mismo papel
 //                  en un crimen frío que en un terror real, y declararlo dos
 //                  veces sería tener dos peritos donde hay uno —y pagarlos—.
-//   estiloPorDefecto — con qué estilo visual de `estilos.mjs` se ve este género.
 
 import { arquetipoPorId as arquetipo } from './elenco.mjs';
 
@@ -38,7 +42,6 @@ export const GENEROS = [
     id: 'crimen-frio',
     nombre: 'Crimen frío',
     resumen: 'Cuerpo oculto, décadas, reapertura por tecnología nueva.',
-    estiloPorDefecto: 'noir',
 
     // LOS PESOS SUMAN 1, Y NO ES DECORATIVO: son la proporción con la que se
     // reparten los minutos pedidos. Un episodio de treinta minutos y otro de diez
@@ -146,7 +149,6 @@ export const GENEROS = [
     id: 'desaparicion',
     nombre: 'Desaparición',
     resumen: 'Alguien sale de casa y no llega. La búsqueda, y lo que la búsqueda destapa.',
-    estiloPorDefecto: 'reconstruccion',
     // Aquí el peso se va a la BÚSQUEDA, no a la pista falsa: lo que engancha en
     // una desaparición no es quién fue, es el tiempo pasando mientras se rastrea.
     bloques: [
@@ -174,7 +176,6 @@ export const GENEROS = [
     id: 'terror-real',
     nombre: 'Terror real',
     resumen: 'Una institución, un experimento, un lugar. Lo que se hizo con permiso.',
-    estiloPorDefecto: 'archivo',
     // El giro aquí no es «quién fue» sino «esto era legal»: el peso está en el
     // destape y en el papeleo que lo autorizó.
     bloques: [
@@ -202,7 +203,6 @@ export const GENEROS = [
     id: 'secta',
     nombre: 'Secta',
     resumen: 'Un líder, una comunidad y la puerta que deja de abrirse por dentro.',
-    estiloPorDefecto: 'reconstruccion',
     // El peso va a la SEDUCCIÓN, no al final: si no se entiende por qué alguien
     // entró, el desenlace no significa nada y el espectador se pone por encima.
     bloques: [
@@ -230,7 +230,6 @@ export const GENEROS = [
     id: 'supervivencia',
     nombre: 'Supervivencia',
     resumen: 'Se sale de casa por la mañana y a mediodía todo ha dejado de funcionar.',
-    estiloPorDefecto: 'reconstruccion',
     // No hay pista falsa ni culpable: el peso está en la resistencia y en las
     // decisiones. Un género que se sostiene por acumulación, no por giro.
     bloques: [

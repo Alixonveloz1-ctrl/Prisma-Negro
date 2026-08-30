@@ -24,8 +24,7 @@ import { claveToma, tomaDelFotograma, claveClip, claveFotograma } from '../../co
 import { elegirVariante } from './biblioteca.js';
 import { reducirReferencias, deBase64 } from '../imagenes.js';
 import {
-  estiloPorId,
-  ESTILOS,
+  ESTILO_DEL_CANAL,
   BARRERA_DOCUMENTAL,
   SIN_TEXTO_LEGIBLE,
   OFICIO_CINEMATOGRAFICO,
@@ -369,7 +368,6 @@ export function elegirReferencias(toma, tomas, maximo = 3) {
  */
 export function componerInstruccion(toma, config, { conReferencias = false, tratamiento = null } = {}) {
   const p = toma.plano;
-  const estilo = estiloPorId(config?.imagen?.estilo);
   const v = tratamiento?.identidadVisual;
 
   // Quién sale en cuadro. NO ESTABA, y el director sí lo decidía: la ficha traía
@@ -387,9 +385,10 @@ export function componerInstruccion(toma, config, { conReferencias = false, trat
     `Encuadre: ${p.encuadre}.`,
     p.lugar ? `Lugar: ${p.lugar}.` : '',
     p.luz ? `Luz: ${p.luz}.` : '',
-    // El estilo dice de qué CLASE es la imagen; el tratamiento del director dice
-    // cómo es la de ESTA pieza. Los dos, en ese orden.
-    estilo.prompt,
+    // El estilo del canal dice de qué CLASE es la imagen; el tratamiento del
+    // director dice cómo es la de ESTA pieza. Los dos, en ese orden — y la
+    // variedad entre episodios sale del segundo, que no cuesta nada.
+    ESTILO_DEL_CANAL,
     v ? `Paleta: ${v.paleta}. Luz general: ${v.luz}. Textura: ${v.textura}.` : '',
     v?.queEvitar ? `Evitar: ${v.queEvitar}.` : '',
     // Lo que hace que sea un fotograma y no una foto de catálogo, y lo que impide
@@ -545,66 +544,6 @@ export function planoDePrueba(tomas = [], caso = null) {
  * Cada muestra se guarda con su propia clave, así que volver a esta pantalla las
  * enseña sin volver a pagarlas.
  */
-export async function muestrarioDeEstilos({
-  tomas = [],
-  config,
-  caso = null,
-  tratamiento = null,
-  pieza = 'p01',
-  soloLasQueFaltan = true,
-  senal,
-  alAvanzar,
-}) {
-  const { toma, deLaToma } = planoDePrueba(tomas, caso);
-  const salida = [];
-
-  for (const [n, estilo] of ESTILOS.entries()) {
-    if (senal?.aborted) throw new Error('Detenido.');
-    const clave = claveMuestra(pieza, estilo.id);
-
-    if (soloLasQueFaltan) {
-      const ya = await local.leerMaterial(clave);
-      if (ya) {
-        salida.push({ estilo, blob: ya, clave, deLaToma, reusada: true });
-        alAvanzar?.(n + 1, ESTILOS.length);
-        continue;
-      }
-    }
-
-    // El estilo de ESTA muestra, no el que esté puesto en la configuración.
-    const suyo = { ...config, imagen: { ...config.imagen, estilo: estilo.id } };
-    const instruccion = componerInstruccion(toma, suyo, { tratamiento });
-
-    const r = await llamar(
-      'imagen',
-      {
-        instruccion,
-        aspecto: config.formato.vertical ? '9:16' : '16:9',
-        guardarEn: clave,
-      },
-      { senal },
-    );
-    if (!r.guardado?.bytes) throw new Error(`La muestra de «${estilo.nombre}» no llegó al almacén.`);
-    const blob = await material(clave, 'image/png', { senal });
-    salida.push({ estilo, blob, clave, deLaToma, instruccion, reusada: false });
-    alAvanzar?.(n + 1, ESTILOS.length);
-  }
-  return salida;
-}
-
-export const claveMuestra = (pieza, estiloId) => `${pieza}/muestra-${estiloId}/img`;
-
-/** Las muestras que ya están guardadas, sin generar ni pagar nada. */
-export async function muestrasGuardadas(pieza) {
-  const salida = [];
-  for (const estilo of ESTILOS) {
-    const clave = claveMuestra(pieza, estilo.id);
-    const blob = await local.leerMaterial(clave);
-    if (blob) salida.push({ estilo, blob, clave, reusada: true });
-  }
-  return salida;
-}
-
 export async function probarEstilo({ tomas = [], config, tratamiento = null, senal }) {
   const conPlano = tomas.find((t) => t.plano);
   const toma = conPlano || {

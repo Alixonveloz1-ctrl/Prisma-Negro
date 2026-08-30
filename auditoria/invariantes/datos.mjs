@@ -21,7 +21,7 @@ export const invariantes = [
     dice: 'La regla del catálogo de géneros es que uno nuevo se añade a la tabla y no se toca nada más —la misma que el README le aplica al montador—. Eso solo se sostiene si CADA fila está completa: unos pesos que no sumen 1 reparten mal los minutos sin dar error, un bloque sin función manda a escribir «avanzar el relato», y un estilo por defecto que no existe en el catálogo de estilos se cae en silencio al primer episodio. Nada de eso se ve leyendo la tabla, y el que añada el séptimo género no va a acordarse de las cuatro cosas.',
     comprobar(ctx) {
       const {
-        GENEROS, GENERO_POR_DEFECTO, generoPorId, ESTILOS,
+        GENEROS, GENERO_POR_DEFECTO, generoPorId,
         ELENCO, RECURSOS, VERSIONES_MINIMAS, EPISODIOS_SIN_REPETIR,
         arquetipoPorId, personajesDe, planoDeVariante, planoDeRecurso,
       } = ctx.fn;
@@ -38,11 +38,6 @@ export const invariantes = [
         vistos.add(g?.id);
         for (const campo of ['nombre', 'resumen']) {
           if (!String(g?.[campo] || '').trim()) fallos.push(`El género «${quién}» no tiene ${campo}: no se puede elegir a ciegas.`);
-        }
-
-        // El estilo visual tiene que existir DE VERDAD en el otro catálogo.
-        if (!ESTILOS.some((e) => e.id === g?.estiloPorDefecto)) {
-          fallos.push(`El género «${quién}» apunta al estilo «${g?.estiloPorDefecto}», que no está en el catálogo de estilos.`);
         }
 
         // Los bloques: la estructura del episodio.
@@ -2460,7 +2455,7 @@ export const invariantes = [
     nombre: 'ninguna-imagen-pide-letras-y-ninguna-sale-de-catalogo',
     dice: 'Los expedientes y los titulares salían con garabatos —el generador no sabe escribir— y un texto ilegible en primer plano delata que la imagen es falsa. Y el resto salía «básico»: sujeto centrado, todo enfocado, todo iluminado, el sitio recién ordenado. Eso es una foto de banco de imágenes, no un fotograma.',
     comprobar(ctx) {
-      const { componerInstruccion, ESTILOS } = ctx.fn;
+      const { componerInstruccion } = ctx.fn;
       const fallos = [];
       const toma = {
         i: 0,
@@ -2473,11 +2468,12 @@ export const invariantes = [
         },
       };
 
-      // Las dos exigencias van en TODOS los estilos, no solo en el que esté puesto:
-      // quien añada el séptimo estilo no tiene que acordarse de copiarlas.
-      for (const estilo of ESTILOS) {
-        const config = { ...ctx.config, imagen: { ...ctx.config.imagen, estilo: estilo.id } };
-        const p = componerInstruccion(toma, config, { tratamiento: null });
+      // El aspecto es del canal y hay uno solo, así que esto se comprueba una vez.
+      // Lo que NO puede pasar es que estas exigencias vivan dentro del texto del
+      // estilo: van sueltas para que cambiar el aspecto del canal no se las lleve.
+      {
+        const estilo = { id: 'canal' };
+        const p = componerInstruccion(toma, ctx.config, { tratamiento: null });
 
         if (!/NADA DE TEXTO LEGIBLE/.test(p)) {
           fallos.push(`Estilo «${estilo.id}»: no se prohíbe el texto legible; los documentos saldrían con garabatos.`);
