@@ -61,6 +61,24 @@ function tramos(guion) {
       salida.push({ clase: 'encabezado', inicio: linea.inicio, fin: linea.fin });
       continue;
     }
+
+    // LA TERCERA CONVENCIÓN DEL TEXTO PLANO: el hablante de un testimonio.
+    //
+    // Una línea que empieza por «> » declara QUIÉN habla en el párrafo que viene
+    // debajo, y no se narra — igual que el encabezado de escena. Si se narrara, el
+    // documental diría en voz alta «Marcos Elizalde, capataz de la cuadrilla» como
+    // si fuera una frase del guion, y encima consumiría una toma.
+    //
+    // La voz NO cambia: sigue siendo la del narrador en todo el episodio, con las
+    // voces expresivas apagadas y el razonamiento original intacto —los modelos
+    // expresivos derivan y en quince minutos se nota—. Esta marca existe SOLO para
+    // dirección: es lo que le dice al director que ahí va el plano del perito
+    // declarando. En pantalla se ve a alguien hablando y se oye al narrador, que
+    // es como funcionan los documentales de plataforma.
+    if (/^\s*>\s+\S/.test(contenido)) {
+      salida.push({ clase: 'testimonio', inicio: linea.inicio, fin: linea.fin });
+      continue;
+    }
     if (!contenido.trim()) {
       salida.push({ clase: 'hueco', inicio: linea.inicio, fin: linea.fin });
       continue;
@@ -179,6 +197,10 @@ export function segmentar(guion, config = {}) {
       i: tomas.length,
       escena: acumulado.escena,
       texto: t,
+      // Quién habla, si esta toma es parte de un testimonio. Cadena vacía si no.
+      // Lo lee el director para poner el plano de quien declara, y de ahí sale la
+      // resolución contra la biblioteca por arquetipo.
+      testimonio: acumulado.testimonio || '',
       // Estimación, solo para dimensionar. La real la mide el audio (§4.5).
       segundos: Math.max(1.2, +(t.length / c.caracteresPorSegundo).toFixed(2)),
       inicioEnGuion: acumulado.inicio,
@@ -196,9 +218,37 @@ export function segmentar(guion, config = {}) {
     acumulado = null;
   };
 
+  // Quién está hablando ahora mismo. Vale hasta la siguiente frontera dura —una
+  // línea en blanco o un cambio de escena—, no solo para la primera toma: un
+  // testimonio de tres frases se parte en dos tomas y las dos son del mismo
+  // testigo. Marcar solo la primera dejaría media declaración con el plano del
+  // narrador.
+  let hablando = '';
+
+  // SALTOS DE LÍNEA SEGUIDOS DESDE EL ÚLTIMO TEXTO NARRADO.
+  //
+  // ─────────────────────────────────────────────────────────────────────────────
+  // La línea en blanco lleva desde el principio documentada como frontera dura
+  // —«Separa con una línea en blanco los bloques que deben ir en tomas distintas.
+  // Esa línea en blanco es una PAUSA»— y NO LO ERA. Tres párrafos separados por
+  // líneas en blanco salían en UNA sola toma.
+  //
+  // El motivo: se buscaba `\n\s*\n` DENTRO de un tramo de hueco, y esos dos saltos
+  // nunca caen en el mismo tramo. El salto que cierra el párrafo es la cola de la
+  // línea anterior; la línea en blanco es otro tramo distinto. Cada uno traía un
+  // salto y la expresión no encajaba en ninguno.
+  //
+  // Así que el guion podía pedir la pausa donde quisiera y el segmentador la
+  // ignoraba siempre. Se contaban los saltos de todos los huecos SEGUIDOS, que es
+  // lo que de verdad significa «hay una línea en blanco de por medio».
+  // ─────────────────────────────────────────────────────────────────────────────
+  let saltos = 0;
+
   for (const tr of lista) {
     if (tr.clase === 'encabezado') {
       cerrar();
+      hablando = '';
+      saltos = 0;
       escenaActual = escenas.length;
       escenas.push({
         n: escenaActual,
@@ -208,9 +258,23 @@ export function segmentar(guion, config = {}) {
       continue;
     }
 
+    if (tr.clase === 'testimonio') {
+      // Frontera dura: lo de antes era del narrador y lo de después es de quien
+      // declara. Juntarlos en una toma pondría dos planos distintos en una.
+      cerrar();
+      hablando = texto.slice(tr.inicio, tr.fin).replace(/^\s*>\s*/, '').trim();
+      saltos = 0;
+      continue;
+    }
+
     if (tr.clase === 'hueco') {
-      // Una línea en blanco cierra la toma en curso: frontera dura.
-      if (/\n\s*\n/.test(texto.slice(tr.inicio, tr.fin))) cerrar();
+      // Dos saltos SEGUIDOS son una línea en blanco, y una línea en blanco cierra
+      // la toma en curso. Ver la cabecera de `saltos`.
+      saltos += (texto.slice(tr.inicio, tr.fin).match(/\n/g) || []).length;
+      if (saltos >= 2) {
+        cerrar();
+        hablando = '';
+      }
       continue;
     }
 
@@ -219,10 +283,14 @@ export function segmentar(guion, config = {}) {
       escenas.push({ n: 0, titulo: '', inicioEnGuion: 0 });
     }
 
+    // Texto narrado: la cuenta de saltos vuelve a cero. Un salto solo —el que
+    // parte una frase larga en dos líneas— no separa nada.
+    saltos = 0;
+
     const frase = texto.slice(tr.inicio, tr.fin);
     const segFrase = frase.length / c.caracteresPorSegundo;
 
-    if (acumulado && acumulado.escena === escenaActual) {
+    if (acumulado && acumulado.escena === escenaActual && acumulado.testimonio === hablando) {
       const segActual = (acumulado.fin - acumulado.inicio) / c.caracteresPorSegundo;
       // Se añade mientras no pase del máximo Y mientras no nos alejemos del
       // objetivo más de lo que ya estamos.
@@ -239,7 +307,7 @@ export function segmentar(guion, config = {}) {
       cerrar();
     }
 
-    acumulado = { inicio: tr.inicio, fin: tr.fin, escena: escenaActual };
+    acumulado = { inicio: tr.inicio, fin: tr.fin, escena: escenaActual, testimonio: hablando };
   }
   cerrar();
 

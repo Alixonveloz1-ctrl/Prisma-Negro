@@ -44,7 +44,7 @@ NAVEGADOR                FUNCIÓN                  NUBE DEL USUARIO
   claves, la segmentación, el audio y **la hoja de montaje**.
 - **`montador/`** — el contenedor de ffmpeg. No conoce **ningún** archivo por su
   nombre: recibe una lista `origen → destino` y copia.
-- **`auditoria/`** — 48 invariantes sobre cómo tiene que estar construido el sistema.
+- **`auditoria/`** — 133 invariantes sobre cómo tiene que estar construido el sistema.
 - **`banco/`** — el banco de pruebas con material de mentira.
 
 ### Por qué la hoja de montaje está en `comun/`
@@ -116,7 +116,7 @@ a la siguiente: se puede detener a mitad y reanudar sin perder nada.
 
 | Fase | Qué hace | Dónde |
 |---|---|---|
-| Investigación | Fichas: hecho + fuente + fecha + cita | `app/fases/investigacion.js` |
+| Investigación | Fichas. Documentando —hecho + fuente + fecha + cita— o construyendo el expediente de un caso inventado | `app/fases/investigacion.js` |
 | Guion | Texto plano, a partir de las fichas | `app/fases/guion.js` |
 | Segmentación | Determinista, con cobertura verificada | `comun/segmentar.mjs` |
 | Dirección | Una ficha de plano por toma, **1 llamada por pieza** | `app/fases/direccion.js` |
@@ -127,26 +127,79 @@ a la siguiente: se puede detener a mitad y reanudar sin perder nada.
 | Miniatura | Texto incrustado por el prompt, marca por el navegador | `app/fases/miniatura.js` |
 | Metadatos | Marcas de tiempo **reales**, pie de fuentes | `app/fases/metadatos.js` |
 | Montaje | Comprobación previa, contenedor, registro legible | `app/fases/montaje.js` |
+| Biblioteca | Los planos que valen para TODOS los episodios. Se pagan una vez | `app/fases/biblioteca.js` |
 
 ---
 
-## Lo que se decidió para el proyecto documental
+## Las dos clases de episodio
 
-El plano deja esto explícitamente para decidir (§8.2), así que está decidido:
+La herramienta hace dos cosas distintas y la diferencia **no es un matiz**: es qué
+se puede escribir que no esté en el material. Se elige en `investigacion.modo`.
 
-- **No se generan imágenes fotorrealistas de personas reales identificables**, ni se
-  presenta material generado como si fuera de archivo. Es el fallo que hunde la
-  credibilidad de un canal documental.
-- Lo que sí se hace: **reconstrucciones declaradas**, mapas y esquemas, planos de
-  recurso, y archivo con licencia clara.
+| | `documentar` | `construir` |
+|---|---|---|
+| Las fichas | Hechos reales, con fuente, fecha y cita | El expediente de un caso que no ocurrió |
+| Se buscan | En internet, por seis ángulos distintos | No se busca: se fabrica, de una sola llamada |
+| El guion | **No puede inventar** ni un dato, una fecha o un nombre | Pone el detalle concreto que la escena pida |
+| El límite | Las fuentes, y se atribuye según el tipo de cada una | La coherencia: un nombre o una fecha no cambian |
+| Al publicar | Pie de fuentes (§8.4) | **Declaración de ficción, la primera línea** |
+
+Las dos comparten el mismo oficio —lo concreto, administrar lo que se sabe, el
+ritmo, nada de adjetivos de opinión— y son dos bloques distintos del sistema del
+guion, no uno reescrito. Eso es lo que permite que **un proyecto documental
+anterior siga siendo un documental**: la mudanza de configuración deja en
+`documentar` todo lo guardado antes de la versión 4.
+
+### Lo que no cambia en ningún modo
+
+- Las personas que aparecen son **intérpretes de una dramatización**, con rostros
+  anónimos, y **nada imita material de archivo auténtico**.
 - Cada toma **sabe de qué tipo es su imagen** (`generada` / `archivo` /
   `reconstruccion`) y eso sale en pantalla.
-- La barrera está en el prompt y en la configuración, no solo en la conciencia de
-  quien lo escribió. Se puede apagar, pero hay que apagarla a mano.
+- Un caso construido **se publica declarado como ficción**, y la declaración se
+  compone en el código —no se le pide al modelo— y va lo primero de la
+  descripción. Un caso inventado presentado como real es una mentira aunque la
+  víctima no exista: lo que se falsea es la naturaleza de la pieza.
+- El guion se escribe **a partir de las fichas**, siempre. Con las construidas es
+  aún más importante: son lo único que garantiza que el detective no se llame
+  Roger en el minuto 12 y Robert en el 32.
 
-Y el guion se escribe **a partir de las fichas**: cada toma conserva la referencia a
-la que la respalda, para que cuando alguien discuta un dato se sepa de dónde salió
-sin releer nada.
+---
+
+## El género, y por qué es un catálogo
+
+Un episodio no tiene «tres actos»: tiene la estructura de su género. Un crimen
+frío se cuenta con gancho, hallazgo, peritaje, muro, pista falsa, archivo,
+tecnología y cierre, con la pista falsa llevándose un cuarto del metraje. Una
+supervivencia no se parece en nada.
+
+Esa estructura vive en `comun/generos.mjs`, en una tabla fija de la que la
+configuración guarda **solo la clave** — igual que el estilo, el tema y el
+generador. Cada género declara cuatro cosas: sus **bloques** con sus pesos, sus
+**motivos** —los planos que vuelven—, sus **arquetipos** de personaje con su plano
+entero, y su **estilo visual** por defecto.
+
+> **La regla, y es la misma que el README le aplica al montador:** un género se
+> añade a esa tabla y **no se toca nada más**. Si añadir un género obliga a editar
+> una fase, el diseño está mal.
+
+---
+
+## De dónde sale el ahorro
+
+La fase de imagen y la de clips son casi todo el coste, y hay tres mecanismos
+encadenados. Con 165 tomas:
+
+| | Imágenes a pagar |
+|---|---|
+| Sin nada | ~165 |
+| **Motivos** — 15–20 planos que vuelven 5–8 veces, repartidos por el código con seis tomas de separación garantizadas | ~57 |
+| **+ Biblioteca** — arquetipos y recursos que valen para todos los episodios, pagados una vez | ~43 |
+
+Y el movimiento **deja de ser un porcentaje**: es una cuenta —doce clips por
+episodio— más los arquetipos de la biblioteca, que llevan video siempre porque se
+pagan una vez. Los motivos nunca llevan clip: su valor está en volver costando
+cero, y animarlos sería pagar la fase más cara justo por lo que ya salía gratis.
 
 ---
 
@@ -159,10 +212,11 @@ npm run banco            # monta con material de mentira
 npm run prueba           # las dos cosas
 ```
 
-`auditar` comprueba 48 afirmaciones sobre cómo tiene que estar construido el
+`auditar` comprueba 133 afirmaciones sobre cómo tiene que estar construido el
 sistema: «ninguna imagen viaja sin reducir», «el montador no nombra ningún archivo
 del guion», «todos los caminos de carga normalizan la configuración», «la lista de
-descargas cubre todos los archivos que abre el montaje».
+descargas cubre todos los archivos que abre el montaje», «un proyecto documental
+viejo no se vuelve ficción solo».
 
 **`auditar:romper` es la que importa.** Rompe el sistema a propósito, una vez por
 invariante, y exige que la invariante correspondiente lo cace. Una comprobación que

@@ -289,6 +289,283 @@ export async function investigarAngulo({ caso, angulo, senal }) {
 
 export const ANGULOS_DE_INVESTIGACION = ANGULOS;
 
+// ── Paso 2 bis: el modo CONSTRUIR ─────────────────────────────────────────────
+//
+// La fase conserva su forma —devuelve fichas— y gana un modo. En `construir` no
+// busca nada: fabrica el expediente de un caso que no ocurrió y lo entrega como
+// fichas, para que el guion se apoye en ellas exactamente igual que antes.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// Y ES UNA SOLA LLAMADA, A PROPÓSITO.
+//
+// La investigación documental va por seis ángulos separados porque una sola
+// pregunta trae una sola versión. Aquí es al revés: seis llamadas construirían
+// seis casos que se contradicen entre sí, y ese es EXACTAMENTE el fallo que esto
+// existe para evitar —el detective que se llama Roger en el minuto doce y Robert
+// en el treinta y dos—. El caso se inventa entero de una vez o no se sostiene.
+//
+// La temperatura sube a 0.9. Con 0.25, que es la de documentar, salen casos
+// genéricos: el cuerpo en el bosque, la mujer que desapareció volviendo a casa.
+// Lo que engancha es el contenedor imposible y la ficha de latón con su número.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Los papeles que juega una ficha construida dentro del caso. */
+export const ROLES_DE_FICHA = [
+  'victima', 'sospechoso', 'testigo', 'objeto', 'lugar', 'fecha', 'pistafalsa', 'revelacion',
+];
+
+const ESQUEMA_CONSTRUIDO = {
+  type: 'object',
+  properties: {
+    fichas: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          afirmacion: { type: 'string' },
+          rol: { type: 'string', enum: ROLES_DE_FICHA },
+          // La fecha se queda: un expediente sin fechas concretas no es un
+          // expediente, y el lapso largo es medio género.
+          fecha: { type: 'string' },
+          // Y la cita también, pero cambia de significado: aquí no es la línea
+          // literal de una fuente, es la línea literal que alguien DIJO dentro
+          // del caso. Es de donde salen los testimonios del guion.
+          cita: { type: 'string' },
+        },
+        required: ['afirmacion', 'rol', 'fecha', 'cita'],
+      },
+    },
+  },
+  required: ['fichas'],
+};
+
+const SISTEMA_CONSTRUIR = `Construyes el expediente de un caso que no ocurrió, para un
+episodio de ficción documental declarada. No escribes el guion: construyes el
+MATERIAL del que saldrá.
+
+Devuelves fichas. Cada ficha es un elemento del caso, y entre todas tienen que
+formar un caso que se sostenga solo.
+
+LO QUE TIENE QUE HABER, SIEMPRE:
+- Una víctima con nombre, edad, oficio y una razón por la que nadie la buscó.
+- Un contenedor imposible: dónde estuvo el cuerpo y por qué nadie lo encontró.
+  Un árbol, una pared, un pozo, un cilindro, un ascensor, un tanque.
+- Un lapso largo y concreto. Entre veinte y cien años, con las dos fechas.
+- Quien lo encuentra: nombre, edad, qué estaba haciendo esa mañana.
+- Un objeto que guarda el secreto y que en su momento NO SE PUDO LEER: un papel
+  apelmazado, una ficha corroída, un diente. Es lo que resolverá el caso al final.
+- Un sospechoso de la pista falsa: alguien a quien todo señala y que el ADN
+  descarta. Tiene que encajar de verdad — oficio, fecha, lugar, un rasgo físico.
+- El culpable real, vinculado al objeto.
+- La tecnología que lo resuelve décadas después, nombrada con precisión.
+
+REGLAS
+- Nombres, lugares y organismos COMPLETAMENTE INVENTADOS. Ni una persona real,
+  ni una empresa real, ni un cuerpo policial real. El condado, el pueblo y el
+  laboratorio se los inventa uno.
+- Coherencia absoluta: un nombre, una fecha o una edad se escriben una vez y no
+  cambian. Antes de cerrar, relee y comprueba que nada se contradice.
+- Concreción de expediente. «Un objeto metálico» no vale; «una ficha de latón de
+  la maderera, con el número 4417 estampado» sí.
+- Nada de sobrenatural salvo que el género lo pida. Lo que engancha es que
+  pudo pasar.
+
+EL ROL de cada ficha dice qué papel juega: victima, sospechoso, testigo, objeto,
+lugar, fecha, pistafalsa (lo que señala al inocente), revelacion (lo que resuelve).
+La cita, cuando la pongas, es lo que alguien DIJO —una frase de persona, no de
+informe—: de ahí salen los testimonios del episodio.`;
+
+/**
+ * Propone casos INVENTADOS entre los que elegir.
+ *
+ * Es el equivalente de `buscarCasos` para el modo construir, y devuelve la misma
+ * forma para que la pantalla que los pinta no tenga que saber de dónde salieron.
+ * No sale a internet: buscar casos reales para después inventarse otro sería pagar
+ * una búsqueda que no se usa.
+ */
+export async function proponerCasos({ genero = null, tema = null, evitar = [], cuantos = 5, senal } = {}) {
+  const yaVistos = evitar.length
+    ? `\n\nNO propongas ninguno parecido a estos, ya se descartaron:\n${evitar.slice(-25).map((t) => `- ${t}`).join('\n')}`
+    : '';
+
+  const r = await llamar(
+    'texto',
+    {
+      sistema:
+        'Inventas premisas de episodio para un canal de ficción documental declarada. ' +
+        'No son casos reales y no lo pretenden: son casos que PUDIERON pasar.\n\n' +
+        'Reglas:\n' +
+        '- Nombres, pueblos, condados y organismos completamente inventados. Ni una ' +
+        'persona real, ni una empresa real, ni un cuerpo policial real.\n' +
+        '- Que no se parezca a un caso real conocido: si suena a uno que existe, ' +
+        'cámbialo. Se inventa, no se disfraza.\n' +
+        '- Lo que engancha es que pudo pasar. Nada de sobrenatural salvo que el ' +
+        'género lo pida.\n' +
+        '- Concreción de expediente ya desde la sinopsis: el sitio imposible, el ' +
+        'objeto, el lapso de años. «Un cuerpo aparece años después» no es una ' +
+        'premisa; «un cuerpo dentro del tronco hueco de un roble, cuarenta y un ' +
+        'años» sí.\n' +
+        '- Variedad: cinco premisas distintas entre sí, no cinco versiones de una.',
+      instruccion:
+        (genero
+          ? `GÉNERO: ${genero.nombre}. ${genero.resumen}\n` +
+            `Motivos visuales del género: ${genero.motivos.join('; ')}.\n\n`
+          : '') +
+        (tema ? `Terreno: ${tema}\n\n` : '') +
+        `Inventa ${cuantos} casos.\n\n` +
+        'Para cada uno:\n' +
+        '- titulo: título del episodio, corto y concreto. Sin signos de exclamación.\n' +
+        '- gancho: una frase de lo que engancha, sin exagerar ni prometer de más.\n' +
+        '- sinopsis: 2 o 3 frases de qué pasó, ya con el detalle concreto.\n' +
+        '- cuando: los años, con el lapso. «1981, resuelto en 2022».\n' +
+        '- donde: el lugar inventado.\n' +
+        '- porQueFunciona: por qué da para episodio visual.\n' +
+        '- imagenSugerida: descripción visual para la portada.\n' +
+        '- documentado: false SIEMPRE. Esto es ficción declarada.\n\n' +
+        'Responde ÚNICAMENTE con un objeto JSON así:\n' +
+        '{"casos":[{"titulo":"","gancho":"","sinopsis":"","cuando":"","donde":"",' +
+        '"porQueFunciona":"","imagenSugerida":"","documentado":false}]}' +
+        yaVistos,
+      esquema: ESQUEMA_CASOS,
+      temperatura: 0.95,
+      maxTokens: 6000,
+    },
+    { senal, reintentos: 1 },
+  );
+
+  const casos = (r.json?.casos || []).slice(0, cuantos).map((c, i) => ({
+    id: `c${Date.now().toString(36)}${i}`,
+    titulo: c.titulo || 'Sin título',
+    gancho: c.gancho || '',
+    sinopsis: c.sinopsis || '',
+    cuando: c.cuando || '',
+    donde: c.donde || '',
+    porQueFunciona: c.porQueFunciona || '',
+    imagenSugerida: c.imagenSugerida || '',
+    // Un caso construido NO se marca como documentado, pase lo que pase: esa
+    // pastilla verde en pantalla significa «hay fuentes públicas sólidas» y aquí
+    // no las hay. Es ficción, y se dice.
+    documentado: false,
+    construido: true,
+    fuentes: [],
+  }));
+
+  if (!casos.length) throw new Error('No salió ninguna premisa. Vuelve a darle.');
+  return { casos, descartados: 0 };
+}
+
+/**
+ * Construye el expediente completo de un caso inventado.
+ *
+ * `caso` es opcional: con él, se construye el expediente de ESE caso —el título y
+ * la sinopsis que se eligieron—; sin él, se inventa entero desde el género y el
+ * tema. `genero` viene del catálogo y decide qué tiene que haber.
+ */
+export async function construirCaso({ caso = null, genero = null, tema = null, cuantas = 30, senal }) {
+  const r = await llamar(
+    'texto',
+    {
+      sistema: SISTEMA_CONSTRUIR,
+      instruccion:
+        (genero
+          ? `GÉNERO: ${genero.nombre}. ${genero.resumen}\n` +
+            `La estructura del episodio será esta, y el expediente tiene que dar ` +
+            `material para todos los bloques:\n` +
+            genero.bloques.map((b) => `- ${b.nombre}: ${b.funcion}`).join('\n') +
+            `\n\n`
+          : '') +
+        (caso
+          ? `EL CASO QUE SE VA A CONTAR:\n${caso.titulo}\n${caso.sinopsis || ''}\n` +
+            `Cuándo: ${caso.cuando || 'lo decides tú'} · Dónde: ${caso.donde || 'lo decides tú'}\n\n` +
+            `Construye el expediente COMPLETO de este caso. Lo de arriba es el ` +
+            `punto de partida; todo lo demás —los nombres, las fechas exactas, el ` +
+            `objeto, el sospechoso falso, el culpable— lo decides tú y no puede ` +
+            `contradecirlo.\n\n`
+          : `Inventa el caso entero${tema ? `, dentro de este terreno: ${tema}` : ''}.\n\n`) +
+        `Devuelve hasta ${cuantas} fichas. Empieza por la víctima, el lugar y las ` +
+        `fechas; sigue por el hallazgo, el peritaje y la pista falsa; termina por ` +
+        `el objeto, la revelación y el culpable. Ese orden importa: es el orden en ` +
+        `que se va a contar.\n\n` +
+        `Responde ÚNICAMENTE con un objeto JSON así:\n` +
+        `{"fichas":[{"afirmacion":"","rol":"victima","fecha":"","cita":""}]}`,
+      esquema: ESQUEMA_CONSTRUIDO,
+      // Con 0.3 salen casos genéricos. Ver la cabecera.
+      temperatura: 0.9,
+      maxTokens: 16000,
+    },
+    { senal, reintentos: 1 },
+  );
+
+  return (r.json?.fichas || []).map((f, i) => ({
+    id: `f${Math.random().toString(36).slice(2, 9)}`,
+    afirmacion: f.afirmacion || '',
+    rol: ROLES_DE_FICHA.includes(f.rol) ? f.rol : 'objeto',
+    fecha: f.fecha || '',
+    cita: f.cita || '',
+    // El ORDEN en que se construyó es información: el modelo levantó el caso de
+    // la víctima a la revelación, y ese es el orden en que se cuenta. Sin esto,
+    // cualquier ordenación posterior lo perdería.
+    orden: i,
+    // Una ficha construida no tiene fuente ni fiabilidad, y decir que sí la tiene
+    // sería la mentira que este proyecto no se puede permitir: se marca como lo
+    // que es, y el pie de fuentes del episodio dice que el caso es ficción.
+    construida: true,
+    fuente: '',
+    tipoFuente: 'otra',
+    enlace: '',
+    fiabilidad: 'sin calificar',
+    incierto: false,
+  }));
+}
+
+/**
+ * Las fichas escritas para meterlas en una instrucción.
+ *
+ * Está aquí —y no repetido en el guion y en el director— porque las dos clases de
+ * ficha se escriben distinto y hay que escribirlas igual en los dos sitios. Una
+ * documentada lleva su fuente entre corchetes, que es lo que le dice al guion cómo
+ * atribuir; una construida lleva su ROL, que es lo que le dice qué papel juega en
+ * el caso. Componerlo en cada fase acabaría con dos formatos y una fase leyendo
+ * «fuente: undefined».
+ */
+export function comoLista(fichas, { tope = 60 } = {}) {
+  return ordenarFichas(fichas)
+    .slice(0, tope)
+    .map((f, i) =>
+      f.construida
+        ? `[${i}] (${f.rol}) ${f.afirmacion}` +
+          `${f.fecha ? ` — ${f.fecha}` : ''}` +
+          `${f.cita ? `\n    dijo: «${f.cita}»` : ''}`
+        : `[${i}] ${f.afirmacion}\n` +
+          `    fuente: ${f.fuente}${f.fecha ? ` (${f.fecha})` : ''} [${f.tipoFuente || 'otra'}]` +
+          `${f.incierto ? ' — DISPUTADO, dilo como discutido' : ''}` +
+          `${f.cita ? `\n    cita: «${f.cita}»` : ''}`,
+    )
+    .join('\n');
+}
+
+/**
+ * El orden en que se le enseñan las fichas a un modelo.
+ *
+ * Documentadas: por solidez de la fuente. El modelo se apoya en lo primero que
+ * lee, así que lo primero tiene que ser lo mejor sostenido —una sentencia antes
+ * que un blog—.
+ *
+ * Construidas: EN EL ORDEN EN QUE SE CONSTRUYERON. No hay solidez que comparar
+ * —se inventaron todas a la vez— y ese orden es el del caso: víctima, lugar,
+ * fechas, hallazgo, pista falsa, revelación. Ordenarlas por «solidez» las barajaba
+ * al azar, porque todas empatan.
+ */
+export function ordenarFichas(fichas) {
+  const lista = [...(fichas || [])];
+  if (lista.some((f) => f.construida)) {
+    return lista.sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999));
+  }
+  const PESO = { oficial: 6, judicial: 6, policial: 5, academica: 4, prensa: 3, testimonio: 2, otra: 1 };
+  const peso = (f) => (PESO[f.tipoFuente] || 1) - (f.incierto ? 2 : 0);
+  return lista.sort((a, b) => peso(b) - peso(a));
+}
+
 /**
  * Junta fichas quitando las repetidas.
  *
@@ -318,10 +595,20 @@ export function fusionarFichas(listas) {
   return [...porClave.values()];
 }
 
-/** Cuántas fichas hay de cada tipo de fuente. Para poder enseñarlo en pantalla. */
+/**
+ * Cuántas fichas hay de cada clase. Para poder enseñarlo en pantalla.
+ *
+ * Documentadas: por tipo de fuente, que es lo que dice cuánto se sostiene el
+ * episodio. Construidas: por ROL, que es lo que dice si el expediente está
+ * completo —si no hay ninguna ficha de rol «revelacion», el caso no se resuelve—.
+ */
 export function reparto(fichas) {
   const r = {};
-  for (const f of fichas || []) r[f.tipoFuente || 'otra'] = (r[f.tipoFuente || 'otra'] || 0) + 1;
+  const porRol = (fichas || []).some((f) => f.construida);
+  for (const f of fichas || []) {
+    const k = porRol ? f.rol || 'objeto' : f.tipoFuente || 'otra';
+    r[k] = (r[k] || 0) + 1;
+  }
   return r;
 }
 

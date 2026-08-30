@@ -121,6 +121,10 @@ function comoHashtag(etiqueta) {
 
 export async function generarMetadatos({ tema, guion, tomas, escenas, fichas = [], senal }) {
   const tiempos = tiemposDeEscenas(tomas, escenas);
+  // ARRIBA DEL TODO, porque lo lee la instrucción que va a salir: declarado
+  // después de la llamada reventaba con «no se puede acceder antes de
+  // inicializar», y justo en la fase que se ejecuta una sola vez al final.
+  const ficcion = esFiccion(fichas);
 
   const r = await llamar(
     'texto',
@@ -130,7 +134,16 @@ export async function generarMetadatos({ tema, guion, tomas, escenas, fichas = [
         'Facebook. Títulos concretos y honestos: nada de cebo, nada de "lo que nadie ' +
         'te contó", nada de MAYÚSCULAS de más. La descripción empieza por dos frases ' +
         'que dicen de qué va, sin rodeos. NO escribas tú las marcas de tiempo: se ' +
-        'añaden después con los tiempos reales.',
+        'añaden después con los tiempos reales.' +
+        // Sin esto, la descripción de un episodio construido dice «un caso real
+        // que conmocionó a la comarca»: el modelo lee un guion que suena a
+        // documental y escribe lo que ve. La declaración de ficción va aparte y
+        // se compone en el código, pero la sinopsis tampoco puede mentir.
+        (ficcion
+          ? '\nESTE EPISODIO ES FICCIÓN DOCUMENTAL: el caso está inventado. No lo ' +
+            'presentes como un caso real, ni digas «caso real», ni «hechos reales», ' +
+            'ni «ocurrió en». Habla del episodio y de la historia que cuenta.'
+          : ''),
       instruccion:
         `Tema: ${tema}\n\nGUION:\n${guion.slice(0, 12000)}\n\n` +
         `Escenas: ${tiempos.marcas.map((m) => `[${m.n}] ${m.titulo}`).join(', ')}\n\n` +
@@ -159,6 +172,10 @@ export async function generarMetadatos({ tema, guion, tomas, escenas, fichas = [
     titulos: j.titulos || [],
     etiquetas: j.etiquetas || [],
     descripcion: [
+      // LA DECLARACIÓN VA LA PRIMERA. Ver la cabecera de `DECLARACION_DE_FICCION`:
+      // el episodio se ve igual que un documental, y eso es exactamente lo que
+      // obliga a decirlo donde no se puede pasar por alto.
+      ficcion ? DECLARACION_DE_FICCION + '\n' : '',
       j.descripcion || '',
       '',
       'Capítulos:',
@@ -182,12 +199,46 @@ export async function generarMetadatos({ tema, guion, tomas, escenas, fichas = [
 }
 
 /**
+ * La declaración de ficción, cuando el caso está construido.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * ESTO NO ES OPCIONAL Y NO DEPENDE DE QUE ALGUIEN SE ACUERDE.
+ *
+ * El episodio se ve exactamente igual que un documental: el mismo tono, los
+ * mismos planos, los mismos testimonios, la misma voz sobria. Esa es la gracia
+ * del formato, y es justamente lo que lo hace indistinguible de uno real si nadie
+ * lo dice. Un caso inventado presentado como caso real es una mentira, y da igual
+ * que la persona de la víctima no exista: lo que se falsea es la naturaleza de la
+ * pieza, y con eso se hunde el canal el día que alguien lo descubra.
+ *
+ * Así que va en el sitio donde no se puede pasar por alto: LO PRIMERO de la
+ * descripción, antes de la sinopsis, antes de los capítulos y antes de las
+ * etiquetas. No en un pie que nadie despliega.
+ *
+ * Y va compuesta aquí, en el código, no pedida al modelo: una frase generada
+ * puede salir distinta, más suave, o no salir.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export const DECLARACION_DE_FICCION =
+  'FICCIÓN DOCUMENTAL. Este episodio es una obra de ficción: el caso, las ' +
+  'personas, los lugares y las instituciones que aparecen son inventados, y ' +
+  'cualquier parecido con hechos o personas reales es casualidad. Las imágenes ' +
+  'están generadas y las personas que se ven son intérpretes de una dramatización.';
+
+/** ¿El expediente de este episodio está construido? */
+export const esFiccion = (fichas) => (fichas || []).some((f) => f.construida);
+
+/**
  * El pie de fuentes (§8.4).
  *
  * Sale del almacén de fichas, no de la memoria del modelo. Es lo que permite que,
  * cuando alguien discuta un dato, se sepa de dónde salió sin releer nada (§8.1).
+ *
+ * Un expediente construido no tiene fuentes y no se le inventan: lo que lleva es
+ * la declaración de ficción, que va arriba del todo y no aquí abajo.
  */
 export function componerPieDeFuentes(fichas) {
+  if (esFiccion(fichas)) return '';
   const utiles = (fichas || []).filter((f) => f.fuente);
   if (!utiles.length) return '';
 

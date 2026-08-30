@@ -35,8 +35,20 @@ export const POR_LOTE = 18;
  * Seis tomas son más de un minuto de documental: suficiente para que volver a ver
  * un plano se lea como un motivo y no como un fallo. Por debajo de eso, la
  * repetición canta.
+ *
+ * Y desde que el reparto lo hace el código, esta separación está GARANTIZADA y no
+ * pedida: ver la cabecera de `repartirMotivos`.
  */
 export const SEPARACION_MINIMA = 6;
+
+/**
+ * Cuántas veces puede volver un motivo, como mucho.
+ *
+ * Ocho vueltas de un plano a lo largo de treinta minutos son una cada cuatro
+ * minutos: eso todavía se lee como motivo. Por encima, se lee como que no había
+ * más material.
+ */
+export const VUELTAS_MAXIMAS = 8;
 
 const ESQUEMA = {
   type: 'object',
@@ -66,6 +78,21 @@ const ESQUEMA = {
           },
           merecemovimiento: { type: 'boolean' },
           igualQue: { type: 'integer' },
+          // EL MOTIVO al que pertenece este plano, por su etiqueta.
+          //
+          // `igualQue` obligaba al modelo a llevar la cuenta de índices a través
+          // de lotes de dieciocho: con ciento sesenta y cinco tomas y veinte
+          // motivos volviendo siete veces son ciento cuarenta colocaciones, y
+          // pedírselas en el prompt tiene dos salidas malas —que viole la
+          // separación, y entonces parece error de montaje, o que devuelva menos
+          // motivos en silencio—. Con una ETIQUETA no hay cuenta que llevar: dos
+          // tomas del mismo motivo escriben la misma etiqueta y el código hace el
+          // resto.
+          motivo: { type: 'string' },
+          // EL ARQUETIPO que aparece en esta toma, si la toma es un testimonio.
+          // Sale del catálogo del género, y es lo que permite resolver el plano
+          // contra la biblioteca permanente en vez de generarlo.
+          personaje: { type: 'string' },
           // Cuánto se queda la imagen DESPUÉS de la última palabra. Va en palabras
           // y no en segundos a propósito: un número libre sale disparatado, y lo
           // que se decide aquí no es una cifra, es si esta toma pesa o no pesa.
@@ -104,21 +131,33 @@ Reglas de este documental:
 - Fija el FORMATO y deja libre la PUESTA EN ESCENA. Decide tú el encuadre y la
   distancia; no pongas a todos los sujetos de espaldas ni a todos mirando a cámara.
   Varía.
-- merecemovimiento=true solo donde el movimiento APORTE (algo se mueve de verdad:
-  humo, agua, multitud, vehículo). Es la fase más cara con diferencia. En duda,
-  false.
-- MOTIVOS RECURRENTES. Esto no es un truco de ahorro: es cómo se monta un
-  documental. Los de plataforma tienen un puñado de planos que VUELVEN —la
-  patrulla llegando a la casa, la calle de noche, el pasillo del juzgado, la
-  cámara de vigilancia— y los repiten cuatro o cinco veces a lo largo de la hora,
-  nunca seguidos. Eso da unidad visual, y de paso una imagen sirve para cinco
-  tomas en vez de para una.
-  Elige entre CUATRO Y OCHO planos que sean los motivos de esta pieza: los que
+- merecemovimiento=true solo donde el movimiento APORTE de verdad: algo se mueve
+  dentro del cuadro —humo, agua, una multitud, un vehículo— y ese movimiento ES
+  la toma. Marca las ESCENAS FUERTES del episodio, no las de relleno: solo unas
+  diez o quince de todo el episodio llevan clip, y las eligen tus «true». En
+  duda, false: un plano fijo con recorrido de cámara se ve perfectamente.
+- MOTIVOS RECURRENTES, y aquí está la mitad del oficio. Esto no es un truco de
+  ahorro: es cómo se monta un documental. Los de plataforma tienen un puñado de
+  planos que VUELVEN —la patrulla llegando a la casa, la calle de noche, el
+  pasillo del juzgado, la cámara de vigilancia— y los repiten cinco o seis veces
+  a lo largo de la hora, nunca seguidos. Eso da unidad visual, y de paso una
+  imagen sirve para siete tomas en vez de para una.
+  Elige entre QUINCE Y VEINTE planos que sean los motivos de esta pieza: los que
   mejor representan el caso y aguantan verse varias veces. Cada uno vuelve entre
-  dos y cinco veces, repartido a lo largo del documental.
-- igualQue: el índice de una toma ANTERIOR cuyo plano se ve igual —mismo lugar,
-  mismo encuadre, misma luz, mismos sujetos—. Es con lo que se marcan las vueltas
-  de un motivo, y con lo que se aprovecha cualquier otra coincidencia real.
+  cinco y ocho veces a lo largo del episodio.
+- motivo: LA ETIQUETA del motivo al que pertenece este plano. Es texto corto y
+  descriptivo —«el contenedor donde apareció el cuerpo», «la carretera comarcal
+  de noche»— y TODAS las tomas de ese mismo motivo llevan LA MISMA ETIQUETA,
+  letra por letra. Vacío si la toma no es un motivo.
+  No te preocupes por dónde caen ni por cuántas veces: escribe la etiqueta cada
+  vez que esa toma sea ese plano y el reparto lo hace el montaje, que sí puede
+  contar. Si dos vueltas quedan demasiado juntas, se descartan solas.
+  Y las tomas de un mismo motivo tienen que verse IGUAL de verdad: mismo lugar,
+  mismo encuadre, misma luz, mismos sujetos, misma descripción. Si el ESTADO
+  cambió —el mismo cuarto pero el paciente ya mejoró, la misma casa pero
+  precintada—, eso es OTRO motivo: otra etiqueta.
+- igualQue: el índice de una toma ANTERIOR cuyo plano se ve igual. Sigue valiendo
+  para coincidencias sueltas que no son un motivo del episodio.
 - Y cuando dos tomas comparten el sitio SIN ser el mismo plano, escribe lugar y
   luz LETRA POR LETRA IGUAL en las dos («el pasillo del pabellón» en ambas, no
   «pasillo del pabellón» y «el corredor del hospital»): el reaprovechado de
@@ -132,6 +171,13 @@ Reglas de este documental:
       es el mismo plano: es otro. Y si el ESTADO cambió —el mismo cuarto pero el
       paciente ya mejoró, la misma casa pero precintada—, eso son DOS imágenes:
       cambia la descripción y no marques igualQue.
+- LOS TESTIMONIOS. Algunas tomas vienen marcadas con QUIÉN HABLA: es alguien
+  declarando a cámara. Esas tomas llevan el plano de esa persona hablando, no una
+  ilustración de lo que cuenta, y en «personaje» va el arquetipo que le
+  corresponde de la lista que se te da. El plano de un arquetipo es SIEMPRE el
+  mismo en todo el canal —el perito en su laboratorio, el detective en su
+  despacho— así que descríbelo tal como venga en esa lista y no lo reinventes:
+  esos planos ya existen y no se vuelven a pagar.
 - EL RESPIRO. Es lo que separa un documental de un noticiero, y es tuyo: cuánto se
   queda la imagen DESPUÉS de que la voz calle. Ahí no hay narración, solo la música
   y lo que se está viendo. Es donde el espectador siente lo que acaba de oír; sin
@@ -176,7 +222,7 @@ Reglas de este documental:
  * `alAvanzar(hechas, total)` permite que la pantalla diga por dónde va: son
  * varias llamadas y algunas tardan.
  */
-export async function dirigir({ tomas, escenas, tema, config, tratamiento = null, senal, alAvanzar, alLote }) {
+export async function dirigir({ tomas, escenas, tema, config, tratamiento = null, genero = null, senal, alAvanzar, alLote }) {
   if (!tomas?.length) throw new Error('No hay tomas que dirigir. Segmenta el guion primero.');
 
   // Lo que ya está dirigido se conserva. Volver a dirigir después de que un lote
@@ -205,8 +251,38 @@ export async function dirigir({ tomas, escenas, tema, config, tratamiento = null
             ? `Venimos de: ${ultimo.lugar}, ${ultimo.encuadre}, ${ultimo.luz}. ` +
               `Sigue de ahí salvo que el texto pida otra cosa.\n`
             : '') +
-          `\n` +
-          grupo.map((t) => `(${t.i}) [escena ${t.escena}] ${t.texto}`).join('\n') +
+          // LOS MOTIVOS DEL GÉNERO Y LOS ARQUETIPOS, del catálogo.
+          //
+          // Sin la lista, cada lote se inventa sus propios motivos y sus propios
+          // planos de perito, y ni se repiten dentro del episodio ni coinciden con
+          // los del episodio anterior — que es de donde sale el ahorro de verdad.
+          (genero
+            ? `MOTIVOS DE ESTE GÉNERO. Úsalos como etiqueta de motivo cuando la toma ` +
+              `sea uno de ellos, escritos LETRA POR LETRA IGUAL:\n` +
+              genero.motivos.map((m) => `- ${m}`).join('\n') +
+              `\nPuedes añadir motivos propios de este caso; escríbelos igual en todas sus vueltas.\n\n` +
+              `ARQUETIPOS QUE DECLARAN. Cuando una toma sea un testimonio, «personaje» ` +
+              `lleva una de estas claves y el plano se describe TAL CUAL viene aquí:\n` +
+              genero.personajes
+                .map(
+                  (p) =>
+                    `- ${p.id} (${p.nombre}): ${p.plano.encuadre} · ${p.plano.lugar} · ` +
+                    `${p.plano.luz}. ${p.plano.descripcion}`,
+                )
+                .join('\n') +
+              `\n\n`
+            : '') +
+          grupo
+            .map(
+              (t) =>
+                `(${t.i}) [escena ${t.escena}]` +
+                // Quién habla, si la segmentación lo marcó con «> ». Es lo que
+                // convierte una toma en el plano de alguien declarando en vez de
+                // en una ilustración de lo que cuenta.
+                (t.testimonio ? ` [TESTIMONIO de: ${t.testimonio}]` : '') +
+                ` ${t.texto}`,
+            )
+            .join('\n') +
           `\n\nDevuelve una ficha por cada una de estas ${grupo.length} tomas, con el ` +
           `índice i exacto tal y como aparece entre paréntesis.`,
         esquema: ESQUEMA,
@@ -291,8 +367,24 @@ export async function dirigir({ tomas, escenas, tema, config, tratamiento = null
  * dirigir pida solo esas.
  */
 function resolver(tomas, planos, config) {
-  const proporcion = config?.movimiento?.proporcion ?? 0.15;
-  const cupo = Math.max(0, Math.round(tomas.length * proporcion));
+  // EL REPARTO DE MOTIVOS LO HACE EL CÓDIGO, NO EL MODELO.
+  //
+  // Con ciento sesenta y cinco tomas y veinte motivos volviendo siete veces son
+  // ciento cuarenta colocaciones que tienen que respetar seis tomas de separación
+  // cada una. El modelo no puede llevar esa cuenta —ve lotes de dieciocho—, así
+  // que pedírselo tenía dos salidas y las dos malas: violar la separación, que se
+  // ve como error de montaje, o devolver menos motivos en silencio. Él dice QUÉ
+  // planos son el mismo motivo; aquí se decide DÓNDE caen las vueltas.
+  const vueltas = repartirMotivos(tomas, planos);
+
+  // EL MOVIMIENTO YA NO ES UN PORCENTAJE, ES UNA CUENTA.
+  //
+  // Una proporción global minimiza el coste de cada episodio, y eso no se
+  // amortiza nunca porque esos clips no vuelven. La política dice cuántas escenas
+  // fuertes lleva ESTE episodio; los motivos van con imagen fija y recorrido de
+  // cámara, que cuesta cero y es lo que se amortiza al repetirse.
+  const politica = config?.movimiento?.politica || {};
+  const cupo = Math.max(0, Math.round(Number(politica.clipsPorEpisodio ?? 12)));
 
   // El modelo propuso; aquí se decide. El cupo de movimiento es del presupuesto, no
   // suyo (§4.7).
@@ -301,7 +393,19 @@ function resolver(tomas, planos, config) {
   // pagada: ordenando por índice, el cupo se llenaba con las tomas del principio y
   // el último tercio del documental se quedaba sin una sola toma animada. Se parte
   // la pieza en tantos tramos como clips haya y se coge un candidato de cada uno.
-  const quieren = tomas.filter((t) => planos.get(t.i)?.merecemovimiento).map((t) => t.i);
+  //
+  // Los motivos quedan FUERA de los candidatos salvo que la política diga otra
+  // cosa: un motivo se ve cinco o seis veces, y animarlo es pagar la fase más cara
+  // por un plano cuyo valor está justamente en volver barato.
+  // LA DUEÑA TAMBIÉN ES EL MOTIVO, y esto se me escapó a la primera: excluyendo
+  // solo las vueltas, la dueña seguía entrando en el sorteo de clips, se lo
+  // llevaba, y desde ahí el movimiento se propagaba a sus cinco vueltas — que es
+  // exactamente pagar el clip más caro para el plano que existía para salir gratis.
+  const conMotivo = new Set([...vueltas.entries()].flatMap(([dueña, lista]) => [dueña, ...lista]));
+  const quieren = tomas
+    .filter((t) => planos.get(t.i)?.merecemovimiento)
+    .filter((t) => politica.motivosConVideo === true || !conMotivo.has(t.i))
+    .map((t) => t.i);
   const conMovimiento = new Set(repartirPorTramos(quieren, cupo, tomas.length));
 
   // UN MOTIVO ANIMADO VUELVE GRATIS.
@@ -314,7 +418,7 @@ function resolver(tomas, planos, config) {
   // Se propaga hacia delante y en orden, así que una cadena (30 repite a 20, 20
   // repite a 8) se resuelve entera en una pasada: `igualQue` siempre mira atrás.
   for (const t of tomas) {
-    const dueña = planos.get(t.i)?.igualQue;
+    const dueña = dueñaDe(t.i, planos, vueltas);
     if (
       Number.isInteger(dueña) &&
       t.i - dueña >= SEPARACION_MINIMA &&
@@ -351,15 +455,17 @@ function resolver(tomas, planos, config) {
     // reutilizar como imagen fija ni al revés. Antes esto excluía del todo a las
     // tomas con movimiento —`!conMovimiento.has(t.i)`— y por eso ningún clip se
     // reutilizaba nunca.
+    //
+    // La dueña puede venir de dos sitios: del reparto de motivos —lo normal desde
+    // que el código coloca las vueltas— o de un `igualQue` suelto del modelo. Los
+    // dos pasan por la misma puerta y por las mismas dos reglas.
+    const dueña = dueñaDe(t.i, planos, vueltas);
     const mismaClase =
-      Number.isInteger(p.igualQue) && conMovimiento.has(t.i) === conMovimiento.has(p.igualQue);
+      Number.isInteger(dueña) && conMovimiento.has(t.i) === conMovimiento.has(dueña);
 
     const reusa =
-      Number.isInteger(p.igualQue) &&
-      p.igualQue >= 0 &&
-      t.i - p.igualQue >= SEPARACION_MINIMA &&
-      mismaClase
-        ? p.igualQue
+      Number.isInteger(dueña) && dueña >= 0 && t.i - dueña >= SEPARACION_MINIMA && mismaClase
+        ? dueña
         : null;
 
     const plano = {
@@ -369,6 +475,10 @@ function resolver(tomas, planos, config) {
       luz: p.luz,
       sujetos: p.sujetos || [],
       descripcion: p.descripcion,
+      // El arquetipo que sale en esta toma, si es un testimonio. Va DENTRO del
+      // plano porque es parte de qué se ve, y es por donde se resuelve contra la
+      // biblioteca permanente del canal.
+      personaje: String(p.personaje || '').trim().toLowerCase(),
     };
 
     // SI EL PLANO CAMBIÓ, LA IMAGEN VIEJA YA NO ES DE ESTA TOMA.
@@ -405,6 +515,77 @@ function resolver(tomas, planos, config) {
         : { desfasada: false }),
     };
   });
+}
+
+/**
+ * Reparte las vueltas de cada motivo a lo largo del episodio.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * El modelo dice QUÉ tomas son el mismo motivo, escribiendo la misma etiqueta en
+ * todas. Aquí se decide CUÁLES de esas vueltas se aceptan, y es lo único que
+ * puede garantizar la separación: el modelo ve lotes de dieciocho tomas y no
+ * puede saber que la vuelta que va a escribir en la 91 está a cuatro de la que
+ * escribió en la 87.
+ *
+ * La regla es simple y no admite excepciones: la primera aparición es la DUEÑA
+ * —esa se paga— y cada vuelta posterior se acepta solo si está a `SEPARACION_MINIMA`
+ * o más de la última aceptada de ese mismo motivo. Una vuelta que no cabe NO se
+ * fuerza y NO se descarta el motivo entero: se queda como toma normal y paga su
+ * imagen. Devolver las que caben en vez de fingir es la diferencia entre un
+ * documental con motivos y uno con el mismo plano dos veces en veinte segundos.
+ *
+ * Y hay un tope de vueltas por motivo: ocho en treinta minutos es una cada cuatro
+ * minutos, que todavía se lee como motivo. Por encima se lee como que no había
+ * más material.
+ *
+ * Determinista sobre `(tomas, planos)`: el mismo guion da siempre el mismo
+ * reparto, que es lo que permite reanudar una dirección caída a mitad sin que
+ * cambie nada de lo ya decidido.
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Devuelve un mapa `dueña → [índices de sus vueltas aceptadas]`.
+ */
+export function repartirMotivos(tomas, planos) {
+  const porEtiqueta = new Map();
+  for (const t of tomas) {
+    const etiqueta = String(planos.get(t.i)?.motivo || '').trim().toLowerCase();
+    if (!etiqueta) continue;
+    if (!porEtiqueta.has(etiqueta)) porEtiqueta.set(etiqueta, []);
+    porEtiqueta.get(etiqueta).push(t.i);
+  }
+
+  const salida = new Map();
+  for (const indices of porEtiqueta.values()) {
+    if (indices.length < 2) continue;
+    const orden = [...indices].sort((a, b) => a - b);
+    const dueña = orden[0];
+    let ultima = dueña;
+    const aceptadas = [];
+    for (const i of orden.slice(1)) {
+      if (aceptadas.length >= VUELTAS_MAXIMAS - 1) break;
+      if (i - ultima < SEPARACION_MINIMA) continue;
+      aceptadas.push(i);
+      ultima = i;
+    }
+    if (aceptadas.length) salida.set(dueña, aceptadas);
+  }
+  return salida;
+}
+
+/**
+ * De qué toma anterior es repetición esta, si lo es.
+ *
+ * Dos caminos y una sola puerta: el reparto de motivos —lo normal— y el `igualQue`
+ * suelto que el modelo marca para una coincidencia que no es motivo del episodio.
+ * Que salgan por aquí los dos es lo que hace que las reglas de separación y de
+ * clase se apliquen igual a los dos, en vez de una vez por camino.
+ */
+function dueñaDe(i, planos, vueltas) {
+  for (const [dueña, lista] of vueltas) {
+    if (lista.includes(i)) return dueña;
+  }
+  const suelto = planos.get(i)?.igualQue;
+  return Number.isInteger(suelto) ? suelto : null;
 }
 
 /** Lo que dura cada clase de respiro, en segundos. */
@@ -463,7 +644,7 @@ export function repartirRespiros(tomas, planos, config) {
 const huellaDeFicha = (x) =>
   !x
     ? ''
-    : [x.lugar, x.encuadre, x.luz, x.descripcion, (x.sujetos || []).join('|')]
+    : [x.lugar, x.encuadre, x.luz, x.descripcion, (x.sujetos || []).join('|'), x.personaje]
         .map((v) => String(v || '').trim().toLowerCase())
         .join(' · ');
 
@@ -482,6 +663,12 @@ function fichaDe(t) {
     tipoImagen: t.claseVisual || t.tipoImagen || 'reconstruccion',
     merecemovimiento: !!t.movimiento,
     igualQue: Number.isInteger(t.reusa) ? t.reusa : undefined,
+    // El motivo se reconstruye desde la huella del plano: dos tomas del mismo
+    // motivo tienen la misma huella, así que reanudar una dirección caída a mitad
+    // vuelve a agrupar exactamente igual. Sin esto, los lotes ya pagados perderían
+    // sus motivos al reanudar y el reparto saldría distinto.
+    motivo: t.motivo || (t.reusa !== null && t.reusa !== undefined ? huellaDeFicha(t.plano) : ''),
+    personaje: t.plano?.personaje || '',
     respiro,
   };
 }

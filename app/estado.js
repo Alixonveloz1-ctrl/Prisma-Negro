@@ -101,10 +101,23 @@ export function sanear(bruto) {
   for (const z of p.piezas) z.fichas = z.fichas.map(sanearFicha);
 
   // Cuál se está mirando. Si apunta a una que ya no está, la primera.
-  p.piezaActiva = p.piezas.some((z) => z.id === p.piezaActiva) ? p.piezaActiva : p.piezas[0].id;
+  //
+  // Y NUNCA LA BIBLIOTECA: no tiene guion ni voz ni montaje, así que dejarla
+  // activa deja la pantalla entera en un estado que no lleva a ningún sitio. Se
+  // mira desde su propio panel.
+  const montables = p.piezas.filter((z) => !z.esBiblioteca);
+  p.piezaActiva = montables.some((z) => z.id === p.piezaActiva)
+    ? p.piezaActiva
+    : (montables[0] || p.piezas[0]).id;
 
   return p;
 }
+
+/** La pieza de la biblioteca, si el proyecto ya la tiene. */
+export const bibliotecaDe = (proyecto) => (proyecto?.piezas || []).find((z) => z.esBiblioteca) || null;
+
+/** Las piezas que son episodios de verdad: todas menos la biblioteca. */
+export const episodiosDe = (proyecto) => (proyecto?.piezas || []).filter((z) => !z.esBiblioteca);
 
 /**
  * Abre una pieza nueva y la deja activa. La anterior no se toca: queda en el
@@ -114,7 +127,10 @@ export function sanear(bruto) {
  * vea y suene igual— y le da derecho a reutilizar su material (§3).
  */
 export function abrirPieza(proyecto, { caso = null, titulo = '', vieneDe = null } = {}) {
-  const n = proyecto.piezas.length + 1;
+  // Se cuentan los EPISODIOS, no las piezas: la biblioteca es una pieza y no lleva
+  // número de episodio. Contándolas todas, el primer caso después de crear la
+  // biblioteca se llamaría `p03` y quedaría un hueco donde nadie sabría qué había.
+  const n = episodiosDe(proyecto).length + 1;
   const z = piezaVacia(idPieza(n), titulo || caso?.titulo || 'Sin título');
   z.creado = Date.now();
   z.caso = caso;
@@ -240,6 +256,8 @@ function piezaVacia(id, titulo) {
 
 function sanearPieza(bruto, n, proyecto) {
   const z = { ...piezaVacia(idPieza(n + 1), ''), ...(bruto || {}) };
+  // La biblioteca es una pieza, pero no se monta nunca y su id no es `pNN`.
+  z.esBiblioteca = z.esBiblioteca === true;
   z.guion = String(z.guion || '');
   z.tomas = Array.isArray(z.tomas) ? z.tomas.map((t, i) => sanearToma(t, i, proyecto)) : [];
   z.escenas = Array.isArray(z.escenas) ? z.escenas : [];
@@ -300,6 +318,23 @@ function sanearToma(bruto, i, proyecto) {
     claseVisual: ['dramatizacion', 'reconstruccion', 'mapa', 'esquema', 'recurso', 'archivo'].includes(t.claseVisual)
       ? t.claseVisual
       : null,
+    // LO DE LA BIBLIOTECA. Una toma de la biblioteca no sale de un guion: sale
+    // del catálogo, y `clave` es lo que la ata a su entrada —`recurso:precinto`,
+    // `personaje:crimen-frio:perito`—. Sin ella, sincronizar la biblioteca después
+    // de añadir un género no sabría cuál es cuál y volvería a pagarlo todo.
+    clave: String(t.clave || ''),
+    recurso: String(t.recurso || ''),
+    genero: String(t.genero || ''),
+    // EL ARQUETIPO que sale en esta toma. Va también aquí arriba, y no solo dentro
+    // del plano, porque es por donde la herencia busca en la biblioteca: leerlo de
+    // dentro del plano obligaría a que el plano existiera, y una toma sin dirigir
+    // todavía no lo tiene.
+    personaje: String(t.personaje || t.plano?.personaje || '').toLowerCase(),
+    // QUIÉN HABLA, si esta toma es parte de un testimonio. Lo pone la
+    // segmentación al ver una línea «> ». Tiene que estar en esta lista blanca o
+    // muere en cada carga —la avería de `heredado` otra vez— y con él se perdería
+    // el plano del que declara y su resolución contra la biblioteca.
+    testimonio: String(t.testimonio || ''),
     // §8.1: cada toma conserva la referencia a la ficha que la respalda.
     fichas: Array.isArray(t.fichas) ? t.fichas : [],
     corteForzado: t.corteForzado === true,
@@ -321,11 +356,27 @@ const claveHeredada = (v) => (typeof v === 'string' && FORMA_CLAVE.test(v) ? v :
 /** §8.1: afirmación, fuente, fecha, cita literal, enlace. */
 const TIPOS_FUENTE = ['oficial', 'judicial', 'policial', 'prensa', 'academica', 'testimonio', 'otra'];
 
+/**
+ * Los papeles de una ficha CONSTRUIDA. Una ficha documentada no tiene rol: tiene
+ * fuente. Son las dos clases de material y se distinguen por `construida`.
+ */
+const ROLES = ['victima', 'sospechoso', 'testigo', 'objeto', 'lugar', 'fecha', 'pistafalsa', 'revelacion'];
+
 function sanearFicha(bruto) {
   const f = { ...(bruto || {}) };
   return {
     id: f.id || `f${Math.random().toString(36).slice(2, 9)}`,
     afirmacion: String(f.afirmacion || ''),
+    // ESTOS TRES TIENEN QUE ESTAR EN LA LISTA, y es la misma lección que costó
+    // `heredado`: esto no hace spread, devuelve una lista blanca, y todo lo que no
+    // esté aquí se borra en CADA carga del proyecto. Sin `construida` una ficha
+    // inventada volvería a leerse como documentada —con fuente vacía— y el guion
+    // le pediría al modelo que atribuyera a una fuente que no existe. Sin `orden`
+    // se perdería el orden en que se levantó el caso, que es el orden en que se
+    // cuenta. Sin `rol`, el papel de cada pieza del expediente.
+    construida: f.construida === true,
+    rol: ROLES.includes(f.rol) ? f.rol : '',
+    orden: Number.isInteger(f.orden) ? f.orden : null,
     fuente: String(f.fuente || ''),
     // Un dato de una sentencia y un dato de un blog no valen lo mismo. Que el tipo
     // viaje en el modelo es lo que permite ordenarlos por solidez y enseñarlo.

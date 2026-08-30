@@ -479,6 +479,10 @@ nav.abajo button svg{width:22px;height:22px}
           </div>
           <div class="rejilla-filtros">
             <div>
+              <label for="genero">Género</label>
+              <select id="genero"></select>
+            </div>
+            <div>
               <label for="tema">Tema</label>
               <select id="tema"></select>
             </div>
@@ -487,6 +491,7 @@ nav.abajo button svg{width:22px;height:22px}
               <select id="epoca"></select>
             </div>
           </div>
+          <p class="nota chica" id="genero-dice"></p>
           <div class="fila-btn" style="margin-top:12px">
             <button class="btn primario" id="b-buscar-casos">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
@@ -626,7 +631,7 @@ nav.abajo button svg{width:22px;height:22px}
         <div class="panel">
           <h2>Escribir</h2>
           <label for="minutos">Duración objetivo (minutos)</label>
-          <input id="minutos" type="number" min="3" max="40" value="10" inputmode="numeric">
+          <input id="minutos" type="number" min="3" max="40" value="30" inputmode="numeric">
           <div class="fila-btn" style="margin-top:13px">
             <button class="btn primario" id="b-escribir">Escribir el guion</button>
             <button class="btn fantasma" id="b-segmentar">Partir en tomas</button>
@@ -781,9 +786,27 @@ nav.abajo button svg{width:22px;height:22px}
         </div>
 
         <div class="panel">
+          <h2>Biblioteca del canal</h2>
+          <p class="nota chica">Los planos que sirven para TODOS los episodios: los
+          arquetipos que declaran —el perito en su laboratorio, el detective en su
+          despacho— y los recursos transversales —la carretera de noche, el precinto,
+          el archivador—. Se pagan una vez y ningún episodio los vuelve a pagar.</p>
+          <div id="resumen-biblioteca" class="nota chica"></div>
+          <div class="fila-btn" style="margin-top:10px">
+            <button class="btn primario" id="b-biblioteca-imagenes">Generar imágenes que faltan</button>
+            <button class="btn fantasma" id="b-biblioteca-clips">Generar clips del reparto</button>
+          </div>
+          <div id="aviso-biblioteca"></div>
+        </div>
+
+        <div class="panel">
           <h2>Movimiento</h2>
-          <label for="proporcion">Tomas con clip de video · <b id="v-proporcion">15%</b></label>
-          <input id="proporcion" type="range" min="0" max="60" value="15">
+          <label for="clips-episodio">Clips de video en este episodio · <b id="v-clips-episodio">12</b></label>
+          <input id="clips-episodio" type="range" min="0" max="40" value="12">
+          <p class="nota chica">Una cuenta, no un porcentaje. Los motivos que vuelven
+          y el relleno van con imagen fija y recorrido de cámara: cuestan cero. Los
+          arquetipos de la biblioteca llevan video y se pagan una sola vez para
+          todos los episodios.</p>
           <label for="m-video">Generador de clips</label>
           <select id="m-video"></select>
           <label for="objetivo">Segundos por toma · <b id="v-objetivo">11</b></label>

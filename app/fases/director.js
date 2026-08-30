@@ -20,6 +20,8 @@
 // mucho más coherente que decidirlo trozo a trozo.
 
 import { llamar } from '../api.js';
+// Las fichas se escriben en UN solo sitio: ver la cabecera de `comoLista`.
+import { comoLista } from './investigacion.js';
 
 const ESQUEMA = {
   type: 'object',
@@ -174,7 +176,7 @@ acto.`;
  * fichas decidiría sobre lo que se imagina, que es exactamente lo que un documental
  * no puede permitirse.
  */
-export async function dirigirPieza({ caso, fichas, minutos = 10, anteriores = [], senal }) {
+export async function dirigirPieza({ caso, fichas, minutos = 10, genero = null, anteriores = [], senal }) {
   if (!caso) throw new Error('No hay caso que dirigir. Elige uno primero.');
   if (!fichas?.length) {
     throw new Error(
@@ -182,13 +184,6 @@ export async function dirigirPieza({ caso, fichas, minutos = 10, anteriores = []
         'imagina: investiga a fondo primero.',
     );
   }
-
-  // Las fichas van ordenadas por solidez: el director tiene que ver primero lo que
-  // de verdad se sostiene, no lo primero que salió.
-  const PESO = { oficial: 6, judicial: 6, policial: 5, academica: 4, prensa: 3, testimonio: 2, otra: 1 };
-  const ordenadas = [...fichas].sort(
-    (a, b) => (PESO[b.tipoFuente] || 1) - (PESO[a.tipoFuente] || 1),
-  );
 
   const r = await llamar(
     'texto',
@@ -198,15 +193,12 @@ export async function dirigirPieza({ caso, fichas, minutos = 10, anteriores = []
         `CASO: ${caso.titulo}\n` +
         `${caso.sinopsis}\n` +
         `Cuándo: ${caso.cuando} · Dónde: ${caso.donde}\n\n` +
-        `MATERIAL INVESTIGADO (${fichas.length} fichas, de más a menos sólida):\n` +
-        ordenadas
-          .slice(0, 60)
-          .map(
-            (f, i) =>
-              `[${i}] ${f.afirmacion} — ${f.fuente} [${f.tipoFuente}]` +
-              `${f.incierto ? ' (DISPUTADO)' : ''}`,
-          )
-          .join('\n') +
+        (genero
+          ? `GÉNERO: ${genero.nombre}. ${genero.resumen}\n` +
+            `Motivos visuales que vuelven en este género: ${genero.motivos.join('; ')}.\n\n`
+          : '') +
+        `MATERIAL (${fichas.length} fichas):\n` +
+        comoLista(fichas, { tope: 60 }) +
         `\n\nDuración objetivo: ${minutos} minutos.\n\n` +
         // Una continuación NO es el mismo documental otra vez. El director recibe
         // lo que ya se contó —entero, no un resumen: lo que importa es qué frases
@@ -238,7 +230,29 @@ export async function dirigirPieza({ caso, fichas, minutos = 10, anteriores = []
         `- tono: el registro, en una frase.\n` +
         `- aperturaEnFrio: con qué momento concreto empieza. Sé específico.\n` +
         `- cierre: cómo termina, sin moraleja.\n` +
-        `- estructura: 3 a 5 actos con acto, titulo, funcion, contenido y minutos.\n` +
+        // LA ESTRUCTURA LA PONE EL GÉNERO, NO EL DIRECTOR.
+        //
+        // Antes se le pedían «3 a 5 actos» y se los inventaba cada vez, así que
+        // dos episodios del mismo género no tenían nada que ver el uno con el
+        // otro: no había formato, había una estructura distinta por caso. La
+        // estructura de bloques es lo que hace que un canal SE RECONOZCA, y por
+        // eso vive en el catálogo y no en la cabeza del director.
+        //
+        // Lo que sigue siendo suyo, y es lo que importa: QUÉ va en cada bloque de
+        // ESTE caso. Los títulos y los minutos vienen dados; el contenido no.
+        (genero?.bloques?.length
+          ? `- estructura: EXACTAMENTE estos ${genero.bloques.length} actos, en este ` +
+            `orden, con estos títulos y estos minutos. No añadas, no quites, no ` +
+            `renombres. Lo tuyo es el «contenido»: qué de ESTE caso va en cada uno.\n` +
+            genero.bloques
+              .map(
+                (b, k) =>
+                  `    ${k + 1}. «${b.nombre}» — ${(minutos * (Number(b.peso) || 0)).toFixed(1)} min ` +
+                  `— función: ${b.funcion}`,
+              )
+              .join('\n') +
+            `\n`
+          : `- estructura: 3 a 5 actos con acto, titulo, funcion, contenido y minutos.\n`) +
         `- identidadVisual: paleta, luz, textura, encuadrePreferido, queEvitar.\n` +
         `- musica: atmosfera, instrumentacion, queEvitar. Y DENTRO, «enIngles» con ` +
         `mood, instruments y avoid ESCRITOS EN INGLÉS: el generador de música solo ` +

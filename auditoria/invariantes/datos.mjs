@@ -65,13 +65,48 @@ export const invariantes = [
           }
         }
 
-        // Los motivos y los arquetipos, que son de donde sale el ahorro.
-        for (const [campo, mínimo] of [['motivos', 4], ['personajes', 3]]) {
-          const lista = g?.[campo] || [];
-          if (lista.length < mínimo) {
-            fallos.push(`El género «${quién}» declara ${lista.length} ${campo} y hacen falta ${mínimo} como mínimo.`);
+        // Los motivos, que son de donde sale el ahorro dentro del episodio.
+        const motivos = g?.motivos || [];
+        if (motivos.length < 4) {
+          fallos.push(`El género «${quién}» declara ${motivos.length} motivos y hacen falta 4 como mínimo.`);
+        }
+        if (motivos.some((x) => !String(x || '').trim())) fallos.push(`Hay un motivo en blanco en «${quién}».`);
+
+        // Y LOS ARQUETIPOS, CON SU PLANO ENTERO. Sin el plano, la biblioteca no se
+        // podría generar desde el catálogo y la fase tendría que saberse la
+        // descripción de cada arquetipo — que es lo que la regla del catálogo
+        // prohíbe: un género se añade a la tabla y no se toca nada más.
+        const personajes = g?.personajes || [];
+        if (personajes.length < 3) {
+          fallos.push(`El género «${quién}» declara ${personajes.length} arquetipos y hacen falta 3 como mínimo.`);
+        }
+        const idsPersonaje = new Set();
+        for (const p of personajes) {
+          if (!p?.id || idsPersonaje.has(p.id)) fallos.push(`Arquetipo sin clave propia en «${quién}»: ${p?.id || '(sin id)'}.`);
+          idsPersonaje.add(p?.id);
+          if (!String(p?.nombre || '').trim()) fallos.push(`Un arquetipo de «${quién}» no tiene nombre.`);
+          for (const campo of ['encuadre', 'lugar', 'luz', 'descripcion']) {
+            if (!String(p?.plano?.[campo] || '').trim()) {
+              fallos.push(
+                `El arquetipo «${p?.id}» de «${quién}» no dice su ${campo}: la biblioteca no podría generarlo ` +
+                  'sin que la fase se sepa la descripción de memoria.',
+              );
+            }
           }
-          if (lista.some((x) => !String(x || '').trim())) fallos.push(`Hay un ${campo} en blanco en «${quién}».`);
+        }
+      }
+
+      // Los recursos transversales: no son de ningún género y por eso van sueltos.
+      const { RECURSOS } = ctx.fn;
+      if (!RECURSOS?.length || RECURSOS.length < 10) {
+        fallos.push(`Hay ${RECURSOS?.length || 0} recursos transversales; con menos de diez la biblioteca no cubre nada.`);
+      }
+      const idsRecurso = new Set();
+      for (const r of RECURSOS || []) {
+        if (!r?.id || idsRecurso.has(r.id)) fallos.push(`Recurso sin clave propia: ${r?.id || '(sin id)'}.`);
+        idsRecurso.add(r?.id);
+        for (const campo of ['lugar', 'encuadre', 'luz', 'descripcion']) {
+          if (!String(r?.[campo] || '').trim()) fallos.push(`El recurso «${r?.id}» no dice su ${campo}.`);
         }
       }
 
@@ -154,6 +189,85 @@ export const invariantes = [
       editando(ctx, 'comun/segmentar.mjs', (t) =>
         t.replace('export function segmentarVerificado', 'function segmentarVerificado'),
       ),
+  },
+
+  {
+    nombre: 'la-linea-en-blanco-y-el-testimonio-parten-la-toma',
+    dice: 'Dos fronteras duras del texto plano, y una llevaba rota desde el principio. La línea en blanco está documentada como PAUSA —«úsala después de un dato duro, para dejarlo caer»— y tres párrafos separados por líneas en blanco salían en UNA sola toma: se buscaba «\\n\\s*\\n» dentro de un tramo de hueco y esos dos saltos nunca caen en el mismo tramo. Así que el guion podía pedir la pausa donde quisiera y el segmentador la ignoraba siempre. La otra es la línea «> », que declara quién habla y NO se narra: si se narrara, el documental leería en voz alta «Marcos Elizalde, capataz de la cuadrilla» como si fuera una frase del guion.',
+    comprobar(ctx) {
+      const { segmentar, verificarCobertura } = ctx.fn;
+      const fallos = [];
+
+      // 1 · La línea en blanco parte, y el salto simple no.
+      const parrafos = segmentar('Frase corta una.\n\nFrase corta dos.\n\nFrase corta tres.');
+      if (parrafos.tomas.length !== 3) {
+        fallos.push(
+          `Tres párrafos separados por líneas en blanco salen en ${parrafos.tomas.length} toma(s): ` +
+            'la pausa que pide el guion se pierde.',
+        );
+      }
+      const seguido = segmentar('Una frase que sigue\nen la línea de abajo, sin línea en blanco.');
+      if (seguido.tomas.length !== 1) {
+        fallos.push(`Un salto de línea suelto parte la toma en ${seguido.tomas.length}: partiría cualquier frase larga.`);
+      }
+
+      // 2 · El testimonio: la línea no se narra, y marca las tomas que la siguen.
+      const guion =
+        '## El hallazgo\n\nLa denuncia entró a las nueve y diez.\n\n' +
+        '> Marcos Elizalde, capataz de la cuadrilla\n' +
+        'No toqué madera. Metí la mano y no había nada.\n\n' +
+        'El roble se taló esa misma tarde.';
+      const r = segmentar(guion);
+      const c = verificarCobertura(guion, r);
+      // La cobertura es lo que impide que una convención nueva se coma texto: cada
+      // carácter tiene que seguir perteneciendo a exactamente un tramo.
+      if (!c.ok) fallos.push(`La convención de testimonio rompe la cobertura: ${c.detalle}`);
+
+      if (r.tomas.some((t) => /Marcos Elizalde/.test(t.texto))) {
+        fallos.push('La línea del hablante se narra: el documental leería en voz alta la ficha del testigo.');
+      }
+      const declara = r.tomas.find((t) => /No toqué madera/.test(t.texto));
+      if (declara?.testimonio !== 'Marcos Elizalde, capataz de la cuadrilla') {
+        fallos.push(
+          `La toma del testimonio no sabe quién habla (${JSON.stringify(declara?.testimonio)}): ` +
+            'el director no podría poner el plano de quien declara.',
+        );
+      }
+      // Y lo de después de la línea en blanco YA NO es del testigo.
+      const despues = r.tomas.find((t) => /se taló/.test(t.texto));
+      if (despues?.testimonio) {
+        fallos.push('El testimonio se derrama sobre la toma siguiente: saldría el testigo donde habla el narrador.');
+      }
+      // Ni lo de antes.
+      if (r.tomas.find((t) => /La denuncia/.test(t.texto))?.testimonio) {
+        fallos.push('La marca de testimonio alcanza hacia atrás, a una toma del narrador.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: ni la línea en blanco separaba —los dos saltos se
+    // buscaban dentro de un solo tramo de hueco, que es donde nunca están— ni la
+    // línea «> » significaba nada.
+    //
+    // VA POR EL CONTEXTO, y esta invariante nació ciega por hacerlo al revés: la
+    // comprobación EJECUTA `segmentar`, así que un sabotaje sobre el texto fuente
+    // no la alcanza. Lo cazó `--romper` a la primera.
+    romper: (ctx) =>
+      conFuncion(ctx, 'segmentar', (guion, config) => {
+        const r = ctx.fn.segmentar(guion, config);
+        const texto = String(guion ?? '');
+        const tomas = [];
+        for (const t of r.tomas) {
+          const previa = tomas[tomas.length - 1];
+          const hueco = previa ? texto.slice(previa.finEnGuion, t.inicioEnGuion) : 'x';
+          if (previa && !hueco.trim()) {
+            previa.finEnGuion = t.finEnGuion;
+            previa.texto = texto.slice(previa.inicioEnGuion, t.finEnGuion);
+            continue;
+          }
+          tomas.push({ ...t, testimonio: '' });
+        }
+        return { ...r, tomas: tomas.map((t, i) => ({ ...t, i })) };
+      }),
   },
 
   // ── §3: las claves y la reutilización ─────────────────────────────────────
@@ -440,13 +554,115 @@ export const invariantes = [
       if (!/tipoFuente/.test(inv)) {
         fallos.push('Las fichas no guardan de qué tipo es su fuente: un blog y una sentencia valdrían lo mismo.');
       }
-      const g = ctx.fuentes.get('app/fases/guion.js') || '';
-      if (!/tipoFuente/.test(g)) {
-        fallos.push('El guion no distingue la solidez de la fuente al atribuir.');
+      return fallos;
+    },
+    // Se rompe por el contexto: la lista de ángulos entra por ahí justamente para
+    // que un sabotaje la alcance.
+    romper: (ctx) =>
+      conFuncion(ctx, 'ANGULOS_DE_INVESTIGACION', ctx.fn.ANGULOS_DE_INVESTIGACION.slice(0, 1)),
+  },
+
+  {
+    nombre: 'cada-clase-de-ficha-se-escribe-como-lo-que-es',
+    dice: 'Hay dos clases de ficha —documentada y construida— y se escriben distinto: la primera lleva su fuente entre corchetes, que es lo que le dice al guion CÓMO ATRIBUIR; la segunda lleva su rol, que es lo que le dice qué papel juega en el caso. Componer esa lista dentro de cada fase acabó con el guion y el director escribiéndolas de dos maneras, y con una ficha construida saliendo como «fuente:  [otra]» — una fuente vacía que el guion habría atribuido igual, afirmando por un expediente que no existe.',
+    comprobar(ctx) {
+      const { comoLista, ordenarFichas } = ctx.fn;
+      const fallos = [];
+
+      const documentadas = [
+        { afirmacion: 'Ardió el puerto.', fuente: 'Sentencia 44/1991', tipoFuente: 'judicial', fecha: '1991', cita: 'quedó probado' },
+        { afirmacion: 'Se dijo que fue el viento.', fuente: 'Blog', tipoFuente: 'otra', fecha: '', cita: '', incierto: true },
+      ];
+      const escritas = comoLista(documentadas);
+      if (!/\[judicial\]/.test(escritas)) {
+        fallos.push('Una ficha documentada se escribe sin su tipo de fuente: el guion no sabría cómo atribuirla.');
+      }
+      if (!/DISPUTADO/.test(escritas)) fallos.push('Una ficha disputada no se marca como tal.');
+      // Y lo más sólido va PRIMERO: el modelo se apoya en lo primero que lee.
+      if (escritas.indexOf('Ardió el puerto') > escritas.indexOf('Se dijo que fue')) {
+        fallos.push('Las fichas documentadas no van de más a menos sólida.');
+      }
+
+      const construidas = [
+        { afirmacion: 'La ficha de latón número 4417.', rol: 'revelacion', fecha: '2022', cita: '', construida: true, orden: 2 },
+        { afirmacion: 'Amparo Iriarte, 34 años, tejedora.', rol: 'victima', fecha: '1981', cita: 'no volvió', construida: true, orden: 0 },
+      ];
+      const fabricadas = comoLista(construidas);
+      if (!/\(victima\)/.test(fabricadas) || !/\(revelacion\)/.test(fabricadas)) {
+        fallos.push('Una ficha construida se escribe sin su rol: se pierde qué papel juega en el caso.');
+      }
+      // Y NO puede insinuar una fuente que no existe.
+      if (/fuente:/.test(fabricadas) || /\[otra\]/.test(fabricadas)) {
+        fallos.push('Una ficha construida se escribe con una fuente vacía: el guion la atribuiría a un expediente inventado.');
+      }
+      // Se leen EN EL ORDEN EN QUE SE LEVANTÓ EL CASO, no barajadas por una
+      // «solidez» en la que todas empatan.
+      if (fabricadas.indexOf('Amparo') > fabricadas.indexOf('4417')) {
+        fallos.push('Las fichas construidas se reordenan: se pierde el orden en que se construyó el caso.');
+      }
+      if (ordenarFichas(construidas)[0]?.rol !== 'victima') {
+        fallos.push('El orden de un expediente construido no respeta cómo se levantó.');
       }
       return fallos;
     },
-    romper: (ctx) => editando(ctx, 'app/fases/guion.js', (t) => t.replaceAll('tipoFuente', 'nada')),
+    // Se rompe como estaba antes de tener una sola puerta: cada fase componiendo
+    // la lista a su manera, con el formato de las documentadas para todo.
+    romper: (ctx) =>
+      conFuncion(ctx, 'comoLista', (fichas, opciones) =>
+        ctx.fn
+          .ordenarFichas(fichas)
+          .slice(0, opciones?.tope ?? 60)
+          .map((f, i) => `[${i}] ${f.afirmacion}\n    fuente: ${f.fuente || ''} [${f.tipoFuente || 'otra'}]`)
+          .join('\n'),
+      ),
+  },
+
+  {
+    nombre: 'un-caso-construido-se-publica-declarado-como-ficcion',
+    dice: 'El episodio construido se ve EXACTAMENTE igual que un documental: el mismo tono, los mismos planos, los mismos testimonios, la misma voz sobria. Esa es la gracia del formato y es justo lo que lo hace indistinguible de uno real si nadie lo dice. Un caso inventado presentado como caso real es una mentira —da igual que la víctima no exista: lo que se falsea es la naturaleza de la pieza— y hunde el canal el día que alguien lo descubra. Y no puede depender de que el modelo se acuerde de decirlo, ni de un pie que nadie despliega: va compuesta en el código y va la primera.',
+    comprobar(ctx) {
+      const { esFiccion, componerPieDeFuentes, DECLARACION_DE_FICCION, textoDePublicacion } = ctx.fn;
+      const fallos = [];
+
+      const construidas = [{ afirmacion: 'a', rol: 'victima', construida: true, fuente: '' }];
+      const documentadas = [{ afirmacion: 'b', fuente: 'Sentencia 44/1991', fecha: '1991', tipoFuente: 'judicial' }];
+
+      if (!esFiccion(construidas)) fallos.push('Un expediente construido no se reconoce como ficción.');
+      if (esFiccion(documentadas)) fallos.push('Un expediente documentado se marca como ficción: diría que es falso lo que es real.');
+
+      // La declaración tiene que decir las tres cosas que importan.
+      for (const [qué, re] of [
+        ['que es ficción', /ficci[oó]n/i],
+        ['que el caso y las personas están inventados', /inventad/i],
+        ['que las imágenes están generadas', /generad/i],
+      ]) {
+        if (!re.test(DECLARACION_DE_FICCION || '')) fallos.push(`La declaración no dice ${qué}.`);
+      }
+
+      // Un expediente construido NO lleva pie de fuentes: no las tiene, y un pie
+      // de fuentes vacío o inventado es peor que ninguno.
+      if (componerPieDeFuentes(construidas)) {
+        fallos.push('Un episodio de ficción sale con pie de fuentes: insinúa un respaldo que no existe.');
+      }
+      if (!componerPieDeFuentes(documentadas)) {
+        fallos.push('Un episodio documentado pierde su pie de fuentes: §8.4 no es opcional.');
+      }
+
+      // Y en el texto que se pega al publicar, la declaración va LA PRIMERA de la
+      // descripción — no al final, donde no la lee nadie.
+      const texto = textoDePublicacion(
+        { titulos: ['Un caso'], etiquetas: ['crimen'], descripcion: `${DECLARACION_DE_FICCION}\n\nLo que pasó.` },
+        'Un caso',
+      );
+      const i = texto.indexOf('DESCRIPCIÓN');
+      if (i < 0 || !texto.slice(i, i + 140).includes('FICCIÓN DOCUMENTAL')) {
+        fallos.push('La declaración no encabeza la descripción: quedaría enterrada donde no la ve nadie.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaría sin la distinción: todo pasa por documental, con su
+    // pie de fuentes y sin declarar nada.
+    romper: (ctx) => conFuncion(ctx, 'esFiccion', () => false),
   },
 
   {
@@ -838,32 +1054,180 @@ export const invariantes = [
 
   {
     nombre: 'un-motivo-vuelve-pero-nunca-seguido',
-    dice: 'Los documentales de plataforma repiten un puñado de planos —la patrulla llegando, la calle de noche, la cámara de vigilancia— cuatro o cinco veces a lo largo de la hora. Da unidad visual y una imagen sirve para cinco tomas. Pero dos veces en veinte segundos no es un motivo: es un error de montaje.',
+    dice: 'Los documentales de plataforma repiten un puñado de planos —la patrulla llegando, la calle de noche, la cámara de vigilancia— cinco o seis veces a lo largo de la hora. Da unidad visual y una imagen sirve para siete tomas. Pero dos veces en veinte segundos no es un motivo: es un error de montaje. Y esto NO se le puede pedir al modelo: con ciento sesenta y cinco tomas y veinte motivos son ciento cuarenta colocaciones, y él ve lotes de dieciocho — no puede saber que la vuelta de la toma 91 está a cuatro de la que escribió en la 87. Él dice qué planos son el mismo motivo; el reparto lo hace el código, que sí puede contar.',
     comprobar(ctx) {
+      const { repartirMotivos } = ctx.fn;
       const dir = fuente(ctx, 'app/fases/direccion.js');
       const fallos = [];
 
-      // El valor se lee DE LA FUENTE, no importándolo: importándolo, cambiarlo en
-      // el sabotaje no cambiaba nada y la invariante salía ciega.
-      const SEPARACION_MINIMA = Number(/SEPARACION_MINIMA = (\d+)/.exec(dir)?.[1] || 0);
-      if (!(SEPARACION_MINIMA >= 4)) {
-        fallos.push(`Con ${SEPARACION_MINIMA} tomas de separación la repetición se ve seguida.`);
+      // Un motivo que vuelve seis veces, dos de ellas pegadas a la anterior.
+      const dónde = [0, 3, 6, 20, 21, 40, 44, 60];
+      const tomas = Array.from({ length: 70 }, (_, i) => ({ i }));
+      const planos = new Map(
+        tomas.map((t) => [
+          t.i,
+          { i: t.i, motivo: dónde.includes(t.i) ? 'la carretera comarcal de noche' : '' },
+        ]),
+      );
+      const reparto = repartirMotivos(tomas, planos);
+      const dueña = [...reparto.keys()][0];
+      const vueltas = reparto.get(dueña) || [];
+
+      if (dueña !== 0) fallos.push(`La dueña del motivo es la toma ${dueña} y debería ser la primera aparición.`);
+      // NINGUNA vuelta puede caer cerca de la anterior. Es la comprobación entera:
+      // se mide sobre el resultado, no sobre lo que se le pidió al modelo.
+      const puestas = [dueña, ...vueltas];
+      for (let k = 1; k < puestas.length; k++) {
+        if (puestas[k] - puestas[k - 1] < 4) {
+          fallos.push(
+            `Dos vueltas del mismo motivo caen en las tomas ${puestas[k - 1]} y ${puestas[k]}: ` +
+              'el mismo plano dos veces en veinte segundos se ve como un fallo de montaje.',
+          );
+        }
       }
-      // Y la regla se CUMPLE en el código, no solo se pide en la instrucción: quien
-      // mira el resultado es el usuario, no el modelo.
-      if (!/t\.i - p\.igualQue >= SEPARACION_MINIMA/.test(dir)) {
-        fallos.push('La separación se le pide al director y no se comprueba: repetiría seguido.');
+      // Y las que no caben se descartan, no se fuerzan ni tiran el motivo entero.
+      if (vueltas.includes(3) || vueltas.includes(21)) {
+        fallos.push('Una vuelta demasiado pegada se acepta igual: se le está creyendo al modelo en vez de contar.');
       }
-      // Y al director se le tiene que pedir que diseñe los motivos, no que los
-      // encuentre por casualidad.
+      if (!vueltas.includes(6) || !vueltas.includes(20) || !vueltas.includes(40)) {
+        fallos.push(`Se pierden vueltas que sí caben: quedaron ${JSON.stringify(vueltas)}.`);
+      }
+
+      // Un tope de vueltas: por encima deja de leerse como motivo y se lee como
+      // que no había más material.
+      const muchas = Array.from({ length: 200 }, (_, i) => ({ i }));
+      const todos = new Map(muchas.map((t) => [t.i, { i: t.i, motivo: t.i % 10 === 0 ? 'el precinto' : '' }]));
+      const largo = repartirMotivos(muchas, todos);
+      const cuantas = ([...largo.values()][0] || []).length + 1;
+      if (cuantas > 8) fallos.push(`Un motivo vuelve ${cuantas} veces: deja de ser un motivo.`);
+
+      // Una aparición suelta no es un motivo.
+      const sola = repartirMotivos(tomas, new Map(tomas.map((t) => [t.i, { i: t.i, motivo: t.i === 5 ? 'x' : '' }])));
+      if (sola.size) fallos.push('Un plano que sale una sola vez se registra como motivo.');
+
+      // Y al director se le tiene que pedir que DISEÑE los motivos, no que los
+      // encuentre por casualidad, y con la dosis del formato.
       if (!/MOTIVOS RECURRENTES/.test(dir)) {
         fallos.push('Nadie le pide al director que diseñe planos que vuelvan: solo cazaría coincidencias.');
       }
+      if (!/QUINCE Y VEINTE/.test(dir)) {
+        fallos.push('La dosis de motivos sigue siendo la de un episodio corto: con pocos motivos no hay nada que amortizar.');
+      }
       return fallos;
     },
+    // Se rompe como estaría si el reparto se le creyera al modelo: todas las
+    // apariciones aceptadas, caigan donde caigan. Va por el contexto porque la
+    // comprobación EJECUTA `repartirMotivos`.
     romper: (ctx) =>
-      editando(ctx, 'app/fases/direccion.js', (t) =>
-        t.replace('export const SEPARACION_MINIMA = 6;', 'export const SEPARACION_MINIMA = 1;'),
+      conFuncion(ctx, 'repartirMotivos', (tomas, planos) => {
+        const porEtiqueta = new Map();
+        for (const t of tomas) {
+          const e = String(planos.get(t.i)?.motivo || '').trim();
+          if (!e) continue;
+          if (!porEtiqueta.has(e)) porEtiqueta.set(e, []);
+          porEtiqueta.get(e).push(t.i);
+        }
+        const salida = new Map();
+        for (const lista of porEtiqueta.values()) {
+          if (lista.length < 2) continue;
+          salida.set(lista[0], lista.slice(1));
+        }
+        return salida;
+      }),
+  },
+
+  {
+    nombre: 'el-movimiento-es-una-cuenta-y-no-toca-a-los-motivos',
+    dice: 'Una proporción global —«el 15 % de las tomas lleva clip»— es minimizar el coste de CADA episodio: con 165 tomas salen 25 clips, y veinticinco clips por episodio no se amortizan nunca porque no vuelven. El modelo correcto para un canal es invertir una vez y amortizar, y eso son dos cosas: el número de escenas fuertes es una CUENTA del episodio, no un porcentaje de su longitud; y un motivo NO lleva clip, porque su valor está justo en volver cinco veces costando cero. Animar un motivo es pagar la fase más cara por lo único que ya salía gratis.',
+    async comprobar(ctx) {
+      const { dirigir } = ctx.fn;
+      const fallos = [];
+
+      // Un episodio largo con motivos, dirigido de verdad: se sustituye la puerta
+      // para no llamar a nadie y se mira lo que sale por el otro lado.
+      const N = 120;
+      const tomas = Array.from({ length: N }, (_, i) => ({ i, escena: 0, texto: `t${i}`, segundos: 8 }));
+      const esMotivo = (i) => i % 7 === 0;
+      const puerta = globalThis.fetch;
+      globalThis.fetch = async (url, opciones) => {
+        const cuerpo = JSON.parse(opciones.body);
+        const indices = [...String(cuerpo.instruccion).matchAll(/^\((\d+)\) \[escena/gm)].map((m) => +m[1]);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            ok: true,
+            json: {
+              planos: indices.map((i) => ({
+                i,
+                encuadre: 'plano general',
+                movimientoCamara: 'fijo',
+                lugar: esMotivo(i) ? 'la carretera' : `sitio ${i}`,
+                luz: 'noche',
+                sujetos: [],
+                descripcion: `d${i}`,
+                tipoImagen: 'reconstruccion',
+                // TODAS quieren movimiento: así se ve quién decide de verdad.
+                merecemovimiento: true,
+                motivo: esMotivo(i) ? 'la carretera comarcal de noche' : '',
+                respiro: 'ninguno',
+              })),
+            },
+          }),
+        };
+      };
+      let salida = [];
+      try {
+        salida = await dirigir({
+          tomas,
+          escenas: [{ n: 0, titulo: 'A' }],
+          tema: 'x',
+          config: { movimiento: { politica: { clipsPorEpisodio: 12, motivosConVideo: false } }, montaje: {} },
+        });
+      } catch (e) {
+        fallos.push(`La dirección no llega a terminar: ${e.message}`);
+      } finally {
+        globalThis.fetch = puerta;
+      }
+      if (!salida.length) return fallos.concat('No salió ninguna toma dirigida.');
+
+      const conClip = salida.filter((t) => t.movimiento);
+      // 1 · La cuenta manda, y NO escala con la longitud del episodio.
+      if (conClip.length > 12) {
+        fallos.push(
+          `Con las 120 tomas pidiendo movimiento salen ${conClip.length} clips y el presupuesto decía 12: ` +
+            'el modelo está decidiendo lo que cuesta dinero.',
+        );
+      }
+      if (conClip.length < 8) {
+        fallos.push(`Solo ${conClip.length} clips de los 12 presupuestados: se está dejando cupo sin usar.`);
+      }
+
+      // 2 · Ningún motivo lleva clip. Es lo que se amortiza volviendo.
+      const motivos = salida.filter((t) => t.reusa !== null);
+      if (!motivos.length) fallos.push('Ningún motivo se resolvió como repetición: no hay nada que amortizar.');
+      if (motivos.some((t) => t.movimiento)) {
+        fallos.push('Un motivo lleva clip: se paga la fase más cara por el plano que ya salía gratis al repetirse.');
+      }
+
+      // 3 · Y los clips se reparten por toda la pieza, no en el primer tercio.
+      const ultimoTercio = conClip.filter((t) => t.i >= (N * 2) / 3).length;
+      if (conClip.length >= 6 && ultimoTercio === 0) {
+        fallos.push('El último tercio del episodio se queda sin una sola toma animada.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: una proporción de la longitud, y los motivos entrando
+    // en el sorteo como cualquier otra toma.
+    romper: (ctx) =>
+      conFuncion(ctx, 'dirigir', async (args) =>
+        ctx.fn.dirigir({
+          ...args,
+          config: {
+            ...args.config,
+            movimiento: { politica: { clipsPorEpisodio: Math.round(args.tomas.length * 0.15), motivosConVideo: true } },
+          },
+        }),
       ),
   },
 
@@ -965,28 +1329,89 @@ export const invariantes = [
 
   {
     nombre: 'un-motivo-animado-vuelve-sin-gastar-cupo',
-    dice: 'Si la toma 8 lleva clip y la 27 repite ese mismo plano, la 27 usa el MISMO clip: no cuesta nada. Sin esto, o la 27 paga otro clip o se queda como imagen fija y se pierde el motivo.',
-    comprobar(ctx) {
-      const dir = fuente(ctx, 'app/fases/direccion.js');
+    dice: 'Si la toma 8 lleva clip y la 27 repite ese mismo plano, la 27 usa el MISMO clip: no cuesta nada y no gasta cupo. Sin esto, o la 27 paga otro clip o se queda como imagen fija y se pierde el motivo. Las dos mitades tienen que darse a la vez: la repetición hereda el movimiento, Y sigue marcada como repetición — si el movimiento la sacara de `reusa`, cada vuelta pagaría su propio clip, que es como estuvo y por eso ningún clip se reutilizaba nunca.',
+    async comprobar(ctx) {
+      const { dirigir } = ctx.fn;
       const fallos = [];
-      // La propagación del movimiento a las repeticiones.
-      if (!/conMovimiento\.has\(dueña\)/.test(dir)) {
-        fallos.push('Una toma que repite un plano animado no hereda el movimiento: se queda fija.');
+
+      // La 8 lleva clip; la 27 repite su plano; la 12 repite un plano fijo.
+      const N = 40;
+      const tomas = Array.from({ length: N }, (_, i) => ({ i, escena: 0, texto: `t${i}`, segundos: 8 }));
+      const gemelas = { 27: 8, 33: 8, 12: 4 };
+      const puerta = globalThis.fetch;
+      globalThis.fetch = async (url, opciones) => {
+        const cuerpo = JSON.parse(opciones.body);
+        const indices = [...String(cuerpo.instruccion).matchAll(/^\((\d+)\) \[escena/gm)].map((m) => +m[1]);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            ok: true,
+            json: {
+              planos: indices.map((i) => {
+                const de = gemelas[i] ?? i;
+                return {
+                  i,
+                  encuadre: 'plano general',
+                  movimientoCamara: 'fijo',
+                  lugar: `sitio ${de}`,
+                  luz: 'noche',
+                  sujetos: [],
+                  descripcion: `d${de}`,
+                  tipoImagen: 'reconstruccion',
+                  // Solo la 8 y sus vueltas piden movimiento: así el cupo cabe de
+                  // sobra y lo que se mide es la propagación, no el reparto.
+                  merecemovimiento: de === 8,
+                  igualQue: gemelas[i],
+                  respiro: 'ninguno',
+                };
+              }),
+            },
+          }),
+        };
+      };
+      let salida = [];
+      try {
+        salida = await dirigir({
+          tomas,
+          escenas: [{ n: 0, titulo: 'A' }],
+          tema: 'x',
+          config: { movimiento: { politica: { clipsPorEpisodio: 4 } }, montaje: {} },
+        });
+      } catch (e) {
+        fallos.push(`La dirección no llega a terminar: ${e.message}`);
+      } finally {
+        globalThis.fetch = puerta;
       }
-      // Y `reusa` tiene que admitir tomas con movimiento, no excluirlas.
-      const i = dir.indexOf('const reusa =');
-      const bloque = dir.slice(i, dir.indexOf(';', i));
-      if (/!conMovimiento\.has\(t\.i\)/.test(bloque)) {
-        fallos.push('Las tomas con movimiento siguen excluidas de la reutilización: ningún clip se repetiría.');
+      if (!salida.length) return fallos.concat('No salió ninguna toma dirigida.');
+      const de = (i) => salida.find((t) => t.i === i);
+
+      if (!de(8)?.movimiento) return fallos.concat('La toma que pide clip no lo recibe: no hay nada que propagar.');
+      // 1 · La repetición hereda el movimiento.
+      for (const i of [27, 33]) {
+        if (!de(i)?.movimiento) {
+          fallos.push(`La toma ${i} repite un plano animado y se queda fija: se pierde el motivo.`);
+        }
       }
-      if (!/mismaClase/.test(bloque)) {
-        fallos.push('No se comprueba que las dos tomas sean de la misma clase: un clip no vale como imagen fija.');
+      // 2 · Y SIGUE siendo repetición, que es lo que hace que no se pague.
+      for (const i of [27, 33]) {
+        if (de(i)?.reusa !== 8) {
+          fallos.push(
+            `La toma ${i} hereda el movimiento pero no queda como repetición (reusa=${de(i)?.reusa}): ` +
+              'pagaría su propio clip, que es la fase más cara.',
+          );
+        }
       }
+      // 3 · Y una repetición de un plano FIJO no se contagia de movimiento.
+      if (de(12)?.movimiento) fallos.push('Una repetición de un plano fijo sale con clip: se paga lo que nadie pidió.');
+      if (de(12)?.reusa !== 4) fallos.push('Una repetición de un plano fijo deja de ser repetición.');
       return fallos;
     },
+    // Se rompe como estuvo: las tomas con movimiento excluidas de la reutilización,
+    // así que cada vuelta de un motivo animado pagaba su propio clip.
     romper: (ctx) =>
-      editando(ctx, 'app/fases/direccion.js', (t) =>
-        t.replace('conMovimiento.has(dueña) &&', 'false &&'),
+      conFuncion(ctx, 'dirigir', async (args) =>
+        (await ctx.fn.dirigir(args)).map((t) => (t.movimiento ? { ...t, reusa: null } : t)),
       ),
   },
 
@@ -1608,12 +2033,25 @@ export const invariantes = [
           `El clip heredado no llega al montaje: la hoja abre ${hoja.tomas[0]?.archivo}.`,
         );
       }
-      // Y el que aplica la herencia tiene que marcar ese movimiento.
+      // Y el que aplica la herencia tiene que marcar ese movimiento. Vive en UN
+      // solo sitio a propósito: hay dos caminos que heredan —el botón de
+      // reutilizar y la resolución automática contra la biblioteca al dirigir— y
+      // con dos implementaciones ya pasó una vez que una de ellas se olvidaba de
+      // marcar `movimiento` y montaba la imagen fija con el clip comprado al lado.
       const main = fuente(ctx, 'app/main.js');
-      const i = main.indexOf("'b-reutilizar',");
-      const cuerpo = main.slice(i, main.indexOf('\nfunction ', i));
+      const i = main.indexOf('function aplicarHerencia(');
+      const cuerpo = i < 0 ? '' : main.slice(i, main.indexOf('\n}', i));
       if (!/t\.heredadoVid = de\.clave;[\s\S]{0,400}?t\.movimiento = true;/.test(cuerpo)) {
         fallos.push('Al heredar un clip no se marca la toma como animada: la hoja no lo pediría.');
+      }
+      for (const [quién, ancla] of [
+        ['el botón de reutilizar', "accion(\n  'b-reutilizar',"],
+        ['la resolución contra la biblioteca', 'async function resolverContraBiblioteca('],
+      ]) {
+        const j = main.indexOf(ancla);
+        if (j < 0 || !/aplicarHerencia\(/.test(main.slice(j, j + 2500))) {
+          fallos.push(`${quién} hereda por su cuenta: dos sitios donde olvidarse de marcar el movimiento.`);
+        }
       }
       return fallos;
     },
@@ -1627,6 +2065,110 @@ export const invariantes = [
           .heredables(tomas, anteriores)
           .filter((h) => (porI.get(h.i)?.movimiento ? h.tipo === 'vid' : h.tipo === 'img'));
       }),
+  },
+
+  {
+    nombre: 'la-biblioteca-se-resuelve-por-arquetipo-y-no-por-parecido',
+    dice: 'El banco entre casos busca por la huella del plano —lugar, encuadre, luz—, y eso solo encuentra lo que coincide POR CASUALIDAD: el perito de este episodio no coincide con el del anterior salvo que el director escriba las tres cosas letra por letra igual, y no lo hace —escribe «el laboratorio» una vez y «la sala del laboratorio» la siguiente—. El arquetipo sí es una clave estable, porque sale del catálogo y no de la redacción. Sin esta resolución, la biblioteca se paga entera y no la usa nadie: cada episodio genera su propio perito.',
+    comprobar(ctx) {
+      const { heredables, tomasDeBiblioteca, sincronizarBiblioteca, resumenBiblioteca, ID_BIBLIOTECA } = ctx.fn;
+      const fallos = [];
+
+      // La biblioteca, con el perito ya pagado —imagen y clip—.
+      const biblioteca = {
+        id: ID_BIBLIOTECA,
+        titulo: 'Biblioteca del canal',
+        esBiblioteca: true,
+        tomas: tomasDeBiblioteca().map((t) =>
+          t.personaje === 'perito' ? { ...t, imagen: 'ok', video: 'ok' } : t,
+        ),
+      };
+      const dueña = biblioteca.tomas.find((t) => t.personaje === 'perito');
+      if (!dueña) return ['La biblioteca no trae ningún arquetipo de perito: no hay nada que resolver.'];
+
+      // Un episodio con el testimonio del perito, REDACTADO DISTINTO. Es el caso
+      // real: nadie escribe dos veces la misma frase.
+      const episodio = [
+        {
+          i: 4,
+          personaje: 'perito',
+          plano: {
+            lugar: 'la sala de análisis del instituto',
+            encuadre: 'primer plano',
+            luz: 'luz de tubo',
+            descripcion: 'otra cosa',
+            sujetos: [],
+            personaje: 'perito',
+          },
+        },
+      ];
+      const puede = heredables(episodio, [biblioteca]);
+      const clave = (tipo) => puede.find((x) => x.tipo === tipo)?.de?.clave;
+
+      if (clave('vid') !== `${ID_BIBLIOTECA}/t${String(dueña.i).padStart(3, '0')}/vid`) {
+        fallos.push(
+          `El testimonio del perito no encuentra su clip en la biblioteca (${clave('vid')}): ` +
+            'se generaría un perito nuevo con el de la biblioteca pagado al lado.',
+        );
+      }
+      if (clave('img') !== `${ID_BIBLIOTECA}/t${String(dueña.i).padStart(3, '0')}/img`) {
+        fallos.push(`El testimonio del perito no encuentra su imagen en la biblioteca (${clave('img')}).`);
+      }
+
+      // Y un arquetipo que la biblioteca NO tiene no inventa nada.
+      const otro = heredables(
+        [{ i: 9, personaje: 'buzo-de-rescate', plano: { lugar: 'x', encuadre: 'y', luz: 'z', sujetos: [], personaje: 'buzo-de-rescate' } }],
+        [biblioteca],
+      );
+      if (otro.length) fallos.push('Un arquetipo que no está en la biblioteca hereda algo igualmente.');
+
+      // La biblioteca se sincroniza SIN PISAR lo pagado: volver a abrirla después
+      // de añadir un género no puede costar dinero por sí solo.
+      const puesta = sincronizarBiblioteca(biblioteca);
+      const despues = puesta.tomas.find((t) => t.personaje === 'perito');
+      if (despues?.imagen !== 'ok' || despues?.video !== 'ok') {
+        fallos.push('Sincronizar la biblioteca borra lo ya generado: se volvería a pagar entera.');
+      }
+      if (!puesta.esBiblioteca || puesta.id !== ID_BIBLIOTECA) {
+        fallos.push('La pieza de biblioteca pierde su identidad al sincronizarse: se montaría como un episodio.');
+      }
+      if (puesta.guion) fallos.push('La biblioteca tiene guion: no se monta nunca y no debería tenerlo.');
+
+      // LAS CLAVES SON ESTABLES. Si al añadir un género se movieran los índices,
+      // todo lo ya generado apuntaría a otro plano y habría que pagarlo otra vez.
+      const soloUno = tomasDeBiblioteca({ generos: ctx.fn.GENEROS.slice(0, 1) });
+      const todos = tomasDeBiblioteca();
+      for (const t of soloUno) {
+        const igual = todos.find((x) => x.clave === t.clave);
+        if (!igual || igual.i !== t.i) {
+          fallos.push(
+            `Añadir géneros mueve el índice de «${t.clave}» (de ${t.i} a ${igual?.i}): ` +
+              'la biblioteca ya pagada apuntaría a otro plano.',
+          );
+          break;
+        }
+      }
+
+      // Y los arquetipos llevan clip mientras los recursos no: un plano de alguien
+      // declarando tiene que moverse; un archivador quieto se ve igual de bien.
+      const r = resumenBiblioteca(todos);
+      if (r.clips !== r.personajes) {
+        fallos.push(`La biblioteca pide ${r.clips} clips para ${r.personajes} arquetipos: alguien paga de más o de menos.`);
+      }
+      if (todos.filter((t) => t.recurso).some((t) => t.movimiento)) {
+        fallos.push('Un recurso transversal lleva clip: es la fase más cara pagada por un fondo quieto.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba antes del tercer banco: solo por la huella del plano,
+    // que es lo que no encuentra nunca al mismo perito escrito de dos maneras.
+    romper: (ctx) =>
+      conFuncion(ctx, 'heredables', (tomas, anteriores) =>
+        ctx.fn.heredables(
+          tomas.map((t) => ({ ...t, personaje: '', plano: { ...(t.plano || {}), personaje: '' } })),
+          anteriores,
+        ),
+      ),
   },
 
   {
@@ -1947,134 +2489,83 @@ export const invariantes = [
   },
 
   {
-    nombre: 'el-guion-se-escribe-con-oficio-y-no-solo-con-prohibiciones',
-    dice: 'Las reglas del guion eran todas negativas —nada de preguntas retóricas, nada de «lo que nadie te contó», frases cortas— y con puras prohibiciones sale exactamente un noticiero: datos correctos, bien atribuidos, uno detrás de otro, y nadie llega al minuto tres. Falta decirle QUÉ HACER.',
+    nombre: 'el-guion-tiene-oficio-y-cada-modo-su-limite',
+    dice: 'Dos cosas a la vez, y las dos se rompen solas. Las reglas del guion eran todas negativas y con puras prohibiciones sale un noticiero: datos correctos, uno detrás de otro, y nadie llega al minuto tres — falta decirle QUÉ HACER. Y desde que hay dos clases de episodio, el límite de cada uno es distinto y no se pueden mezclar: en un documental inventar un detalle es mentir sobre personas reales, y en ficción declarada prohibirlo deja al guion sin la mitad de su oficio. Si el sistema del modo construir se colara en un proyecto documental, ese documental empezaría a inventar sin que nadie lo pidiera.',
     comprobar(ctx) {
-      const g = fuente(ctx, 'app/fases/guion.js');
-      const i = g.indexOf('const SISTEMA');
-      const sistema = i < 0 ? '' : g.slice(i, g.indexOf('`;', i));
+      const { sistemaDelGuion } = ctx.fn;
       const fallos = [];
-      if (!sistema) return ['No se encuentran las reglas del guion.'];
+      const construir = sistemaDelGuion('construir');
+      const documentar = sistemaDelGuion('documentar');
 
-      // Lo que de verdad separa un documental de un noticiero, punto por punto.
+      // 1 · EL OFICIO, en los dos. Es lo que de verdad separa un documental de un
+      // noticiero, punto por punto, y no depende de si el caso es real.
       for (const [qué, re] of [
         ['contar con detalles concretos en vez de resúmenes', /LO CONCRETO|detalle/i],
         ['retener el significado y responder después', /ADMINISTRA LO QUE SABES|todav[ií]a no ha dicho/i],
         ['cerrar cada bloque abriendo el siguiente', /NO CIERRES LA ESCENA RESUMIENDO|empuj/i],
         ['variar la medida de las frases', /Frase larga, frase larga, frase corta|RITMO/],
         ['usar las palabras literales de las fuentes', /literal|palabras de los dem[aá]s/i],
+        ['anclar cada acto en alguien concreto', /PERSONAS, NO EXPEDIENTES/],
+        ['no contar dos veces el mismo hecho', /UNA VEZ EN TODO EL DOCUMENTAL/],
       ]) {
-        if (!re.test(sistema)) fallos.push(`No se le pide ${qué}.`);
+        for (const [modo, texto] of [['construir', construir], ['documentar', documentar]]) {
+          if (!re.test(texto)) fallos.push(`En modo ${modo} no se le pide ${qué}.`);
+        }
       }
-
       // Y los adjetivos de opinión, que son lo que convierte un documental en un
       // canal de contenido: decir que algo es escalofriante es garantizar que no lo sea.
-      if (!/escalofriante/i.test(sistema) || !/impactante/i.test(sistema)) {
-        fallos.push('No se prohíben los adjetivos de opinión: volverían «escalofriante» e «impactante».');
+      for (const [modo, texto] of [['construir', construir], ['documentar', documentar]]) {
+        if (!/escalofriante/i.test(texto) || !/impactante/i.test(texto)) {
+          fallos.push(`En modo ${modo} no se prohíben los adjetivos de opinión.`);
+        }
+        // El formato del texto plano es lo que la segmentación entiende. Sin esto
+        // el guion sale sin escenas y todo el episodio es una sola.
+        if (!/"## "/.test(texto)) fallos.push(`En modo ${modo} no se pide marcar las escenas con «## ».`);
+        if (!/"> "/.test(texto)) fallos.push(`En modo ${modo} no se explica la línea de testimonio «> ».`);
       }
 
-      // El oficio NO puede haberse llevado por delante el rigor: son dos cosas y
-      // las dos caben. Si aflojar el tono aflojó las fuentes, esto no vale nada.
+      // 2 · EL RIGOR, solo en documentar y ENTERO. Si aflojar el tono aflojó las
+      // fuentes, esto no vale nada.
       for (const [qué, re] of [
         ['que cada afirmación salga de una ficha', /sale de una ficha/i],
         ['que no se inventen datos', /No inventes datos/i],
         ['que se atribuya según el tipo de fuente', /\[judicial\]|\[testimonio\]/],
         ['que la tensión no salga de insinuar lo que no consta', /nunca de sugerir lo que no consta|no consta/i],
       ]) {
-        if (!re.test(sistema)) fallos.push(`Se perdió el rigor: ${qué}.`);
+        if (!re.test(documentar)) fallos.push(`El modo documentar perdió el rigor: ${qué}.`);
+      }
+
+      // 3 · Y ESE RIGOR NO PUEDE ESTAR EN CONSTRUIR, ni al revés. Son dos límites
+      // incompatibles: con los dos puestos, el guion recibe «inventa el detalle» y
+      // «no inventes datos» en el mismo sistema y hace lo que le parece.
+      if (/No inventes datos/i.test(construir)) {
+        fallos.push('El modo construir arrastra la prohibición de inventar: la licencia y su contraria a la vez.');
+      }
+      if (/el detalle\s+concreto que la escena necesite lo pones t[uú]/i.test(documentar)) {
+        fallos.push(
+          'El modo documentar trae la licencia de inventar detalle: un documental sobre personas reales ' +
+            'se pondría a inventar la hora y la marca de las botas.',
+        );
+      }
+
+      // 4 · LA LICENCIA VIENE CON SU LÍMITE. Sin la coherencia, «invéntate el
+      // detalle» es exactamente el fallo que este modo existe para evitar.
+      for (const [qué, re] of [
+        ['que el caso es ficción declarada', /ficci[oó]n, declarada|obra de ficci[oó]n/i],
+        ['que el límite es la coherencia', /El l[ií]mite es la coherencia/],
+        ['que un nombre o una fecha no cambian', /se escriben una vez y no cambian/],
+        ['el gancho en segunda persona del primer acto', /EL GANCHO/],
+        ['los testimonios con su convención', /LOS TESTIMONIOS/],
+        ['el cierre con una duda concreta sin contestar', /EL CIERRE/],
+      ]) {
+        if (!re.test(construir)) fallos.push(`El modo construir no dice ${qué}.`);
       }
       return fallos;
     },
-    // Se rompe como estaba: solo prohibiciones, sin oficio.
-    romper: (ctx) =>
-      editando(ctx, 'app/fases/guion.js', (t) =>
-        t.replace(/- LO CONCRETO, SIEMPRE\.[\s\S]*?explicando lo mismo\./, '- Frases cortas.'),
-      ),
-  },
-
-  {
-    nombre: 'cada-acto-ve-entero-lo-que-ya-se-escribio',
-    dice: '«Me parece que la historia se está repitiendo: en las tomas más adelante se repite lo que ya se dijo antes.» El guion se escribe acto por acto, y al acto siguiente solo le llegaban los ÚLTIMOS 600 CARACTERES del anterior —unas cien palabras—. El acto cuarto sabía cómo terminaba el tercero y nada de lo que dijeron el primero y el segundo, así que volvía a contar el dato duro «para que se entienda» y el espectador lo oía por segunda vez a los diez minutos.',
-    async comprobar(ctx) {
-      const { escribirGuion } = ctx.fn;
-      const fallos = [];
-
-      // Actos largos a propósito: si cupieran en una cola de 600 caracteres, esto
-      // pasaría igual con el fallo puesto y no comprobaría nada.
-      const acto = (n) =>
-        `## Acto ${n}\n\nAPERTURA_DEL_ACTO_${n}: la denuncia entró el catorce de marzo a las nueve y diez. ` +
-        'La agente de guardia anotó el nombre, la edad y la dirección, y dejó constancia de todo. '.repeat(8) +
-        `CIERRE_DEL_ACTO_${n}.`;
-
-      // La única forma de ver QUÉ SE LE PIDE al modelo es mirar lo que sale por la
-      // puerta. Se sustituye la puerta entera: aquí no se llama a nadie.
-      const pedidas = [];
-      const puerta = globalThis.fetch;
-      globalThis.fetch = async (url, opciones) => {
-        pedidas.push(JSON.parse(opciones.body));
-        return { ok: true, status: 200, json: async () => ({ ok: true, texto: acto(pedidas.length) }) };
-      };
-      try {
-        await escribirGuion({
-          tema: 'El caso del puerto',
-          fichas: [{ afirmacion: 'Ardió el puerto.', fuente: 'Sentencia', tipoFuente: 'judicial' }],
-          minutos: 1,
-        });
-      } catch (e) {
-        fallos.push(`El guion no llega a escribirse: ${e.message}`);
-      } finally {
-        globalThis.fetch = puerta;
-      }
-      if (pedidas.length < 3) {
-        return fallos.concat(`Se pidieron ${pedidas.length} actos: no hay costura que comprobar.`);
-      }
-
-      // 1 · El primero no arrastra nada: no hay nada escrito todavía.
-      if (/LO QUE YA LLEVAS ESCRITO/.test(pedidas[0].instruccion)) {
-        fallos.push('Al primer acto se le pasa un contexto de actos anteriores que no existe.');
-      }
-      // 2 · Cada acto ve los anteriores ENTEROS, desde su primera frase. Con la
-      // cola de 600 caracteres la apertura del primero no llegaba al tercero, y
-      // era justo lo que hacía falta para no volver a contarla.
-      for (let n = 1; n < pedidas.length; n++) {
-        for (let k = 1; k <= n; k++) {
-          for (const [dónde, marca] of [['la apertura', `APERTURA_DEL_ACTO_${k}`], ['el cierre', `CIERRE_DEL_ACTO_${k}`]]) {
-            if (!pedidas[n].instruccion.includes(marca)) {
-              fallos.push(`El acto ${n + 1} no ve ${dónde} del acto ${k}: puede volver a contarlo.`);
-            }
-          }
-        }
-        if (!/no vuelvas a contar estos hechos/.test(pedidas[n].instruccion)) {
-          fallos.push(`Al acto ${n + 1} se le dan los anteriores sin decirle que ya están dichos.`);
-        }
-      }
-      // 3 · Y la regla general, que es la que cubre las repeticiones DENTRO de un
-      // mismo acto: un hecho se cuenta una vez en todo el documental.
-      if (!/UNA VEZ EN TODO EL DOCUMENTAL/.test(pedidas[0].sistema || '')) {
-        fallos.push('Las reglas del guion no prohíben contar dos veces el mismo hecho.');
-      }
-      return fallos;
-    },
-    // Se rompe como estaba: del documental ya escrito solo viajaba la cola del
-    // acto anterior. Se sabotea la función que la comprobación EJECUTA —no el
-    // texto fuente, que no la alcanzaría— recortando lo que sale por la puerta.
-    romper: (ctx) =>
-      conFuncion(ctx, 'escribirGuion', async (args) => {
-        const puerta = globalThis.fetch;
-        globalThis.fetch = async (url, opciones) => {
-          const cuerpo = JSON.parse(opciones.body);
-          cuerpo.instruccion = String(cuerpo.instruccion).replace(
-            /LO QUE YA LLEVAS ESCRITO[\s\S]*?\n\nFICHAS DISPONIBLES:/,
-            (bloque) => `CONTEXTO:\n${bloque.slice(-600)}\n\nFICHAS DISPONIBLES:`,
-          );
-          return puerta(url, { ...opciones, body: JSON.stringify(cuerpo) });
-        };
-        try {
-          return await ctx.fn.escribirGuion(args);
-        } finally {
-          globalThis.fetch = puerta;
-        }
-      }),
+    // Se rompe como estaba: un solo sistema, sin el bloque que pone el límite de
+    // cada modo. Va por el contexto porque la comprobación EJECUTA
+    // `sistemaDelGuion`, y editar la fuente no la alcanzaría.
+    romper: (ctx) => conFuncion(ctx, 'sistemaDelGuion', () => ctx.fn.sistemaDelGuion('construir')),
   },
 
   {

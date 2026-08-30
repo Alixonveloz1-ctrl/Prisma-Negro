@@ -16,6 +16,7 @@
 
 import { PREDETERMINADO as SEGMENTACION } from '../comun/segmentar.mjs';
 import { ESTILOS, ESTILO_POR_DEFECTO } from '../comun/estilos.mjs';
+import { GENEROS, GENERO_POR_DEFECTO } from '../comun/generos.mjs';
 import { PREDETERMINADO as MODELO, claveDe, grafiasDe } from '../comun/modelos.mjs';
 
 // Los generadores viven en `comun/modelos.mjs`, en una tabla fija.
@@ -27,7 +28,15 @@ import { PREDETERMINADO as MODELO, claveDe, grafiasDe } from '../comun/modelos.m
 // muerto. La clave no cambia nunca.
 
 export const PREDETERMINADA = {
-  version: 3,
+  version: 4,
+
+  // EL GÉNERO, del catálogo de `comun/generos.mjs`.
+  //
+  // Se guarda solo la clave, igual que el estilo y el generador: la tabla se puede
+  // reescribir entera sin tocar un proyecto guardado. De él salen la estructura de
+  // bloques del episodio, los motivos que vuelven, los arquetipos de la biblioteca
+  // y el estilo visual por defecto.
+  genero: GENERO_POR_DEFECTO,
 
   formato: {
     ancho: 1920,
@@ -47,6 +56,18 @@ export const PREDETERMINADA = {
   texto: { modelo: MODELO.texto },
 
   segmentacion: { ...SEGMENTACION },
+
+  guion: {
+    // LA DURACIÓN OBJETIVO, y vive AQUÍ y no en el campo de la pantalla.
+    //
+    // Estaba escrita en el `value="10"` del `<input>`, así que no se guardaba con
+    // el proyecto: cada recarga volvía a diez minutos y había que acordarse de
+    // subirlo antes de escribir. Un ajuste que se olvida solo no es un ajuste.
+    //
+    // Treinta minutos es el formato del canal. Un episodio de treinta con la
+    // estructura del género y la biblioteca puesta cuesta menos que dos de quince.
+    minutos: 30,
+  },
 
   narracion: {
     // §4.5: el episodio se reparte en bloques de unos 45 segundos.
@@ -83,21 +104,61 @@ export const PREDETERMINADA = {
     // §8.2: la decisión de diseño más importante de un proyecto documental.
     // El valor por defecto es el seguro.
     tipoPorDefecto: 'reconstruccion',
-    // El estilo visual, del catálogo de comun/estilos.mjs.
+    // El estilo visual, del catálogo de comun/estilos.mjs. Vacío = manda el del
+    // género; el catálogo de géneros trae `estiloPorDefecto` y esa es la elección
+    // razonable mientras nadie diga otra cosa.
     estilo: ESTILO_POR_DEFECTO,
-    // Con esto en `true`, la fase de imagen se niega a pedir fotorrealismo de
-    // personas reales identificables. Se puede apagar, pero hay que apagarlo a
-    // mano y sabiendo lo que se hace.
-    prohibirFotorrealismoDePersonasReales: true,
+    // LA BARRERA DE §8.2, APAGADA — y esto es una decisión, no un descuido.
+    //
+    // Existía para no generar fotorrealismo de personas REALES identificables, que
+    // es el fallo que hunde un canal documental. Con casos construidos no hay
+    // ninguna persona real que proteger: la víctima, el sospechoso y el perito no
+    // existen. Encenderla aquí solo conseguiría que todo se resolviera de espaldas
+    // y en penumbra, que es exactamente el salvapantallas con voz en off.
+    //
+    // Lo que NO se apaga y sigue en todas las imágenes: que las personas son
+    // intérpretes anónimos y que nada imita material de archivo auténtico
+    // (`BARRERA_DOCUMENTAL`, en `comun/estilos.mjs`). Un proyecto que siga en modo
+    // documentar puede volver a encender esto a mano.
+    prohibirFotorrealismoDePersonasReales: false,
   },
 
   movimiento: {
     // Vacío: lo pone el sondeo al proyecto.
     modelo: '',
-    // §4.7: es la fase MÁS CARA CON DIFERENCIA. La palanca principal del
-    // presupuesto es qué proporción de tomas lleva movimiento.
-    // §8.5: en documental, esa proporción baja.
-    proporcion: 0.15,
+    // §4.7: sigue siendo la fase MÁS CARA CON DIFERENCIA. Lo que cambia es el
+    // MODELO DE GASTO.
+    //
+    // ─────────────────────────────────────────────────────────────────────────
+    // Una proporción global —«el 15 % de las tomas lleva movimiento»— es
+    // minimizar el coste de CADA episodio: con 165 tomas salen 25 clips, y
+    // veinticinco clips por episodio, episodio tras episodio, no se amortizan
+    // nunca porque no vuelven.
+    //
+    // El modelo correcto para un canal es invertir una vez y amortizar, y para
+    // eso el movimiento se decide POR CATEGORÍA:
+    //
+    //   biblioteca  — los arquetipos permanentes. Video SIEMPRE, y se paga una
+    //                 sola vez para todos los episodios que vengan.
+    //   episodio    — las escenas fuertes de ESTE episodio. Una cuenta, no un
+    //                 porcentaje: un episodio no necesita 25 clips, necesita los
+    //                 doce que importan.
+    //   motivos     — los planos que vuelven, y el relleno. Imagen fija con
+    //                 recorrido de cámara. Cuesta cero.
+    //
+    // Y lo que lo hace viable ya está resuelto en el montaje: la entrada va con
+    // `-stream_loop -1`, así que un clip de seis segundos cubre una toma de
+    // veinticinco repitiéndose. Un plano del perito declarando sirve para todos
+    // sus testimonios sin generar nada más.
+    // ─────────────────────────────────────────────────────────────────────────
+    politica: {
+      // Las escenas fuertes del episodio. Diez a quince es el rango del canal.
+      clipsPorEpisodio: 12,
+      // Los arquetipos de la biblioteca: video siempre.
+      bibliotecaConVideo: true,
+      // Los motivos que vuelven: nunca. Son la imagen fija que se amortiza.
+      motivosConVideo: false,
+    },
     segundosPorClip: 6,
   },
 
@@ -131,18 +192,62 @@ export const PREDETERMINADA = {
   },
 
   investigacion: {
-    // §8.1: sin fichas no hay documental, hay opinión.
+    // DOS MODOS, y la fase tiene la misma forma en los dos: devuelve fichas.
+    //
+    //   documentar — sale a internet y trae hechos comprobables con su fuente.
+    //                Es lo que había, y sigue entero.
+    //   construir  — no busca nada: fabrica el expediente de un caso que no
+    //                ocurrió, ficha a ficha, ANTES de escribir. Es lo que evita
+    //                que el detective se llame Roger en el minuto 12 y Robert en
+    //                el 32: si el caso se construye entero primero, el guion no
+    //                puede contradecirse.
+    modo: 'construir',
+    // §8.1: sin fichas no hay episodio. Sigue en pie con las construidas — de
+    // hecho con más motivo, porque son lo ÚNICO que garantiza la coherencia.
     exigirFichas: true,
     minimoFichasPorEscena: 1,
   },
 };
 
+/** Los dos modos de la fase de investigación. */
+export const MODOS_INVESTIGACION = ['documentar', 'construir'];
+
 function esObjeto(v) {
   return v && typeof v === 'object' && !Array.isArray(v);
 }
 
+/**
+ * Mezcla lo guardado encima de los valores por defecto.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * LA COPIA ES PROFUNDA, Y NO ES UN LUJO.
+ *
+ * Esto hacía `{ ...base }` —una copia SUPERFICIAL— y solo clonaba de verdad las
+ * ramas que venían en `encima`. Una rama que el proyecto guardado no mencionaba
+ * —`investigacion`, pongamos— salía siendo EL MISMO OBJETO que el de
+ * `PREDETERMINADA`. Así que en cuanto `normalizar` escribía ahí dentro un valor
+ * distinto del de fábrica, se lo escribía A LOS VALORES DE FÁBRICA: a partir de
+ * ese momento, en esa misma sesión, TODOS los proyectos que se cargaran nacían
+ * con el valor mudado.
+ *
+ * Llevaba tiempo así y no se veía porque todas las líneas de `normalizar`
+ * asignaban el mismo valor que ya tenía el predeterminado —acotar 0.96 entre 0.5
+ * y 1.5 devuelve 0.96—, así que la escritura era invisible. La mudanza de modo de
+ * investigación fue la primera que escribió algo DISTINTO, y se cazó al instante:
+ * un proyecto nuevo salía en «documentar» porque un proyecto viejo cargado antes
+ * había dejado ese valor clavado en la tabla de fábrica.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
 function mezclar(base, encima) {
-  const salida = Array.isArray(base) ? [...base] : { ...base };
+  if (Array.isArray(base)) {
+    const salida = [...base];
+    for (const [k, v] of Object.entries(encima || {})) if (v !== undefined) salida[k] = v;
+    return salida;
+  }
+  const salida = {};
+  for (const [k, v] of Object.entries(base || {})) {
+    salida[k] = esObjeto(v) ? mezclar(v, {}) : Array.isArray(v) ? [...v] : v;
+  }
   for (const [k, v] of Object.entries(encima || {})) {
     if (esObjeto(v) && esObjeto(base?.[k])) salida[k] = mezclar(base[k], v);
     else if (v !== undefined) salida[k] = v;
@@ -181,6 +286,11 @@ function eleccionDeGenerador(familia, guardado) {
 
 export function normalizar(cruda) {
   const c = mezclar(PREDETERMINADA, cruda || {});
+
+  // LA VERSIÓN GUARDADA, ANTES DE PISARLA. Es lo único que distingue un proyecto
+  // viejo de uno nuevo, y de eso depende que un documental de antes no se
+  // convierta solo en ficción.
+  const versionGuardada = Number(cruda?.version) || 0;
 
   // Las elecciones de generador, traducidas al catálogo actual.
   for (const [familia, campo] of [
@@ -233,7 +343,45 @@ export function normalizar(cruda) {
   }
   if (!ESTILOS.some((e) => e.id === c.imagen.estilo)) c.imagen.estilo = ESTILO_POR_DEFECTO;
 
-  c.movimiento.proporcion = numero(c.movimiento.proporcion, 0, 1, 0.15);
+  // EL GÉNERO, contra el catálogo. Igual que el estilo: una clave que ya no está
+  // en la tabla cae al predeterminado en vez de arrastrar un `undefined` hasta la
+  // fase de guion, tres pantallas más allá.
+  if (!GENEROS.some((g) => g.id === c.genero)) c.genero = GENERO_POR_DEFECTO;
+
+  c.guion.minutos = entero(c.guion.minutos, 3, 40, 30);
+
+  // EL MODO DE INVESTIGACIÓN, Y LA MUDANZA QUE IMPORTA.
+  //
+  // Un proyecto guardado con la versión 3 se investigó documentando: sus fichas
+  // llevan fuente, fecha y cita, y su guion se escribió con la prohibición de
+  // inventar. Dejar que herede el nuevo predeterminado —`construir`— lo
+  // convertiría solo en ficción: la siguiente tanda de fichas se inventaría el
+  // caso y se mezclaría con las reales. Eso no es un cambio de ajuste, es
+  // estropear un documental terminado.
+  //
+  // Así que un proyecto anterior a la versión 4 que no eligió modo se queda en
+  // `documentar`. Uno nuevo, o uno que eligió, manda él.
+  if (!MODOS_INVESTIGACION.includes(c.investigacion.modo)) {
+    c.investigacion.modo = PREDETERMINADA.investigacion.modo;
+  }
+  if (versionGuardada > 0 && versionGuardada < 4 && !cruda?.investigacion?.modo) {
+    c.investigacion.modo = 'documentar';
+  }
+  // Y la barrera de §8.2 iba encendida en aquellos proyectos: se respeta lo que
+  // tuvieran guardado, y si no guardaron nada, lo de entonces.
+  if (versionGuardada > 0 && versionGuardada < 4 && cruda?.imagen?.prohibirFotorrealismoDePersonasReales === undefined) {
+    c.imagen.prohibirFotorrealismoDePersonasReales = true;
+  }
+
+  // La política de movimiento. `clipsPorEpisodio` es una CUENTA, no una
+  // proporción: ver la cabecera de arriba.
+  // La proporción vieja se BORRA, no se conserva. Un proyecto de la versión 3 la
+  // trae guardada y ya no la lee nadie: dejarla ahí sería un ajuste que dice una
+  // cosa mientras el sistema hace otra, que es la peor clase de configuración.
+  delete c.movimiento.proporcion;
+  c.movimiento.politica.clipsPorEpisodio = entero(c.movimiento.politica.clipsPorEpisodio, 0, 60, 12);
+  c.movimiento.politica.bibliotecaConVideo = c.movimiento.politica.bibliotecaConVideo !== false;
+  c.movimiento.politica.motivosConVideo = c.movimiento.politica.motivosConVideo === true;
   c.movimiento.segundosPorClip = [4, 6, 8].includes(c.movimiento.segundosPorClip)
     ? c.movimiento.segundosPorClip
     : 6;

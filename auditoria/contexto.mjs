@@ -148,6 +148,7 @@ async function funcionesPuras() {
   const img = await import('../app/fases/imagen.js');
   const mov = await import('../app/fases/movimiento.js');
   const inv = await import('../app/fases/investigacion.js');
+  const bib = await import('../app/fases/biblioteca.js');
   const aud = await import('../comun/audio.mjs');
   const mus = await import('../app/fases/musica.js');
   const nar = await import('../app/fases/narracion.js');
@@ -175,18 +176,29 @@ async function funcionesPuras() {
     // que CADA UNO se sostiene, no que el primero está bien escrito.
     GENEROS: gen.GENEROS,
     GENERO_POR_DEFECTO: gen.GENERO_POR_DEFECTO,
+    RECURSOS: gen.RECURSOS,
     generoPorId: gen.generoPorId,
     repartirPorTramos: dir.repartirPorTramos,
+    repartirMotivos: dir.repartirMotivos,
+    SEPARACION_MINIMA: dir.SEPARACION_MINIMA,
     actosDe: gui.actosDe,
     huellaDeActos: gui.huellaDeActos,
     escribirGuion: gui.escribirGuion,
+    sistemaDelGuion: gui.sistemaDelGuion,
     dirigir: dir.dirigir,
     heredables: img.heredables,
+    tomasDeBiblioteca: bib.tomasDeBiblioteca,
+    sincronizarBiblioteca: bib.sincronizarBiblioteca,
+    resumenBiblioteca: bib.resumenBiblioteca,
+    ID_BIBLIOTECA: bib.ID_BIBLIOTECA,
     emparejarDentroDelCaso: img.emparejarDentroDelCaso,
     componerInstruccion: img.componerInstruccion,
     planificarImagenes: img.planificar,
     planificarClips: mov.planificar,
     ANGULOS_DE_INVESTIGACION: inv.ANGULOS_DE_INVESTIGACION,
+    comoLista: inv.comoLista,
+    ordenarFichas: inv.ordenarFichas,
+    ROLES_DE_FICHA: inv.ROLES_DE_FICHA,
     repartirPorTiempos: aud.repartirPorTiempos,
     repartirBloque: aud.repartirBloque,
     repartir: aud.repartir,
@@ -210,6 +222,9 @@ async function funcionesPuras() {
     construirHoja: hoj.construirHoja,
     guionEntrega: hoj.guionEntrega,
     textoDePublicacion: met.textoDePublicacion,
+    esFiccion: met.esFiccion,
+    componerPieDeFuentes: met.componerPieDeFuentes,
+    DECLARACION_DE_FICCION: met.DECLARACION_DE_FICCION,
     silencios: aud.silencios,
     componerManifiesto: hoj.componerManifiesto,
     guionFfmpeg: hoj.guionFfmpeg,

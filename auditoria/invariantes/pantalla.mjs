@@ -842,9 +842,24 @@ export const invariantes = [
 
       // El camino que recorre quien monta: preparar, reproducir, parar, y las
       // consultas que no gastan. Todos con el proyecto ya empezado del arnés.
+      //
+      // Y los que tocan catálogos y piezas nuevas —reutilizar, la biblioteca—:
+      // un botón que no se pulsa aquí es un botón cuyo manejador viaja entero al
+      // teléfono, que es literalmente cómo llegó «Can't find variable: dueña».
+      // Los tres se paran solos antes de gastar nada: sin otros casos, sin
+      // imágenes que falten, o preguntando.
       const r = await humoDeLaPantalla({
         parche,
-        pulsa: ['b-preparar-previa', 'b-reproducir', 'b-parar-previa', 'b-inventario', 'b-comprobar'],
+        pulsa: [
+          'b-preparar-previa',
+          'b-reproducir',
+          'b-parar-previa',
+          'b-inventario',
+          'b-comprobar',
+          'b-reutilizar',
+          'b-biblioteca-imagenes',
+          'b-biblioteca-clips',
+        ],
       });
 
       const fallos = [...r.fallos];

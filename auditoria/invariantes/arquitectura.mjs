@@ -1089,6 +1089,84 @@ export const invariantes = [
   },
 
   {
+    nombre: 'un-proyecto-documental-viejo-no-se-vuelve-ficcion-solo',
+    dice: 'El predeterminado nuevo es construir el caso: se INVENTA. Un proyecto guardado antes de eso se investigó documentando —sus fichas llevan fuente, fecha y cita, y su guion se escribió con la prohibición de inventar—, y si hereda el predeterminado de hoy, la siguiente tanda de fichas se fabrica un caso y se mezcla con las reales. Eso no es cambiar un ajuste: es estropear un documental terminado, sin avisar y sin forma de volver atrás.',
+    comprobar(ctx) {
+      const { normalizar, GENERO_POR_DEFECTO } = ctx.fn;
+      const fallos = [];
+
+      // 1 · El proyecto de antes: versión 3, sin haber elegido modo nunca.
+      const viejo = normalizar({ version: 3, narracion: { velocidad: 0.96 } });
+      if (viejo.investigacion.modo !== 'documentar') {
+        fallos.push(
+          `Un proyecto de la versión 3 pasa a modo «${viejo.investigacion.modo}»: ` +
+            'se pondría a inventarse el caso que ya estaba investigado.',
+        );
+      }
+      if (viejo.imagen.prohibirFotorrealismoDePersonasReales !== true) {
+        fallos.push('Un proyecto documental viejo pierde la barrera de §8.2, que sí tenía puesta.');
+      }
+
+      // 2 · El proyecto nuevo manda el predeterminado de hoy.
+      const nuevo = normalizar({});
+      if (nuevo.investigacion.modo !== 'construir') {
+        fallos.push(`Un proyecto nuevo no arranca en construir, sino en «${nuevo.investigacion.modo}».`);
+      }
+      if (nuevo.guion.minutos !== 30) fallos.push(`La duración objetivo por defecto es ${nuevo.guion.minutos} y no 30.`);
+
+      // 3 · Y una elección EXPRESA se respeta, sea vieja o nueva. Que la mudanza
+      // no pise lo que la persona decidió es la mitad del §7.2.
+      const elegido = normalizar({ version: 3, investigacion: { modo: 'construir' } });
+      if (elegido.investigacion.modo !== 'construir') {
+        fallos.push('Un proyecto viejo que SÍ eligió construir se revierte a documentar: se le cambia la decisión.');
+      }
+
+      // 4 · Idempotente. Normalizar dos veces tiene que dar lo mismo, o la mudanza
+      // se aplicaría otra vez sobre lo ya mudado en cada carga.
+      const dosVeces = normalizar(viejo);
+      if (dosVeces.investigacion.modo !== 'documentar' || dosVeces.version !== 4) {
+        fallos.push('Normalizar dos veces no da lo mismo: la mudanza no es idempotente.');
+      }
+
+      // 5 · Y NORMALIZAR NO PUEDE ESCRIBIR EN LOS VALORES DE FÁBRICA.
+      //
+      // La mezcla era una copia superficial: una rama que el proyecto guardado no
+      // mencionaba salía siendo el MISMO objeto que el de `PREDETERMINADA`, y
+      // escribir ahí dentro mudaba la tabla de fábrica para toda la sesión. No se
+      // veía porque hasta ahora todas las líneas escribían el mismo valor que ya
+      // había. Se comprueba cargando un proyecto viejo y mirando qué le pasa al
+      // siguiente proyecto NUEVO, que es exactamente como se manifestaba.
+      normalizar({ version: 3 });
+      const despues = normalizar({});
+      if (despues.investigacion.modo !== 'construir') {
+        fallos.push(
+          'Cargar un proyecto viejo deja el modo clavado en los valores de fábrica: ' +
+            'el siguiente proyecto nuevo nace ya mudado.',
+        );
+      }
+      if (despues.imagen.prohibirFotorrealismoDePersonasReales !== false) {
+        fallos.push('Cargar un proyecto viejo le deja la barrera de §8.2 puesta al siguiente proyecto nuevo.');
+      }
+
+      // 6 · El género se valida contra el catálogo y la proporción vieja se borra.
+      if (normalizar({ genero: 'no-existe' }).genero !== GENERO_POR_DEFECTO) {
+        fallos.push('Un género que ya no está en el catálogo no cae al predeterminado.');
+      }
+      if (normalizar({ version: 3, movimiento: { proporcion: 0.15 } }).movimiento.proporcion !== undefined) {
+        fallos.push('La proporción de movimiento vieja sobrevive: un ajuste guardado que ya no lee nadie.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaría sin la mudanza: el predeterminado de hoy se aplica a
+    // todo el mundo, tuviera lo que tuviera guardado.
+    romper: (ctx) =>
+      conFuncion(ctx, 'normalizar', (cruda) => {
+        const c = ctx.fn.normalizar(cruda);
+        return { ...c, investigacion: { ...c.investigacion, modo: 'construir' } };
+      }),
+  },
+
+  {
     nombre: 'la-eleccion-de-generador-manda',
     dice: 'El generador que elige la persona es el que se usa, y no se lo cambia nadie. La aplicación llegó a re-elegirlo en cada carga «para subirlo sola», y eso es cambiarle el precio a alguien por debajo sin avisar.',
     async comprobar(ctx) {

@@ -13,11 +13,10 @@
 
 import { llamar } from '../api.js';
 import { comoInstruccion } from './director.js';
-
-// Cuánto pesa cada tipo de fuente. Un dato de una sentencia y uno de un blog no
-// valen lo mismo, y el guion tiene que apoyarse antes en el primero.
-const PESO = { oficial: 6, judicial: 6, policial: 5, academica: 4, prensa: 3, testimonio: 2, otra: 1 };
-const PESO_FUENTE = (f) => (PESO[f.tipoFuente] || 1) - (f.incierto ? 2 : 0);
+// Las fichas se escriben en UN solo sitio: hay dos clases —documentadas y
+// construidas— y componer la lista aquí acabaría con dos formatos distintos y una
+// fase leyendo «fuente: undefined».
+import { comoLista } from './investigacion.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // «No es un noticiero, es un documental, pero tiene que ser entretenido.»
@@ -91,10 +90,31 @@ CÓMO NO SE CUENTA — y esto es lo que lo convierte en noticiero
   leído entero rompe el hechizo — es dato de ficha, no de boca de narrador. Las
   siglas solo si se pronuncian como palabra conocida (FBI sí; NHTSA no).
 - Nada de "en este video vamos a ver". Empieza por el hecho.
-- Nada de preguntas retóricas de relleno, ni de "lo que nadie te contó", ni de
-  hablarle al espectador ("imagina que...", "y tú, ¿qué harías?").
-- Sin moraleja y sin cerrar con una reflexión general.
+- Nada de preguntas retóricas de relleno, ni de "lo que nadie te contó".
+- Sin moraleja: no cierres explicándole al espectador qué tiene que sentir.`;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LAS DOS LICENCIAS, Y POR QUÉ SON DOS BLOQUES Y NO UNO.
+//
+// El sistema de arriba —el oficio— vale para las dos clases de episodio. Lo que
+// cambia es qué se puede escribir que no esté en el material, y eso depende de
+// cómo se hicieron las fichas:
+//
+//   documentar — fichas con fuente, fecha y cita de algo que pasó de verdad.
+//                Inventar un detalle ahí es mentir sobre personas reales, y es
+//                el fallo que hunde un canal. La prohibición se queda ENTERA.
+//   construir  — fichas de un caso que no ocurrió, declarado como ficción en la
+//                cabecera del episodio. No hay a quién mentir: lo que había que
+//                proteger no existe. Lo que sí puede romper la pieza es la
+//                incoherencia, y ese pasa a ser el límite.
+//
+// Que sean dos bloques y no uno reescrito es lo que permite que un proyecto
+// documental viejo siga siendo un documental. Si el guion tuviera un solo
+// sistema, cambiar el modo en Ajustes no bastaría: el episodio ya terminado se
+// reescribiría inventando.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RIGOR = `
 LO QUE NO SE NEGOCIA — nada de lo de arriba autoriza a inventar
 - Cada afirmación factual sale de una ficha. Si una ficha marca algo como
   discutido, el guion lo dice discutido: "según el expediente...", "la versión
@@ -107,11 +127,65 @@ LO QUE NO SE NEGOCIA — nada de lo de arriba autoriza a inventar
   lo de [testimonio] u [otra] se cuenta como lo que es ("según relató", "se ha
   dicho, sin que conste probado").
 - La tensión sale de administrar lo que HAY, nunca de sugerir lo que no consta.
+- Y no le hables al espectador: nada de "imagina que...", ni de "y tú, ¿qué
+  harías?". Aquí los hechos son de alguien y se cuentan, no se recrean encima.`;
 
+const MATERIAL_CONSTRUIDO = `
+EL MATERIAL
+Trabajas sobre fichas construidas: el caso es una obra de ficción, declarada como
+tal en la cabecera del episodio. Eso cambia una cosa y solo una: el detalle
+concreto que la escena necesite lo pones tú. La hora exacta, la temperatura de
+esa mañana, la marca de las botas, la edad del capataz, el número estampado en
+la ficha de latón. Nada de eso tiene que estar en el material.
+El límite es la coherencia: no puedes contradecir una ficha, y un nombre, una
+fecha o una edad se escriben una vez y no cambian en todo el episodio. Un
+detalle inventado que choca con otro anterior no es color, es lo único que
+destruye la pieza entera.
+Cada ficha viene con su ROL entre paréntesis —victima, sospechoso, testigo,
+objeto, lugar, fecha, pistafalsa, revelacion—: eso te dice qué papel juega en el
+caso y en qué bloque toca sacarla. La revelación no se adelanta.
+
+EL GANCHO — solo el primer acto, y son cuarenta segundos
+Empieza EN SEGUNDA PERSONA y dentro de la acción, antes de contextualizar nada.
+«Imagina esta escena. Te han contratado para talar unos robles viejos… retiras
+la madera podrida con las manos.» El espectador hace, no mira.
+Termina EXACTAMENTE en el instante del hallazgo y corta. No expliques todavía
+qué es, ni de qué año, ni dónde. Eso viene después de la cabecera.
+
+LOS TESTIMONIOS
+Cada dos o tres minutos entra alguien: quien encontró el cuerpo, el perito, el
+detective, un familiar. Habla en primera persona, en presente, con voz de
+persona y no de informe: frases que empiezan a medias, un detalle que no venía
+a cuento, una duda.
+Se marcan así, en su propio párrafo, y la línea de arriba dice quién es:
+    > Marcos Elizalde, capataz de la cuadrilla
+    Habíamos revisado el árbol desde afuera. Tenía humedad y la corteza
+    levantada, pero eso es normal en árboles viejos.
+El narrador lo presenta antes por su nombre y su cargo. No lo repitas después.
+Esa línea que empieza por «> » NO SE NARRA: es la ficha del que habla.
+
+EL CIERRE
+Resuelve el caso, devuelve el nombre, cierra con la familia. Y deja UNA cosa sin
+explicar —una sola, y que sea concreta: cómo llegó el cuerpo hasta ahí, qué
+significaba una palabra del papel, por qué nadie denunció. Formúlala como
+pregunta y no la contestes. Es lo que se discute en los comentarios.`;
+
+const FORMATO = `
 FORMATO
 - Estructura con "## " los cambios de escena. El título de escena NO se narra.
+- Una línea que empieza por "> " declara quién habla en el testimonio que viene
+  debajo, y tampoco se narra.
 - Separa con una línea en blanco los bloques que deben ir en tomas distintas. Esa
   línea en blanco es una PAUSA: úsala después de un dato duro, para dejarlo caer.`;
+
+/**
+ * Las reglas del guion para el modo en que se hicieron las fichas.
+ *
+ * `construir` trae la licencia de inventar CON SU LÍMITE; `documentar` trae la
+ * prohibición entera. El tronco —el oficio— es el mismo en los dos.
+ */
+export const sistemaDelGuion = (modo = 'construir') =>
+  SISTEMA + (modo === 'documentar' ? RIGOR : MATERIAL_CONSTRUIDO) + '\n' + FORMATO;
 
 /**
  * Genera el guion a partir de las fichas (§8.1: el guion se genera A PARTIR DE las
@@ -145,6 +219,12 @@ export async function escribirGuion({
   fichas,
   minutos = 10,
   tratamiento = null,
+  // Cómo se hicieron las fichas, y con eso qué se puede escribir que no esté en
+  // ellas. Ver `sistemaDelGuion`.
+  modo = 'construir',
+  // El género, del catálogo. De él sale la estructura de bloques cuando el
+  // director no dejó una suya.
+  genero = null,
   anteriores = [],
   // Los actos que YA SE ESCRIBIERON en un intento anterior que se cayó a mitad, y
   // el aviso de que un acto nuevo acaba de salir. Juntos son lo que hace que un
@@ -164,21 +244,13 @@ export async function escribirGuion({
 
   // Unas 145 palabras por minuto de narración documental pausada.
   const palabras = Math.round(minutos * 145);
-  const actos = actosDe(tratamiento, minutos);
+  const actos = actosDe(tratamiento, minutos, genero);
 
-  // Las fichas van ORDENADAS por solidez de la fuente. El modelo se apoya en lo
-  // primero que lee, así que lo primero tiene que ser lo mejor sostenido: una
-  // sentencia antes que un blog.
-  const listaFichas = [...fichas]
-    .sort((a, b) => PESO_FUENTE(b) - PESO_FUENTE(a))
-    .map(
-      (f, i) =>
-        `[${i}] ${f.afirmacion}\n` +
-        `    fuente: ${f.fuente}${f.fecha ? ` (${f.fecha})` : ''} [${f.tipoFuente || 'otra'}]` +
-        `${f.incierto ? ' — DISPUTADO, dilo como discutido' : ''}\n` +
-        (f.cita ? `    cita: «${f.cita}»\n` : ''),
-    )
-    .join('\n');
+  // Las fichas, ordenadas y escritas por la puerta común. Documentadas: por
+  // solidez de la fuente, porque el modelo se apoya en lo primero que lee.
+  // Construidas: en el orden en que se levantó el caso, que es el orden en que se
+  // cuenta.
+  const listaFichas = comoLista(fichas, { tope: 120 });
 
   const partes = [];
   for (const [n, acto] of actos.entries()) {
@@ -195,7 +267,7 @@ export async function escribirGuion({
     const r = await llamar(
       'texto',
       {
-        sistema: SISTEMA,
+        sistema: sistemaDelGuion(modo),
         instruccion:
           `Tema: ${tema}\n` +
           (angulo ? `Ángulo: ${angulo}\n` : '') +
@@ -286,8 +358,8 @@ export const contarPalabras = (t) => (String(t).trim().match(/\S+/g) || []).leng
  * director cambió la estructura —otros títulos, otros minutos—, reanudar sobre
  * los viejos pegaría dos documentales distintos, y eso es peor que reescribir.
  */
-export const huellaDeActos = (tratamiento, minutos) =>
-  actosDe(tratamiento, minutos)
+export const huellaDeActos = (tratamiento, minutos, genero = null) =>
+  actosDe(tratamiento, minutos, genero)
     .map((a) => `${a.titulo}·${a.minutos}`)
     .join(' | ');
 
@@ -298,7 +370,7 @@ export const huellaDeActos = (tratamiento, minutos) =>
  * qué hace cada uno y cuánto dura. Si no la hay, se parte en tres —planteamiento,
  * desarrollo, cierre— para no escribirlo todo de una llamada de todas formas.
  */
-export function actosDe(tratamiento, minutos) {
+export function actosDe(tratamiento, minutos, genero = null) {
   const suya = (tratamiento?.estructura || []).filter((a) => a && a.titulo);
   if (suya.length) {
     const total = suya.reduce((s, a) => s + (Number(a.minutos) || 0), 0) || minutos;
@@ -311,6 +383,28 @@ export function actosDe(tratamiento, minutos) {
       minutos: Math.max(1, +((Number(a.minutos) || total / suya.length) * (minutos / total)).toFixed(1)),
     }));
   }
+
+  // LA ESTRUCTURA DEL GÉNERO, cuando no hay tratamiento.
+  //
+  // Los pesos del catálogo suman 1 y reparten los minutos pedidos. Antes de esto
+  // había tres actos genéricos —caso, investigación, cierre— para cualquier
+  // episodio de cualquier clase, que es lo mismo que no tener estructura: un
+  // crimen frío no se cuenta igual que una supervivencia, y la diferencia son
+  // exactamente los bloques y sus proporciones.
+  //
+  // El mínimo de un minuto por bloque no es decorativo: el gancho pesa 0.03, y en
+  // un episodio corto eso da cero. Un acto de cero minutos se le pide al modelo
+  // igual y sale un acto entero, descuadrando todo lo demás.
+  const bloques = genero?.bloques || [];
+  if (bloques.length) {
+    return bloques.map((b) => ({
+      titulo: b.nombre,
+      funcion: b.funcion || 'avanzar el relato',
+      contenido: '',
+      minutos: Math.max(1, +(minutos * (Number(b.peso) || 0)).toFixed(1)),
+    }));
+  }
+
   return [
     { titulo: 'El caso', funcion: 'plantear qué pasó y por qué importa', contenido: '', minutos: minutos * 0.3 },
     { titulo: 'La investigación', funcion: 'lo que se supo y cómo', contenido: '', minutos: minutos * 0.45 },
@@ -319,18 +413,19 @@ export function actosDe(tratamiento, minutos) {
 }
 
 /** Reescribe una escena sin tocar el resto (§4: cada fase se puede repetir sola). */
-export async function reescribirEscena({ guion, tituloEscena, indicacion, fichas, senal }) {
+export async function reescribirEscena({ guion, tituloEscena, indicacion, fichas, modo = 'construir', senal }) {
   const r = await llamar(
     'texto',
     {
-      sistema: SISTEMA,
+      // El MISMO sistema que escribió el guion, con la misma licencia. Reescribir
+      // una escena con otras reglas mete en el episodio un párrafo que juega a
+      // otra cosa que el resto.
+      sistema: sistemaDelGuion(modo),
       instruccion:
         `GUION COMPLETO (para contexto):\n${guion}\n\n` +
         `Reescribe ÚNICAMENTE la escena «${tituloEscena}».\n` +
         `Indicación: ${indicacion}\n\n` +
-        (fichas?.length
-          ? `FICHAS:\n${fichas.map((f, i) => `[${i}] ${f.afirmacion} — ${f.fuente}`).join('\n')}\n\n`
-          : '') +
+        (fichas?.length ? `FICHAS:\n${comoLista(fichas, { tope: 80 })}\n\n` : '') +
         `Devuelve SOLO el texto nuevo de esa escena, empezando por su línea "## ".`,
       temperatura: 0.75,
     },

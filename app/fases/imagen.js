@@ -83,9 +83,37 @@ export function heredables(tomas, piezasAnteriores) {
   // el que más ahorra: un clip cuesta muchas veces lo que una imagen.
   const imagenes = new Map();
   const clips = new Map();
+  // Y UN TERCER BANCO: EL DE ARQUETIPOS.
+  //
+  // Los dos de arriba buscan por la huella del plano —lugar, encuadre, luz— y eso
+  // solo encuentra lo que coincide por casualidad. El perito forense de este
+  // episodio no coincide con el del anterior salvo que el director escriba las
+  // tres cosas letra por letra igual, y no lo hace: escribe «el laboratorio» una
+  // vez y «la sala del laboratorio» la siguiente.
+  //
+  // El arquetipo sí es una clave estable —sale del catálogo, no de la redacción—,
+  // así que una toma marcada con `personaje: 'perito'` encuentra el plano del
+  // perito de la biblioteca aunque el texto no se parezca en nada. Es lo que
+  // convierte la biblioteca en algo que se usa solo, en vez de en un banco que
+  // hay que acertar.
+  const porArquetipo = new Map();
   for (const z of piezasAnteriores) {
     for (const t of z.tomas || []) {
       if (!t.plano) continue;
+      const arquetipo = String(t.personaje || t.plano?.personaje || '').trim().toLowerCase();
+      if (arquetipo && !porArquetipo.has(arquetipo)) {
+        const conVid = t.video === 'ok' || !!t.heredadoVid;
+        const conImg = t.imagen === 'ok' || !!t.heredado;
+        if (conVid || conImg) {
+          porArquetipo.set(arquetipo, {
+            pieza: z.id,
+            i: t.i,
+            titulo: z.titulo,
+            vid: conVid ? t.heredadoVid || claveToma(z.id, t.i, 'vid') : null,
+            img: conImg ? t.heredado || claveToma(z.id, t.i, 'img') : null,
+          });
+        }
+      }
       const k = huellaDePlano(t);
       if (!k) continue;
 
@@ -155,12 +183,19 @@ export function heredables(tomas, piezasAnteriores) {
     if (!t.plano) continue;
     const k = huellaDePlano(t);
 
+    // EL ARQUETIPO MANDA SOBRE LA HUELLA. Si esta toma es el testimonio del
+    // perito y la biblioteca tiene al perito, ese es el plano — da igual cómo se
+    // haya redactado el lugar en este episodio. Es la resolución que de verdad
+    // ahorra, porque no depende de que dos textos coincidan.
+    const arquetipo = String(t.personaje || t.plano?.personaje || '').trim().toLowerCase();
+    const dela = arquetipo ? porArquetipo.get(arquetipo) : null;
+
     if (!t.heredadoVid && t.video !== 'ok') {
-      const c = clips.get(k);
+      const c = dela?.vid ? { ...dela, clave: dela.vid } : clips.get(k);
       if (c) salida.push({ i: t.i, de: c, tipo: 'vid' });
     }
     if (!t.heredado && t.imagen !== 'ok') {
-      const g = imagenes.get(k);
+      const g = dela?.img ? { ...dela, clave: dela.img } : imagenes.get(k);
       if (g) salida.push({ i: t.i, de: g, tipo: 'img' });
     }
   }

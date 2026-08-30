@@ -19,8 +19,10 @@ import {
   etiquetaDe, CATALOGO, PREDETERMINADO,
   SIN_VELOCIDAD_NI_TONO, SIN_TONO, SIN_SSML,
 } from '../comun/modelos.mjs';
+import { pintarSelector } from './config.js';
 import { segmentarVerificado } from '../comun/segmentar.mjs';
 import { TEMAS, EPOCAS, EPOCA_POR_DEFECTO, temaPorId, epocaPorId } from '../comun/temas.mjs';
+import { GENEROS, generoPorId } from '../comun/generos.mjs';
 import { ESTILOS, estiloPorId } from '../comun/estilos.mjs';
 import * as investigacion from './fases/investigacion.js';
 import * as guionFase from './fases/guion.js';
@@ -29,6 +31,7 @@ import * as director from './fases/director.js';
 import * as narracion from './fases/narracion.js';
 import * as imagenFase from './fases/imagen.js';
 import * as movimiento from './fases/movimiento.js';
+import * as bibliotecaFase from './fases/biblioteca.js';
 import * as musica from './fases/musica.js';
 import * as miniatura from './fases/miniatura.js';
 import * as metadatos from './fases/metadatos.js';
@@ -384,9 +387,44 @@ function pintarFiltros() {
       o.textContent = e.nombre;
       se.appendChild(o);
     }
+    // El género. De él salen la estructura del episodio, los motivos que vuelven
+    // y los arquetipos de la biblioteca, así que se elige ANTES de nada — aquí, al
+    // lado del tema, y no escondido en Ajustes.
+    const sg = $('genero');
+    sg.innerHTML = '';
+    for (const g of GENEROS) {
+      const o = document.createElement('option');
+      o.value = g.id;
+      o.textContent = g.nombre;
+      sg.appendChild(o);
+    }
   }
   st.value = P.temaId || '';
   $('epoca').value = P.epocaId || EPOCA_POR_DEFECTO;
+  // §7.3: el que repinta DEVUELVE el valor con el que se quedó y quien llama lo
+  // ESCRIBE. Un género retirado del catálogo se corregía en el selector y la
+  // configuración conservaba el viejo: la pantalla decía una cosa y el estado otra.
+  P.config.genero = pintarSelector(
+    $('genero'),
+    GENEROS.map((g) => ({ id: g.id, etiqueta: g.nombre })),
+    P.config.genero,
+  );
+  $('genero-dice').textContent = generoPorId(P.config.genero)?.resumen || '';
+}
+
+/**
+ * La duración objetivo, del campo a la configuración.
+ *
+ * Vivía en el `value="10"` del `<input>` y no se guardaba con el proyecto: cada
+ * recarga volvía a diez minutos. Ahora el campo es la cara de `config.guion.minutos`
+ * y quien lo lee lo escribe, que es §7.3 otra vez.
+ */
+function minutosObjetivo() {
+  const n = Number($('minutos').value);
+  const bueno = Number.isFinite(n) ? Math.min(40, Math.max(3, Math.round(n))) : P.config.guion.minutos;
+  P.config.guion.minutos = bueno;
+  $('minutos').value = bueno;
+  return bueno;
 }
 
 function pintarTodo() {
@@ -544,20 +582,30 @@ function pintarPasos() {
 async function buscar() {
   P.temaId = $('tema').value;
   P.epocaId = $('epoca').value;
+  P.config.genero = $('genero').value;
   const tema = temaPorId(P.temaId);
   const epoca = epocaPorId(P.epocaId);
+  const genero = generoPorId(P.config.genero);
+  const construyendo = P.config.investigacion.modo === 'construir';
 
   $('zona-casos').innerHTML =
-    `<p class="nota" style="margin-top:14px">Buscando en internet` +
-    `${tema ? ` · ${escapar(tema.nombre)}` : ''} · ${escapar(epoca.nombre.toLowerCase())}…</p>`;
+    `<p class="nota" style="margin-top:14px">` +
+    (construyendo
+      ? `Inventando casos de ${escapar(genero.nombre.toLowerCase())}${tema ? ` · ${escapar(tema.nombre)}` : ''}…`
+      : `Buscando en internet${tema ? ` · ${escapar(tema.nombre)}` : ''} · ${escapar(epoca.nombre.toLowerCase())}…`) +
+    `</p>`;
 
-  const r = await investigacion.buscarCasos({
-    tema,
-    epoca,
-    // No repetir lo ya descartado: buscar dos veces y que salgan los mismos cinco es
-    // la forma más rápida de que la herramienta parezca rota.
-    evitar: P.casosVistos,
-  });
+  // Los dos modos devuelven LO MISMO —una lista de casos con la misma forma— y por
+  // eso todo lo de abajo, incluido `pintarCasos`, no sabe de dónde salieron.
+  const r = construyendo
+    ? await investigacion.proponerCasos({ genero, tema: tema?.nombre || '', evitar: P.casosVistos })
+    : await investigacion.buscarCasos({
+        tema,
+        epoca,
+        // No repetir lo ya descartado: buscar dos veces y que salgan los mismos
+        // cinco es la forma más rápida de que la herramienta parezca rota.
+        evitar: P.casosVistos,
+      });
   casos = r.casos;
   P.casosVistos = [...new Set([...P.casosVistos, ...casos.map((c) => c.titulo)])].slice(-60);
   await guardar();
@@ -676,21 +724,37 @@ async function buscarFichas(mas) {
 accion('b-fichas', () => buscarFichas(false), 'investigacion');
 accion('b-mas-fichas', () => buscarFichas(true), 'investigacion');
 
+/** Cómo se llama cada papel de una ficha construida, para leerlo. */
+const NOMBRE_ROL = {
+  victima: 'víctima', sospechoso: 'sospechoso', testigo: 'testigo', objeto: 'objeto',
+  lugar: 'lugar', fecha: 'fecha', pistafalsa: 'pista falsa', revelacion: 'revelación',
+};
+
 function pintarFichas() {
   $('fichas').innerHTML = pieza().fichas.length
     ? pieza().fichas
-        .map(
-          (f) =>
-            `<div class="ficha"><div class="cab">` +
-            `<span class="pastilla ${f.incierto ? 'p-aviso' : 'p-ok'}">${f.incierto ? 'disputado' : escapar(f.fiabilidad)}</span>` +
-            `<span class="pastilla p-tipo">${escapar(f.tipoFuente)}</span>` +
-            `<span>${escapar(f.fuente)}${f.fecha ? ' · ' + escapar(f.fecha) : ''}</span></div>` +
-            `<p>${escapar(f.afirmacion)}</p>` +
-            (f.cita ? `<div class="cita">«${escapar(f.cita)}»</div>` : '') +
-            `</div>`,
+        .map((f) =>
+          // Una ficha construida NO enseña fiabilidad ni fuente: no las tiene, y
+          // pintar «sin calificar · otra ·» al lado de cada una es ruido que además
+          // insinúa que hubo una fuente. Enseña su PAPEL en el caso, que es lo que
+          // de verdad la distingue de las demás.
+          f.construida
+            ? `<div class="ficha"><div class="cab">` +
+              `<span class="pastilla p-tipo">${escapar(NOMBRE_ROL[f.rol] || f.rol || 'pieza')}</span>` +
+              `<span>${f.fecha ? escapar(f.fecha) : 'construida'}</span></div>` +
+              `<p>${escapar(f.afirmacion)}</p>` +
+              (f.cita ? `<div class="cita">«${escapar(f.cita)}»</div>` : '') +
+              `</div>`
+            : `<div class="ficha"><div class="cab">` +
+              `<span class="pastilla ${f.incierto ? 'p-aviso' : 'p-ok'}">${f.incierto ? 'disputado' : escapar(f.fiabilidad)}</span>` +
+              `<span class="pastilla p-tipo">${escapar(f.tipoFuente)}</span>` +
+              `<span>${escapar(f.fuente)}${f.fecha ? ' · ' + escapar(f.fecha) : ''}</span></div>` +
+              `<p>${escapar(f.afirmacion)}</p>` +
+              (f.cita ? `<div class="cita">«${escapar(f.cita)}»</div>` : '') +
+              `</div>`,
         )
         .join('')
-    : '<p class="nota">Todavía no hay fichas. Sin ellas el guion sería opinión, no documental.</p>';
+    : '<p class="nota">Todavía no hay fichas. Sin ellas no hay episodio: son de donde sale el guion.</p>';
 }
 
 /**
@@ -704,6 +768,35 @@ accion(
   'b-investigar-fondo',
   async () => {
     if (!pieza().caso) throw new Error('Elige un caso primero, en el paso 1.');
+
+    // MODO CONSTRUIR: UNA SOLA LLAMADA, y no es por ahorrar.
+    //
+    // Los seis ángulos existen porque una sola pregunta a internet trae una sola
+    // versión. Construyendo es al revés: seis llamadas fabricarían seis casos que
+    // se contradicen —el detective que se llama Roger en el minuto doce y Robert
+    // en el treinta y dos—, que es justo lo que este modo existe para evitar. El
+    // expediente se levanta entero de una vez o no se sostiene.
+    if (P.config.investigacion.modo === 'construir') {
+      avisar('paso2', 'Construyendo el expediente del caso, entero y de una vez…');
+      const fichas = await investigacion.construirCaso({
+        caso: pieza().caso,
+        genero: generoPorId(P.config.genero),
+      });
+      if (!fichas.length) throw new Error('El expediente salió vacío. Vuelve a darle.');
+      // Se REEMPLAZA, no se fusiona. Fusionar dos expedientes construidos junta dos
+      // casos distintos en uno, y lo único que este modo garantiza es la coherencia.
+      pieza().fichas = fichas;
+      await guardar();
+      pintarFichas();
+      pintarReparto();
+      pintarCasoElegido();
+      pintarPasos();
+      return avisar(
+        'paso2',
+        `Expediente construido: ${fichas.length} fichas. Ya puedes dirigir y escribir el guion.`,
+        'bueno',
+      );
+    }
 
     const r = await colaInvestiga.ejecutar(
       'investigación',
@@ -738,8 +831,11 @@ function pintarReparto() {
   const NOMBRE = {
     oficial: 'oficiales', judicial: 'judiciales', policial: 'policiales',
     prensa: 'prensa', academica: 'académicas', testimonio: 'testimonios', otra: 'otras',
+    ...NOMBRE_ROL,
   };
-  const SOLIDA = ['oficial', 'judicial', 'policial', 'academica'];
+  // En un expediente construido, lo «sólido» es que estén las piezas que resuelven
+  // el caso: sin revelación no hay final, y sin pista falsa no hay tercer acto.
+  const SOLIDA = ['oficial', 'judicial', 'policial', 'academica', 'revelacion', 'pistafalsa'];
   const caja = $('reparto-fuentes');
   if (!caja) return;
   caja.innerHTML = Object.keys(r).length
@@ -769,7 +865,8 @@ accion(
     const tr = await director.dirigirPieza({
       caso: pieza().caso,
       fichas: pieza().fichas,
-      minutos: Number($('minutos').value) || 10,
+      minutos: minutosObjetivo(),
+      genero: generoPorId(P.config.genero),
       anteriores: yaContado,
     });
     // En una continuación, el ASPECTO lo pone la primera parte, no el director:
@@ -782,7 +879,6 @@ accion(
     // El ritmo que pide el director entra en la configuración: es él quien sabe si
     // esta pieza va lenta o va nerviosa. El tope de gasto sigue siendo del usuario.
     P.config.segmentacion.segundosObjetivo = tr.ritmo.segundosPorToma;
-    P.config.movimiento.proporcion = tr.ritmo.proporcionMovimiento;
     P = estado.sanear(P);
 
     await guardar();
@@ -841,19 +937,23 @@ accion(
       );
     }
     avisar('paso3', `${pieza().fichas.length} fichas. Escribiendo el guion…`);
-    const minutos = Number($('minutos').value) || 10;
+    const minutos = minutosObjetivo();
 
     // CADA ACTO PAGADO SE GUARDA AL LLEGAR, y si el intento anterior se cayó a
     // mitad, sus actos se recogen en vez de reescribirse — solo si la estructura
     // no cambió desde entonces: reanudar sobre actos de otra estructura pegaría
     // dos documentales distintos.
-    const huella = guionFase.huellaDeActos(pieza().tratamiento, minutos);
+    const huella = guionFase.huellaDeActos(pieza().tratamiento, minutos, generoPorId(P.config.genero));
     const parcial = pieza().actosEscritos;
     const texto = await guionFase.escribirGuion({
       tema: pieza().tema,
       fichas: pieza().fichas,
       minutos,
       tratamiento: pieza().tratamiento,
+      // Cómo se hicieron las fichas decide qué puede escribir el guion que no
+      // esté en ellas; el género, la estructura de bloques.
+      modo: P.config.investigacion.modo,
+      genero: generoPorId(P.config.genero),
       anteriores: loYaContado(),
       yaEscritos: parcial?.huella === huella && Array.isArray(parcial.partes) ? parcial.partes : [],
       alActo: async (parte, n) => {
@@ -893,16 +993,20 @@ accion(
 accion(
   'b-escribir',
   async () => {
-    const minutos = Number($('minutos').value) || 10;
+    const minutos = minutosObjetivo();
     // El mismo cuaderno de actos que en el paso 3: un intento caído a mitad se
     // reanuda desde el acto que faltaba, se escriba desde donde se escriba.
-    const huella = guionFase.huellaDeActos(pieza().tratamiento, minutos);
+    const huella = guionFase.huellaDeActos(pieza().tratamiento, minutos, generoPorId(P.config.genero));
     const parcial = pieza().actosEscritos;
     const texto = await guionFase.escribirGuion({
       tema: pieza().tema,
       fichas: pieza().fichas,
       minutos,
       tratamiento: pieza().tratamiento,
+      // Cómo se hicieron las fichas decide qué puede escribir el guion que no
+      // esté en ellas; el género, la estructura de bloques.
+      modo: P.config.investigacion.modo,
+      genero: generoPorId(P.config.genero),
       anteriores: loYaContado(),
       yaEscritos: parcial?.huella === huella && Array.isArray(parcial.partes) ? parcial.partes : [],
       alActo: async (parte, n) => {
@@ -1054,6 +1158,7 @@ accion(
       tema: pieza().tema,
       config: P.config,
       tratamiento: pieza().tratamiento,
+      genero: generoPorId(P.config.genero),
       // Son varias llamadas y algunas tardan: sin esto parece que se ha colgado.
       alAvanzar: (hechas, total) =>
         avisar('tomas', `Dirigiendo… ${hechas} de ${total} tomas.`),
@@ -1066,6 +1171,11 @@ accion(
     });
     pieza().tomas = tomas;
     await guardar();
+    // Contra la biblioteca, AHORA: si la toma del perito no queda resuelta antes
+    // de darle a «Imágenes», se genera un perito nuevo y el de la biblioteca se
+    // queda en el estante. El paso caro no puede depender de acordarse de pulsar
+    // algo antes.
+    const dela = await resolverContraBiblioteca(pieza());
     pintarTomas();
     const sin = direccion.sinDirigir(tomas);
     avisar(
@@ -1073,6 +1183,7 @@ accion(
       sin.length
         ? `${sin.length} de ${tomas.length} tomas se quedaron sin plano (${sin.slice(0, 8).join(', ')}…). Vuelve a dirigir: solo se rehacen esas.`
         : `Dirigidas ${tomas.length} tomas. ${tomas.filter((x) => x.movimiento).length} llevan clip. ` +
+          (dela ? `${dela} salen de la biblioteca y no se pagan. ` : '') +
           (tomas.filter((x) => x.desfasada).length
             ? `${tomas.filter((x) => x.desfasada).length} cambiaron de plano, así que su imagen anterior ya no vale y hay que rehacerla.`
             : 'Ninguna imagen anterior queda desfasada.'),
@@ -1102,6 +1213,7 @@ async function asegurarDireccion() {
     tema: pieza().tema,
     config: P.config,
     tratamiento: pieza().tratamiento,
+    genero: generoPorId(P.config.genero),
     alAvanzar: (hechas, total) => avisar('paso4', `Dirigiendo… ${hechas} de ${total} tomas.`),
     alLote: async (parciales) => {
       pieza().tomas = parciales;
@@ -1109,6 +1221,10 @@ async function asegurarDireccion() {
     },
   });
   await guardar();
+  // Y contra la biblioteca antes de que la fase siguiente empiece a pagar. Este
+  // es el camino automático —dirigir porque falta, justo antes de generar— y es
+  // precisamente donde más importa: aquí no hay nadie mirando.
+  await resolverContraBiblioteca(pieza());
   pintarTomas();
 }
 
@@ -1204,6 +1320,123 @@ accion('b-movimiento', async () => {
   // Un clip recién pagado puede servirle a su plano gemelo, ahora mismo.
   await emparejarGemelos('paso4');
 });
+
+// ── La biblioteca permanente del canal ────────────────────────────────────────
+//
+// Es la única inversión de una sola vez que hace este proyecto: los arquetipos
+// que declaran y los recursos transversales se pagan aquí y NINGÚN episodio los
+// vuelve a pagar. Vive en su propia pieza, con claves bajo `biblioteca/`, y no se
+// monta nunca.
+
+/** La pieza de biblioteca, creada o puesta al día desde el catálogo. */
+function laBiblioteca() {
+  const previa = estado.bibliotecaDe(P);
+  const z = bibliotecaFase.sincronizarBiblioteca(previa);
+  if (previa) P.piezas[P.piezas.indexOf(previa)] = z;
+  else P.piezas.push(z);
+  return z;
+}
+
+function pintarBiblioteca() {
+  const caja = $('resumen-biblioteca');
+  if (!caja) return;
+  const z = estado.bibliotecaDe(P);
+  const tomas = z ? z.tomas : bibliotecaFase.tomasDeBiblioteca();
+  const r = bibliotecaFase.resumenBiblioteca(tomas, P.config.movimiento.politica);
+  caja.innerHTML =
+    `<div class="reparto">` +
+    `<span class="pastilla ${r.imagenesFaltan ? '' : 'p-ok'}">${r.total - r.imagenesFaltan} de ${r.total} imágenes</span>` +
+    `<span class="pastilla ${r.clipsFaltan ? '' : 'p-ok'}">${r.clips - r.clipsFaltan} de ${r.clips} clips</span>` +
+    `<span class="pastilla">${r.recursos} recursos</span>` +
+    `<span class="pastilla">${r.personajes} arquetipos</span>` +
+    `</div>`;
+}
+
+accion(
+  'b-biblioteca-imagenes',
+  async () => {
+    const z = laBiblioteca();
+    await guardar();
+    const pendientes = z.tomas.filter((t) => t.imagen !== 'ok');
+    if (!pendientes.length) return avisar('biblioteca', 'La biblioteca ya tiene todas sus imágenes.', 'bueno');
+
+    const r = await cola.ejecutar(
+      'biblioteca',
+      pendientes,
+      (toma, _i, senal, alEsperar) =>
+        imagenFase.generarImagen({
+          toma,
+          tomas: z.tomas,
+          // LA CLAVE VA BAJO `biblioteca/`, no bajo la pieza activa: si fuera bajo
+          // la pieza, reescribir ese caso se llevaría la biblioteca por delante.
+          pieza: bibliotecaFase.ID_BIBLIOTECA,
+          config: P.config,
+          // Sin tratamiento a propósito: la biblioteca sirve a TODOS los episodios
+          // y la identidad visual de uno concreto la ataría a ese caso.
+          tratamiento: null,
+          senal,
+          alEsperar,
+        }),
+      {
+        alTerminarUno: async (nueva) => {
+          const k = z.tomas.findIndex((t) => t.i === nueva.i);
+          if (k >= 0) z.tomas[k] = nueva;
+          await guardar();
+          pintarBiblioteca();
+        },
+      },
+    );
+    informar(r, 'biblioteca', 'biblioteca');
+  },
+  'biblioteca',
+);
+
+accion(
+  'b-biblioteca-clips',
+  async () => {
+    const z = laBiblioteca();
+    await guardar();
+    if (!P.config.movimiento.politica.bibliotecaConVideo) {
+      return avisar('biblioteca', 'Los clips de la biblioteca están apagados en la política de movimiento.');
+    }
+    const pendientes = z.tomas.filter((t) => t.movimiento && t.video !== 'ok');
+    if (!pendientes.length) return avisar('biblioteca', 'El reparto ya tiene todos sus clips.', 'bueno');
+    if (
+      !confirm(
+        `Son ${pendientes.length} clips del reparto. Se pagan UNA VEZ y valen para todos los ` +
+          `episodios que vengan, pero es la fase más cara. ¿Sigo?`,
+      )
+    ) {
+      return;
+    }
+
+    const r = await cola.ejecutar(
+      'biblioteca',
+      pendientes,
+      (toma, _i, senal, alEsperar) =>
+        movimiento.generarClip({
+          toma,
+          tomas: z.tomas,
+          pieza: bibliotecaFase.ID_BIBLIOTECA,
+          config: P.config,
+          tratamiento: null,
+          senal,
+          alEsperar,
+          aviso: (m) => ($('progreso').textContent = m),
+        }),
+      {
+        alTerminarUno: async (nueva) => {
+          const k = z.tomas.findIndex((t) => t.i === nueva.i);
+          if (k >= 0) z.tomas[k] = nueva;
+          await guardar();
+          pintarBiblioteca();
+        },
+      },
+    );
+    informar(r, 'biblioteca', 'biblioteca');
+  },
+  'biblioteca',
+);
 
 accion('b-musica', async () => {
   const soloLasQueFaltan = !rehacerTodo();
@@ -1390,16 +1623,16 @@ async function emparejarAMano(iRecibe, numeroDueña) {
   avisar('previa', `Toma ${iRecibe + 1}: usa ${partes.join(' y ')} de la toma ${n}. Ya no paga lo suyo.`, 'bueno');
 }
 
-function informar(r, que) {
+function informar(r, que, donde = 'paso4') {
   pintarPasos();
   if (r.detenida) {
-    return avisar('paso4', `${que}: detenido en ${r.hechas} de ${r.total}. Lo hecho está guardado.`);
+    return avisar(donde, `${que}: detenido en ${r.hechas} de ${r.total}. Lo hecho está guardado.`);
   }
   if (r.fallos.length) {
-    avisar('paso4', `${que}: ${r.fallos.length} de ${r.total} fallaron. Vuelve a darle: solo repite lo que falta.`, 'malo');
-    return registro('paso4', r.fallos.map((f) => `· ${f.error}`));
+    avisar(donde, `${que}: ${r.fallos.length} de ${r.total} fallaron. Vuelve a darle: solo repite lo que falta.`, 'malo');
+    return registro(donde, r.fallos.map((f) => `· ${f.error}`));
   }
-  avisar('paso4', `${que}: ${r.hechas} de ${r.total}, sin fallos.`, 'bueno');
+  avisar(donde, `${que}: ${r.hechas} de ${r.total}, sin fallos.`, 'bueno');
 }
 
 // ── Vista previa ──────────────────────────────────────────────────────────────
@@ -2134,7 +2367,9 @@ function pintarContinuacion() {
 function pintarHistorial() {
   const caja = $('historial');
   if (!caja) return;
-  const piezas = [...P.piezas].sort((a, b) => (b.creado || 0) - (a.creado || 0));
+  // La biblioteca no es un episodio: no se abre desde el historial, se mira en
+  // su propio panel de Ajustes.
+  const piezas = estado.episodiosDe(P).sort((a, b) => (b.creado || 0) - (a.creado || 0));
   $('cuenta-historial').textContent = piezas.length > 1 ? `${piezas.length}` : '';
 
   caja.className = 'hist';
@@ -2237,6 +2472,57 @@ accion(
  * siempre valen— y porque enseñar cuántas imágenes te ahorras es lo que hace que
  * merezca la pena mirarlo.
  */
+/**
+ * Aplica una lista de herencias sobre las tomas de una pieza.
+ *
+ * Lo usan los dos caminos —el botón de reutilizar y la resolución automática
+ * contra la biblioteca al dirigir— para que no haya dos sitios donde equivocarse
+ * al marcar una toma como heredada. Ya pasó una vez: el camino que heredaba un
+ * clip no marcaba `movimiento`, y la hoja se montaba con la imagen fija teniendo
+ * el clip comprado al lado.
+ */
+function aplicarHerencia(z, lista) {
+  for (const { i, de, tipo } of lista) {
+    const t = z.tomas.find((x) => x.i === i);
+    if (!t) continue;
+    // `de.clave` es la del archivo DE VERDAD: si el donante a su vez heredaba,
+    // apunta al original y no a un archivo que nunca se generó.
+    if (tipo === 'vid') {
+      t.heredadoVid = de.clave;
+      t.video = 'ok';
+      // Y pasa a ser toma CON MOVIMIENTO: sin esto la hoja no usa el clip —exige
+      // `movimiento` para pedirlo— y la toma se montaba con la imagen fija
+      // teniendo el clip heredado ahí al lado.
+      t.movimiento = true;
+    } else {
+      t.heredado = de.clave;
+      t.imagen = 'ok';
+    }
+  }
+  return lista.length;
+}
+
+/**
+ * Resuelve las tomas de esta pieza contra la BIBLIOTECA, en cuanto se dirige.
+ *
+ * Se hace aquí y no esperando al botón porque es lo que evita pagar: si la toma
+ * del perito no queda resuelta ANTES de darle a «Imágenes», se genera un perito
+ * nuevo y el de la biblioteca se queda en el estante. El paso más caro no puede
+ * depender de que alguien se acuerde de pulsar algo antes.
+ *
+ * Solo contra la biblioteca: entre casos sigue mandando el botón, porque ahí la
+ * coincidencia es por parecido y la decide una persona.
+ */
+async function resolverContraBiblioteca(z) {
+  const b = estado.bibliotecaDe(P);
+  if (!b || !z.tomas.length) return 0;
+  const puede = imagenFase.heredables(z.tomas, [b]);
+  if (!puede.length) return 0;
+  aplicarHerencia(z, puede);
+  await guardar();
+  return puede.length;
+}
+
 accion(
   'b-reutilizar',
   async () => {
@@ -2261,23 +2547,7 @@ accion(
         'bueno',
       );
     }
-    for (const { i, de, tipo } of puede) {
-      const t = z.tomas.find((x) => x.i === i);
-      if (!t) continue;
-      // `de.clave` es la del archivo DE VERDAD: si el donante a su vez heredaba,
-      // apunta al original y no a un archivo que nunca se generó.
-      if (tipo === 'vid') {
-        t.heredadoVid = de.clave;
-        t.video = 'ok';
-        // Y pasa a ser toma CON MOVIMIENTO: sin esto la hoja no usa el clip
-        // —exige `movimiento` para pedirlo— y la toma se montaba con la imagen
-        // fija teniendo el clip heredado ahí al lado.
-        t.movimiento = true;
-      } else {
-        t.heredado = de.clave;
-        t.imagen = 'ok';
-      }
-    }
+    aplicarHerencia(z, puede);
     await guardar();
     pintarTodo();
     avisar(
@@ -2663,6 +2933,7 @@ accion(
 
 function pintarAjustes() {
   pintarEstilos();
+  pintarBiblioteca();
   // Los selectores de imagen y clips los llena `cargarModelos` con lo que el
   // proyecto tiene de verdad; aquí solo se refleja lo guardado.
   P.config.imagen.modelo = P.config.imagenModelo.modelo || P.config.imagen.modelo;
@@ -2672,8 +2943,8 @@ function pintarAjustes() {
     $(id).value = v;
     if (txt) $(txt).textContent = v;
   };
-  pon('proporcion', Math.round(P.config.movimiento.proporcion * 100));
-  $('v-proporcion').textContent = `${Math.round(P.config.movimiento.proporcion * 100)}%`;
+  pon('clips-episodio', P.config.movimiento.politica.clipsPorEpisodio, 'v-clips-episodio');
+  $('minutos').value = P.config.guion.minutos;
   pon('objetivo', P.config.segmentacion.segundosObjetivo, 'v-objetivo');
   pon('velocidad', Math.round(P.config.narracion.velocidad * 100));
   $('v-velocidad').textContent = P.config.narracion.velocidad.toFixed(2);
@@ -2685,7 +2956,7 @@ function pintarAjustes() {
   $('vertical').value = P.config.formato.vertical ? '1' : '0';
 }
 
-$('proporcion').addEventListener('input', (e) => ($('v-proporcion').textContent = `${e.target.value}%`));
+$('clips-episodio').addEventListener('input', (e) => ($('v-clips-episodio').textContent = e.target.value));
 $('objetivo').addEventListener('input', (e) => ($('v-objetivo').textContent = e.target.value));
 $('velocidad').addEventListener('input', (e) => ($('v-velocidad').textContent = (e.target.value / 100).toFixed(2)));
 $('musica-volumen').addEventListener('input', (e) => ($('v-musica-volumen').textContent = `${e.target.value}%`));
@@ -2712,7 +2983,7 @@ accion(
     // Los campos viejos siguen alimentando a las fases hasta que todas lean el nuevo.
     P.config.imagen.modelo = P.config.imagenModelo.modelo || P.config.imagen.modelo;
     P.config.movimiento.modelo = P.config.videoModelo.modelo || P.config.movimiento.modelo;
-    P.config.movimiento.proporcion = Number($('proporcion').value) / 100;
+    P.config.movimiento.politica.clipsPorEpisodio = Number($('clips-episodio').value);
     P.config.segmentacion.segundosObjetivo = Number($('objetivo').value);
     P.config.narracion.velocidad = Number($('velocidad').value) / 100;
     P.config.musica.volumen = Number($('musica-volumen').value) / 100;
