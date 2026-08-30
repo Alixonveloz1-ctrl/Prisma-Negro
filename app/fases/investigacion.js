@@ -383,7 +383,7 @@ informe—: de ahí salen los testimonios del episodio.`;
  * No sale a internet: buscar casos reales para después inventarse otro sería pagar
  * una búsqueda que no se usa.
  */
-export async function proponerCasos({ genero = null, tema = null, evitar = [], cuantos = 5, senal } = {}) {
+export async function proponerCasos({ genero = null, tema = null, epoca = null, evitar = [], cuantos = 5, senal } = {}) {
   const yaVistos = evitar.length
     ? `\n\nNO propongas ninguno parecido a estos, ya se descartaron:\n${evitar.slice(-25).map((t) => `- ${t}`).join('\n')}`
     : '';
@@ -412,6 +412,14 @@ export async function proponerCasos({ genero = null, tema = null, evitar = [], c
             `Motivos visuales del género: ${genero.motivos.join('; ')}.\n\n`
           : '') +
         (tema ? `Terreno: ${tema}\n\n` : '') +
+        // LA ÉPOCA AQUÍ NO FILTRA NADA: no hay búsqueda que filtrar. Dice CUÁNDO
+        // TRANSCURRE el caso que se inventa, y en un crimen frío eso es medio
+        // género — el lapso entre los hechos y la reapertura es lo que hace que la
+        // historia funcione. Sin decirlo, todos los casos salen ambientados ahora.
+        (epoca?.desde?.()
+          ? `ÉPOCA: los hechos arrancan DE ${epoca.desde()} EN ADELANTE. Si el género ` +
+            `pide un lapso largo hasta la resolución, cuenta ese lapso desde ahí.\n\n`
+          : '') +
         `Inventa ${cuantos} casos.\n\n` +
         'Para cada uno:\n' +
         '- titulo: título del episodio, corto y concreto. Sin signos de exclamación.\n' +

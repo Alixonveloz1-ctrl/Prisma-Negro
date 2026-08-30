@@ -334,6 +334,102 @@ export const invariantes = [
   },
 
   {
+    nombre: 'la-pantalla-dice-lo-que-la-herramienta-hace-de-verdad',
+    dice: '«¿Por qué me sigue diciendo todas esas cosas, si se supone que los casos ya no son reales, son ficticios?» El motor pasó a construir casos inventados y la pantalla se quedó entera hablando del otro modo: «Busca en internet casos reales», «Seis búsquedas: cronología, fuentes oficiales, prensa», «De un caso real a un video terminado». Y a un caso INVENTADO le pintaba una pastilla ámbar de «poco documentado», que es al revés de lo que es. Un texto que describe lo que la herramienta hacía ANTES no es un texto viejo: es una mentira sobre lo que va a pasar cuando pulses, y quien lo lee decide con eso.',
+    async comprobar(ctx) {
+      const { humoDeLaPantalla, proyectoYaEmpezado } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+      const fallos = [];
+
+      // Se ARRANCA LA APLICACIÓN en cada modo y se lee lo que queda escrito en
+      // pantalla. Mirar el HTML no serviría: el HTML trae un texto de partida y lo
+      // que importa es con cuál se queda.
+      const enModo = async (modo) => {
+        const p = proyectoYaEmpezado();
+        p.config = { ...(p.config || {}), version: 4, investigacion: { modo } };
+        const r = await humoDeLaPantalla({ parche, proyecto: p });
+        return {
+          fallos: r.fallos,
+          texto: ['titulo-inicio', 'sub-inicio', 'paso1-dice', 'paso2-dice', 'b-buscar-casos-texto', 'b-investigar-fondo-texto', 'paso6-dice']
+            .map((id) => r.texto(id))
+            .join(' · '),
+        };
+      };
+
+      const construir = await enModo('construir');
+      const documentar = await enModo('documentar');
+      fallos.push(...construir.fallos, ...documentar.fallos);
+
+      // 1 · CONSTRUIR no puede prometer lo que no hace. No busca en internet, los
+      // casos no son reales, y no son seis búsquedas sino una construcción.
+      for (const [qué, re] of [
+        ['que busca en internet', /busca en internet|buscando en internet/i],
+        ['que los casos son reales', /casos reales|caso real/i],
+        ['que hace seis búsquedas', /seis b[uú]squedas/i],
+        ['que hay fuentes que citar', /pie de fuentes/i],
+      ]) {
+        if (re.test(construir.texto)) {
+          fallos.push(`En modo construir, la pantalla dice ${qué}: no es lo que va a pasar al pulsar.`);
+        }
+      }
+      // Y sí tiene que decir lo que SÍ hace.
+      for (const [qué, re] of [['que el caso se inventa', /invent|construy|ficci[oó]n/i]]) {
+        if (!re.test(construir.texto)) fallos.push(`En modo construir, la pantalla no dice ${qué}.`);
+      }
+
+      // 2 · Y DOCUMENTAR al revés: no puede decir que inventa nada.
+      if (/invent/i.test(documentar.texto)) {
+        fallos.push('En modo documentar, la pantalla dice que inventa: ahí los casos son reales.');
+      }
+      if (!/reales|internet/i.test(documentar.texto)) {
+        fallos.push('En modo documentar, la pantalla no dice que los casos son reales y se buscan.');
+      }
+
+      // 3 · Los dos textos tienen que ser DISTINTOS. Si son iguales, es que no
+      // depende del modo y una de las dos versiones está mintiendo.
+      if (construir.texto === documentar.texto) {
+        fallos.push('La pantalla dice lo mismo en los dos modos: uno de los dos textos es mentira.');
+      }
+
+      // 4 · Y EL MODO SE PUEDE VER Y CAMBIAR. De él dependen la mitad de las
+      // fases, y estuvo sin ningún mando: se elegía en un archivo.
+      const html = fuente(ctx, 'index.html');
+      if (!/id="modo-investigacion"/.test(html)) {
+        fallos.push('No hay dónde ver ni cambiar el modo, y de él depende media herramienta.');
+      }
+
+      // 5 · Un caso construido NO se pinta como «poco documentado»: no le falta
+      // documentación, es que no lleva.
+      //
+      // Se busca LO QUE SE PINTA, no la palabra suelta: la primera versión de esto
+      // cazaba el propio comentario que explica el fallo y daba un falso positivo.
+      const main = fuente(ctx, 'app/main.js');
+      for (const m of main.matchAll(/pastilla p-aviso">poco documentado/g)) {
+        const alrededor = main.slice(Math.max(0, m.index - 300), m.index);
+        if (!/\bconstruido\b/.test(alrededor)) {
+          fallos.push('Un caso construido puede salir marcado como «poco documentado»: es al revés de lo que es.');
+          break;
+        }
+      }
+      // Y al revés: tiene que haber una pastilla que diga que es ficción, o no se
+      // distingue de un caso real mirando la lista.
+      if (!/pastilla p-ok">ficci[oó]n/.test(main)) {
+        fallos.push('Un caso inventado no se marca como ficción: en la lista se ve igual que uno real.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: un solo texto para los dos modos, el del que había
+    // antes. Va por el contexto —parchea la fuente que el arnés arranca— porque lo
+    // que se mide es lo que queda escrito en pantalla al arrancar.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace(/const DICE_EL_MODO = \{\n  construir: \{/, 'const DICE_EL_MODO = {\n  noEsteModo: {'),
+      ),
+  },
+
+  {
     nombre: 'el-aspecto-es-del-canal-y-no-se-elige-por-proyecto',
     dice: 'Había seis estilos y se elegía uno por proyecto, con un muestrario para comparar. Con la biblioteca permanente eso deja de ser una preferencia y pasa a ser dinero: dos estilos son DOS bibliotecas de 141 imágenes, o una mezcla que no avisa —un perito en cine negro dentro de un episodio rodado en reconstrucción—. Y lo que se ganaba era un diez por ciento de la instrucción: el resto —el oficio cinematográfico, la prohibición de texto legible, la barrera documental y la paleta del director— era idéntico en los seis. Si alguien vuelve a meter un estilo por proyecto, la biblioteca se mezcla en silencio.',
     comprobar(ctx) {

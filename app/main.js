@@ -434,6 +434,87 @@ function pintarFiltros() {
 }
 
 /**
+ * LA PANTALLA HABLA DEL MODO EN EL QUE ESTÁ.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «¿Por qué me sigue diciendo todas esas cosas, si se supone que los casos ya no
+ *  son reales, son ficticios? Hay que meterle lógica al asunto.»
+ *
+ * Y tenía razón: el motor pasó a construir casos inventados y la pantalla se
+ * quedó entera hablando del otro modo. «Busca en internet casos reales», «Seis
+ * búsquedas: cronología, fuentes oficiales, prensa», «De un caso real a un video
+ * terminado». Nada de eso pasaba ya, y peor: a un caso INVENTADO se le pintaba
+ * una pastilla ámbar de «poco documentado», que es al revés de lo que es —no le
+ * falta documentación, es que no la lleva—.
+ *
+ * Un texto que describe lo que la herramienta hacía antes no es un texto viejo:
+ * es una mentira sobre lo que va a pasar cuando pulses, y quien lo lee toma
+ * decisiones con eso.
+ *
+ * Así que todo lo que cambia con el modo se escribe AQUÍ, en un solo sitio, y se
+ * repinta cuando el modo cambia. Un texto mode-dependiente escrito en el HTML es
+ * un texto que se va a quedar viejo el día que se añada el tercer modo.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+const DICE_EL_MODO = {
+  construir: {
+    titulo: 'Crea ficción documental',
+    sub: 'De una idea a un episodio terminado, sin salir de aquí.',
+    paso1Titulo: 'El caso',
+    paso1: 'Inventa cinco casos del género que elijas. No sale a internet: los construye. Elige uno.',
+    buscar: 'Inventar casos',
+    epoca: 'Época en la que transcurre',
+    paso2Titulo: 'El expediente',
+    paso2:
+      'Construye el caso entero antes de escribir: víctima, lugar, fechas, el objeto que lo resuelve, ' +
+      'la pista falsa y el culpable. De una sola llamada, para que nada se contradiga.',
+    fondo: 'Construir el expediente',
+    paso6: 'Video final, miniatura, título y descripción — con la declaración de ficción delante.',
+    ajustes:
+      'El caso se INVENTA, con su expediente completo antes de escribir el guion. El guion puede poner ' +
+      'el detalle concreto que la escena pida, y el episodio se publica declarado como ficción.',
+  },
+  documentar: {
+    titulo: 'Crea un documental',
+    sub: 'De un caso real a un video terminado, sin salir de aquí.',
+    paso1Titulo: 'Investigación',
+    paso1: 'Busca en internet casos reales que den para documental. Elige uno.',
+    buscar: 'Buscar casos',
+    epoca: 'Época',
+    paso2Titulo: 'Investigación a fondo',
+    paso2:
+      'Seis búsquedas sobre el caso: cronología, fuentes oficiales, prensa, lo discutido, cifras y ' +
+      'qué pasó después.',
+    fondo: 'Investigar a fondo',
+    paso6: 'Video final, miniatura, título, descripción con tiempos reales y pie de fuentes.',
+    ajustes:
+      'Los casos son REALES y se buscan en internet. El guion no puede inventar ni un dato, una fecha ' +
+      'o un nombre que no esté en las fichas, y el episodio se publica con su pie de fuentes.',
+  },
+};
+
+function pintarModo() {
+  const modo = P.config.investigacion.modo;
+  const d = DICE_EL_MODO[modo] || DICE_EL_MODO.construir;
+  const pon = (id, texto) => {
+    const el = $(id);
+    if (el) el.textContent = texto;
+  };
+  pon('titulo-inicio', d.titulo);
+  pon('sub-inicio', d.sub);
+  pon('paso1-titulo', d.paso1Titulo);
+  pon('paso1-dice', d.paso1);
+  pon('b-buscar-casos-texto', d.buscar);
+  pon('epoca-etiqueta', d.epoca);
+  pon('paso2-titulo', d.paso2Titulo);
+  pon('paso2-dice', d.paso2);
+  pon('b-investigar-fondo-texto', d.fondo);
+  pon('paso6-dice', d.paso6);
+  pon('modo-dice', d.ajustes);
+  if ($('modo-investigacion')) $('modo-investigacion').value = modo;
+}
+
+/**
  * La duración objetivo, del campo a la configuración.
  *
  * Vivía en el `value="10"` del `<input>` y no se guardaba con el proyecto: cada
@@ -449,6 +530,7 @@ function minutosObjetivo() {
 }
 
 function pintarTodo() {
+  pintarModo();
   // El formato elegido manda también en los VISORES: sin esta clase, la pantalla
   // enseñaba un 9:16 recortado a 16:9 y parecía que se generaba mal.
   document.body.classList.toggle('formato-vertical', !!P.config.formato.vertical);
@@ -618,7 +700,16 @@ async function buscar() {
   // Los dos modos devuelven LO MISMO —una lista de casos con la misma forma— y por
   // eso todo lo de abajo, incluido `pintarCasos`, no sabe de dónde salieron.
   const r = construyendo
-    ? await investigacion.proponerCasos({ genero, tema: tema?.nombre || '', evitar: P.casosVistos })
+    ? await investigacion.proponerCasos({
+        genero,
+        tema: tema?.nombre || '',
+        // La época no se cae en este modo: cambia de significado. Ahí no filtra una
+        // búsqueda —no hay búsqueda— sino que dice CUÁNDO TRANSCURRE el caso que se
+        // inventa, y en un crimen frío eso es medio género: el lapso entre los
+        // hechos y la reapertura es lo que hace que la historia funcione.
+        epoca,
+        evitar: P.casosVistos,
+      })
     : await investigacion.buscarCasos({
         tema,
         epoca,
@@ -633,8 +724,10 @@ async function buscar() {
 
   if (!casos.length) {
     throw new Error(
-      `No salió ningún caso de ${epoca.nombre.toLowerCase()} para ese tema. ` +
-        `Prueba con una época más amplia o con otro tema.`,
+      construyendo
+        ? `No salió ninguna premisa para ese género y ese tema. Vuelve a darle, o prueba con otro tema.`
+        : `No salió ningún caso de ${epoca.nombre.toLowerCase()} para ese tema. ` +
+          `Prueba con una época más amplia o con otro tema.`,
     );
   }
   // Si se cayeron casos por fecha, se dice: si no, parece que la búsqueda vino floja.
@@ -672,7 +765,7 @@ function pintarCasos() {
           `<div class="cb"><b>${escapar(c.titulo)}</b><p>${escapar(c.gancho)}</p>` +
           `<div class="meta">${c.cuando ? `<span>${escapar(c.cuando)}</span>` : ''}` +
           `${c.donde ? `<span>· ${escapar(c.donde)}</span>` : ''}` +
-          `${c.documentado ? '' : '<span class="pastilla p-aviso">poco documentado</span>'}</div></div></button>`,
+          `${c.construido ? '<span class="pastilla p-ok">ficción</span>' : c.documentado ? '' : '<span class="pastilla p-aviso">poco documentado</span>'}</div></div></button>`,
       )
       .join('') +
     `</div>`;
@@ -711,11 +804,26 @@ function pintarCasos() {
   });
 }
 
+/**
+ * La pastilla de un caso, según de dónde salió.
+ *
+ * Un caso CONSTRUIDO no es «poco documentado»: no le falta documentación, es que
+ * no lleva y no debe llevar. Pintarle el aviso ámbar de un caso real flojo era
+ * decirle al usuario que algo está mal justo donde todo está bien — y de paso
+ * escondía lo único que sí hay que ver de un vistazo: que es ficción.
+ */
+const pastillaDeCaso = (c) =>
+  c.construido
+    ? '<span class="pastilla p-ok">ficción</span>'
+    : c.documentado
+      ? '<span class="pastilla p-ok">documentado</span>'
+      : '<span class="pastilla p-aviso">poco documentado</span>';
+
 function pintarCasoElegido() {
   const c = pieza().caso;
   $('caso-elegido').innerHTML = c
     ? `<div class="ficha"><div class="cab">${escapar(c.cuando)} · ${escapar(c.donde)}` +
-      `${c.documentado ? '<span class="pastilla p-ok">documentado</span>' : '<span class="pastilla p-aviso">poco documentado</span>'}</div>` +
+      `${pastillaDeCaso(c)}</div>` +
       `<p><b>${escapar(c.titulo)}</b></p><p style="margin-top:6px;color:var(--tinta-2)">${escapar(c.sinopsis)}</p>` +
       (c.fuentes?.length
         ? `<div class="cita">Fuentes consultadas: ${c.fuentes.slice(0, 4).map((f) => escapar(f.titulo || f.enlace)).join(' · ')}</div>`
@@ -2925,6 +3033,19 @@ function pintarAjustes() {
 }
 
 $('clips-episodio').addEventListener('input', (e) => ($('v-clips-episodio').textContent = e.target.value));
+
+// EL MODO SE APLICA AL MOMENTO, sin pasar por «Guardar ajustes».
+//
+// De él dependen la mitad de las fases —de dónde salen los casos, cómo se hace el
+// expediente, qué puede escribir el guion, si se publica declarado como ficción— y
+// la pantalla entera cambia de texto. Si hubiera que guardar primero, se leería la
+// descripción del modo anterior mientras el selector dice otra cosa.
+$('modo-investigacion')?.addEventListener('change', async (e) => {
+  P.config.investigacion.modo = e.target.value;
+  await guardar();
+  pintarModo();
+  pintarPasos();
+});
 $('objetivo').addEventListener('input', (e) => ($('v-objetivo').textContent = e.target.value));
 $('velocidad').addEventListener('input', (e) => ($('v-velocidad').textContent = (e.target.value / 100).toFixed(2)));
 $('musica-volumen').addEventListener('input', (e) => ($('v-musica-volumen').textContent = `${e.target.value}%`));

@@ -449,8 +449,8 @@ nav.abajo button svg{width:22px;height:22px}
       <!-- INICIO: el flujo entero, paso a paso -->
       <section id="v-inicio" class="vista">
         <div class="saludo">
-          <h1>Crea un documental</h1>
-          <p>De un caso real a un video terminado, sin salir de aquí.</p>
+          <h1 id="titulo-inicio">Crea un documental</h1>
+          <p id="sub-inicio">De una idea a un video terminado, sin salir de aquí.</p>
         </div>
 
         <div class="panel" id="panel-auto">
@@ -473,29 +473,29 @@ nav.abajo button svg{width:22px;height:22px}
           <div class="paso-cab">
             <div class="paso-n">1</div>
             <div class="paso-txt">
-              <h3>Investigación</h3>
-              <p>Busca en internet casos reales que den para documental. Elige uno.</p>
+              <h3 id="paso1-titulo">Investigación</h3>
+              <p id="paso1-dice">Elige un caso.</p>
             </div>
           </div>
           <div class="rejilla-filtros">
             <div>
               <label for="genero">Género</label>
               <select id="genero"></select>
+              <p class="nota chica" id="genero-dice" style="margin-top:6px"></p>
             </div>
             <div>
               <label for="tema">Tema</label>
               <select id="tema"></select>
             </div>
             <div>
-              <label for="epoca">Época</label>
+              <label for="epoca" id="epoca-etiqueta">Época</label>
               <select id="epoca"></select>
             </div>
           </div>
-          <p class="nota chica" id="genero-dice"></p>
           <div class="fila-btn" style="margin-top:12px">
             <button class="btn primario" id="b-buscar-casos">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-              Buscar casos
+              <span id="b-buscar-casos-texto">Buscar casos</span>
             </button>
             <button class="btn fantasma" id="b-otros-casos">Otros cinco</button>
           </div>
@@ -508,13 +508,13 @@ nav.abajo button svg{width:22px;height:22px}
           <div class="paso-cab">
             <div class="paso-n">2</div>
             <div class="paso-txt">
-              <h3>Investigación a fondo</h3>
-              <p>Seis búsquedas sobre el caso: cronología, fuentes oficiales, prensa, lo discutido, cifras y qué pasó después.</p>
+              <h3 id="paso2-titulo">Investigación a fondo</h3>
+              <p id="paso2-dice">El material del que sale el guion.</p>
             </div>
             <div class="paso-acc">
               <button class="btn primario" id="b-investigar-fondo">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/><path d="M11 8v6M8 11h6"/></svg>
-                Investigar a fondo
+                <span id="b-investigar-fondo-texto">Investigar a fondo</span>
               </button>
             </div>
           </div>
@@ -594,7 +594,7 @@ nav.abajo button svg{width:22px;height:22px}
             <div class="paso-n">6</div>
             <div class="paso-txt">
               <h3>Exportar</h3>
-              <p>Video final, miniatura, título, descripción con tiempos reales y fuentes.</p>
+              <p id="paso6-dice">Video final, miniatura, título y descripción con los tiempos medidos.</p>
             </div>
             <div class="paso-acc">
               <button class="btn fantasma" id="b-metadatos">Metadatos</button>
@@ -758,6 +758,15 @@ nav.abajo button svg{width:22px;height:22px}
           <p class="nota chica">El nivel del lecho cuando NADIE habla. Con voz baja doce decibelios y vuelve al terminar la frase, como en el video final. El que elijas aquí es el que se exporta.</p>
 
 
+        </div>
+        <div class="panel">
+          <h2>Modo del canal</h2>
+          <label for="modo-investigacion">De dónde salen los casos</label>
+          <select id="modo-investigacion">
+            <option value="construir">Ficción documental · el caso se inventa</option>
+            <option value="documentar">Documental · casos reales investigados</option>
+          </select>
+          <p class="nota chica" id="modo-dice" style="margin-top:7px"></p>
         </div>
         <div class="panel">
           <h2>Modelo de texto · el director</h2>

@@ -7,10 +7,17 @@
 //
 // El canal va de misterio, terror, crimen y polémicas de artistas. El catálogo es
 // eso, no una lista genérica de «temas interesantes».
+//
+// UN TEMA ES UN TERRENO, NO UNA AFIRMACIÓN DE QUE ALGO OCURRIÓ. Los nombres decían
+// «Crímenes reales», «Terror real», «Experimentos médicos reales», y con el modo
+// que construye casos inventados eso se contradecía solo: un experimento médico
+// inventado no es un «experimento médico real». La realidad de un caso la
+// garantiza el modo —y en `documentar`, la búsqueda—, no la etiqueta del menú. El
+// campo `busca` sí sigue siendo de búsqueda y solo lo usa `documentar`.
 
 export const TEMAS = [
   {
-    grupo: 'Crímenes reales',
+    grupo: 'Crimen',
     icono: '🔎',
     temas: [
       { id: 'crimen-sin-resolver', nombre: 'Crímenes sin resolver', busca: 'casos criminales sin resolver, investigaciones abiertas, cold cases' },
@@ -35,10 +42,10 @@ export const TEMAS = [
     ],
   },
   {
-    grupo: 'Terror real',
+    grupo: 'Terror',
     icono: '🕯️',
     temas: [
-      { id: 'experimentos', nombre: 'Experimentos médicos reales', busca: 'experimentos médicos sin consentimiento, ensayos clínicos denunciados' },
+      { id: 'experimentos', nombre: 'Experimentos médicos', busca: 'experimentos médicos sin consentimiento, ensayos clínicos denunciados' },
       { id: 'psiquiatricos', nombre: 'Hospitales e instituciones', busca: 'abusos en instituciones psiquiátricas, internados, denuncias' },
       { id: 'sectas-violentas', nombre: 'Sectas y rituales', busca: 'sectas con víctimas, rituales violentos, cultos investigados' },
       { id: 'supervivencia', nombre: 'Supervivencia extrema', busca: 'supervivientes de catástrofes, casos extremos documentados' },
