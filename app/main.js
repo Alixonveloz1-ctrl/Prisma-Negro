@@ -163,16 +163,38 @@ async function comprobarConexion(donde) {
   }
 
   const prueba = salud.prueba || [];
-  caja.innerHTML = prueba
-    .map(
-      (p) =>
-        `<div class="aviso ${p.ok ? 'bueno' : 'malo'}">${p.ok ? '✓' : '✗'} <b>${escapar(p.paso)}</b> — ` +
-        `${escapar(p.dice)}` +
-        (p.arregla ? `<span class="comoarreglar">${escapar(p.arregla)}</span>` : '') +
-        `</div>`,
-    )
-    .join('');
+  caja.innerHTML =
+    prueba
+      .map(
+        (p) =>
+          `<div class="aviso ${p.ok ? 'bueno' : 'malo'}">${p.ok ? '✓' : '✗'} <b>${escapar(p.paso)}</b> — ` +
+          `${escapar(p.dice)}` +
+          (p.arregla ? `<span class="comoarreglar">${escapar(p.arregla)}</span>` : '') +
+          `</div>`,
+      )
+      .join('') + versionDesplegada(salud.version);
   return prueba;
+}
+
+/**
+ * Qué versión está sirviendo la web, en pantalla.
+ *
+ * «¿Todo eso está en main? Porque no veo ningún cambio.» Estaba en main y estaba
+ * desplegado, y aun así no había forma de contestar esa pregunta MIRANDO EL
+ * TELÉFONO: para saberlo había que abrir un panel de despliegues, que es
+ * exactamente lo que §1 dice que no se puede pedir.
+ *
+ * Con esto, la duda se resuelve de un vistazo: si el commit que sale aquí es el
+ * último, lo que se está usando es lo último — y si no sale ninguno, es que la
+ * página viene de la caché del navegador y hay que recargarla.
+ */
+function versionDesplegada(v) {
+  if (!v?.commit) return '';
+  return (
+    `<p class="nota chica" style="margin-top:10px">Versión desplegada: ` +
+    `<b>${escapar(v.commit)}</b>${v.rama ? ` · rama ${escapar(v.rama)}` : ''}. ` +
+    `Si esperabas un cambio reciente y este no es su commit, recarga la página.</p>`
+  );
 }
 
 accion('b-comprobar', () => comprobarConexion('salud-ajustes'));

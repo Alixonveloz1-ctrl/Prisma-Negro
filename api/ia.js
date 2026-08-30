@@ -92,11 +92,26 @@ async function despachar(modo, c) {
     // ── Diagnóstico ───────────────────────────────────────────────────────────
     case 'salud': {
       const configuracion = revisarConfiguracion();
+      // QUÉ VERSIÓN ESTÁ SIRVIENDO ESTO, Y POR QUÉ HACE FALTA.
+      //
+      // «¿Todo eso está en main? Porque no veo ningún cambio.» El código estaba en
+      // main y desplegado, y aun así no había forma de contestar esa pregunta
+      // MIRANDO LA PANTALLA: desde un teléfono no se ve un commit ni un registro de
+      // despliegue. Sin esto, cualquier duda sobre si lo que se está usando es lo
+      // último acaba en una comprobación que no puede hacer quien la necesita.
+      //
+      // Sale de la plataforma, no de un número escrito a mano: un número a mano se
+      // olvida de subir justo el día que importa.
+      const version = {
+        commit: String(process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7),
+        rama: process.env.VERCEL_GIT_COMMIT_REF || '',
+        desplegado: process.env.VERCEL_DEPLOYMENT_ID ? true : false,
+      };
       // Comprobar que una variable EXISTE no comprueba nada. Cuando la
       // configuración está completa se prueba la cadena de verdad: firma, almacén,
       // modelos y montador. Es lo único que distingue «lo pegué» de «funciona».
-      if (!configuracion.lista) return { configuracion };
-      return { configuracion, prueba: await probarCadena() };
+      if (!configuracion.lista) return { configuracion, version };
+      return { configuracion, version, prueba: await probarCadena() };
     }
 
     // ── Modelos ───────────────────────────────────────────────────────────────

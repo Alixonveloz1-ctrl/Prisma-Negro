@@ -63,9 +63,18 @@ export const invariantes = [
       const usadas = new Set();
 
       // Las leídas con `process.env.X` a pelo.
+      //
+      // Menos las que pone LA PLATAFORMA. `.env.example` es la lista de lo que hay
+      // que PEGAR para que esto funcione, y meter ahí `VERCEL_GIT_COMMIT_SHA` haría
+      // creer que hay que ponerla a mano: la pone Vercel en cada despliegue, y
+      // escribirla a mano sería peor que no tenerla —diría la versión equivocada—.
+      // Se distinguen por el prefijo, que es de la plataforma y no del proyecto.
+      const DE_LA_PLATAFORMA = /^VERCEL_/;
       for (const [ruta, texto] of ctx.fuentes) {
         if (!ruta.startsWith('api/')) continue;
-        for (const m of texto.matchAll(/process\.env\.([A-Z][A-Z0-9_]+)/g)) usadas.add(m[1]);
+        for (const m of texto.matchAll(/process\.env\.([A-Z][A-Z0-9_]+)/g)) {
+          if (!DE_LA_PLATAFORMA.test(m[1])) usadas.add(m[1]);
+        }
       }
       // Y TODAS las de la tabla de alias. Un alias que la función acepta pero que no
       // está documentado es una variable que nadie sabe que puede poner —o peor, que
@@ -82,6 +91,57 @@ export const invariantes = [
       ...ctx,
       nombresEntorno: { ...ctx.nombresEntorno, bucket: [...ctx.nombresEntorno.bucket, 'BUCKET_SIN_DOCUMENTAR'] },
     }),
+  },
+
+  {
+    nombre: 'ningun-modulo-vivo-se-sirve-de-la-cache-del-navegador',
+    dice: '«¿Todo eso está en main? Porque no veo ningún cambio.» Estaba en main y estaba desplegado. Lo que fallaba era el reparto: `vercel.json` mandaba `no-cache` a `/app/` y al índice, pero NO a `/comun/`. Y `comun/` lo importan los módulos de `app/`, así que el teléfono se traía `main.js` recién horneado y `comun/estilos.mjs` de la caché. Cuando el fresco importa un nombre que el cacheado ya no exporta, el enlace de módulos falla ENTERO y no arranca nada: un despliegue correcto que en pantalla se ve como que no ha cambiado nada, y sin un solo error que lo diga. Desde un teléfono no hay forma de vaciar la caché de un archivo suelto.',
+    comprobar(ctx) {
+      const fallos = [];
+      let vercel;
+      try {
+        vercel = JSON.parse(fuente(ctx, 'vercel.json'));
+      } catch {
+        return ['vercel.json no se puede leer: sin él no hay cabeceras de caché.'];
+      }
+      const cabeceras = vercel.headers || [];
+      const sinCache = (ruta) =>
+        cabeceras.some(
+          (h) =>
+            new RegExp(`^${String(h.source).replace('(.*)', '.*')}$`).test(ruta) &&
+            (h.headers || []).some((x) => /cache-control/i.test(x.key) && /no-cache|no-store|max-age=0/i.test(x.value)),
+        );
+
+      // TODA carpeta de la que salga un módulo que el navegador importa. No solo
+      // las que hay hoy: se descubren mirando de dónde importa el código vivo, para
+      // que crear una carpeta nueva mañana no se quede fuera en silencio.
+      const carpetas = new Set(['app', 'comun']);
+      for (const [ruta, texto] of ctx.fuentes) {
+        if (!ruta.startsWith('app/')) continue;
+        // Solo lo que SALE de `app/`: un `./fases/` es una subcarpeta suya y ya
+        // queda cubierta por `/app/(.*)`. Contarla daría un fallo por una carpeta
+        // que no existe en la raíz.
+        for (const m of texto.matchAll(/from '\.\.\/(?:\.\.\/)*([a-z]+)\//g)) carpetas.add(m[1]);
+      }
+      for (const c of carpetas) {
+        if (!sinCache(`/${c}/x.js`)) {
+          fallos.push(
+            `«/${c}/» se sirve con la caché por defecto y de ahí salen módulos que el navegador importa: ` +
+              'una versión vieja de uno solo tumba el arranque entero.',
+          );
+        }
+      }
+      // Y la página, por sus dos direcciones: se entra por «/», no por «/index.html».
+      for (const ruta of ['/', '/index.html']) {
+        if (!sinCache(ruta)) fallos.push(`«${ruta}» se sirve con la caché por defecto: se abriría la página de antes.`);
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: `/comun/` sin cabecera, que es el agujero que hubo.
+    romper: (ctx) =>
+      editando(ctx, 'vercel.json', (t) =>
+        t.replace(/\s*\{\s*"source": "\/comun\/\(\.\*\)"[\s\S]*?\]\s*\},/, ''),
+      ),
   },
 
   // ── §2: la única puerta y el censor ───────────────────────────────────────
