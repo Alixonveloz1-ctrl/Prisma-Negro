@@ -153,6 +153,7 @@ async function funcionesPuras() {
   const nar = await import('../app/fases/narracion.js');
   const met = await import('../app/fases/metadatos.js');
   const est2 = await import('../comun/estilos.mjs');
+  const gen = await import('../comun/generos.mjs');
   // El proveedor se importa entero para poder EJECUTAR lo que no llama a la nube
   // —normalizar el WAV que devuelve el servicio de voz, por ejemplo—: mirarlo en
   // el texto fuente no habría cazado que un tamaño declarado a cero deja el audio
@@ -169,6 +170,12 @@ async function funcionesPuras() {
     // La lista de estilos entra por aquí para poder recorrerlos todos: una
     // comprobación que solo mira el estilo por defecto no dice nada del séptimo.
     ESTILOS: est2.ESTILOS,
+    // Y el catálogo de géneros, por lo mismo y con más motivo: la tabla va a
+    // crecer con géneros que todavía no existen, y lo que hay que comprobar es
+    // que CADA UNO se sostiene, no que el primero está bien escrito.
+    GENEROS: gen.GENEROS,
+    GENERO_POR_DEFECTO: gen.GENERO_POR_DEFECTO,
+    generoPorId: gen.generoPorId,
     repartirPorTramos: dir.repartirPorTramos,
     actosDe: gui.actosDe,
     huellaDeActos: gui.huellaDeActos,

@@ -15,6 +15,89 @@ const GUIONES_DE_PRUEBA = [
 ];
 
 export const invariantes = [
+  // ── Los catálogos ─────────────────────────────────────────────────────────
+  {
+    nombre: 'cada-genero-del-catalogo-se-sostiene-solo',
+    dice: 'La regla del catálogo de géneros es que uno nuevo se añade a la tabla y no se toca nada más —la misma que el README le aplica al montador—. Eso solo se sostiene si CADA fila está completa: unos pesos que no sumen 1 reparten mal los minutos sin dar error, un bloque sin función manda a escribir «avanzar el relato», y un estilo por defecto que no existe en el catálogo de estilos se cae en silencio al primer episodio. Nada de eso se ve leyendo la tabla, y el que añada el séptimo género no va a acordarse de las cuatro cosas.',
+    comprobar(ctx) {
+      const { GENEROS, GENERO_POR_DEFECTO, generoPorId, ESTILOS } = ctx.fn;
+      const fallos = [];
+      if (!GENEROS?.length) return ['El catálogo de géneros está vacío.'];
+
+      const vistos = new Set();
+      for (const g of GENEROS) {
+        const quién = g?.id || '(sin id)';
+        if (!g?.id || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(g.id)) {
+          fallos.push(`El género «${quién}» no tiene una clave estable: la configuración guarda esto.`);
+        }
+        if (vistos.has(g?.id)) fallos.push(`La clave «${quién}» está dos veces: una de las dos es inalcanzable.`);
+        vistos.add(g?.id);
+        for (const campo of ['nombre', 'resumen']) {
+          if (!String(g?.[campo] || '').trim()) fallos.push(`El género «${quién}» no tiene ${campo}: no se puede elegir a ciegas.`);
+        }
+
+        // El estilo visual tiene que existir DE VERDAD en el otro catálogo.
+        if (!ESTILOS.some((e) => e.id === g?.estiloPorDefecto)) {
+          fallos.push(`El género «${quién}» apunta al estilo «${g?.estiloPorDefecto}», que no está en el catálogo de estilos.`);
+        }
+
+        // Los bloques: la estructura del episodio.
+        const bloques = g?.bloques || [];
+        if (bloques.length < 3) {
+          fallos.push(`El género «${quién}» tiene ${bloques.length} bloques: eso no es una estructura.`);
+        }
+        const suma = bloques.reduce((s, b) => s + (Number(b?.peso) || 0), 0);
+        if (Math.abs(suma - 1) > 0.001) {
+          fallos.push(
+            `Los pesos de «${quién}» suman ${suma.toFixed(3)} y no 1: los minutos pedidos se reparten mal ` +
+              'y el episodio no dura lo que dice durar.',
+          );
+        }
+        const idsBloque = new Set();
+        for (const b of bloques) {
+          if (!b?.id || idsBloque.has(b.id)) fallos.push(`Bloque sin clave propia en «${quién}»: ${b?.id || '(sin id)'}.`);
+          idsBloque.add(b?.id);
+          if (!(Number(b?.peso) > 0)) fallos.push(`El bloque «${b?.id}» de «${quién}» pesa cero: no se escribiría nunca.`);
+          for (const campo of ['nombre', 'funcion']) {
+            if (!String(b?.[campo] || '').trim()) {
+              fallos.push(`El bloque «${b?.id}» de «${quién}» no dice su ${campo}: se escribiría a ciegas.`);
+            }
+          }
+        }
+
+        // Los motivos y los arquetipos, que son de donde sale el ahorro.
+        for (const [campo, mínimo] of [['motivos', 4], ['personajes', 3]]) {
+          const lista = g?.[campo] || [];
+          if (lista.length < mínimo) {
+            fallos.push(`El género «${quién}» declara ${lista.length} ${campo} y hacen falta ${mínimo} como mínimo.`);
+          }
+          if (lista.some((x) => !String(x || '').trim())) fallos.push(`Hay un ${campo} en blanco en «${quién}».`);
+        }
+      }
+
+      // Y el predeterminado tiene que existir: si no, `generoPorId` devuelve
+      // `undefined` y el fallo aparece a tres fases de distancia.
+      if (!GENEROS.some((g) => g.id === GENERO_POR_DEFECTO)) {
+        fallos.push(`El género por defecto «${GENERO_POR_DEFECTO}» no está en la tabla.`);
+      }
+      if (generoPorId('no-existe-este-genero')?.id !== GENERO_POR_DEFECTO) {
+        fallos.push('Una clave desconocida no cae en el género por defecto: un proyecto viejo se quedaría sin género.');
+      }
+      return fallos;
+    },
+    // Se rompe por donde se va a romper de verdad: alguien copia un género para
+    // hacer el siguiente, cambia un peso y no recuenta. Va por el contexto porque
+    // la comprobación LEE la tabla de ahí, no del texto fuente.
+    romper: (ctx) =>
+      conFuncion(
+        ctx,
+        'GENEROS',
+        ctx.fn.GENEROS.map((g, k) =>
+          k === 0 ? { ...g, bloques: g.bloques.map((b, j) => (j === 0 ? { ...b, peso: b.peso + 0.2 } : b)) } : g,
+        ),
+      ),
+  },
+
   // ── §4.3: la segmentación ─────────────────────────────────────────────────
   {
     nombre: 'la-segmentacion-cubre-el-guion-caracter-por-caracter',
