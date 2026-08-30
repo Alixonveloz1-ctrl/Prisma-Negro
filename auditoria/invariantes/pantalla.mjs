@@ -334,6 +334,85 @@ export const invariantes = [
   },
 
   {
+    nombre: 'el-inicio-se-puede-gobernar-desde-el-inicio',
+    dice: '«El inicio me sale ya iniciado el último caso. No veo los casos generados para borrarlos. No tengo control de nada. No puedo sugerir yo un caso, porque no tengo nada donde escribir.» Cuatro huecos y el mismo origen: el Inicio era el flujo de UN episodio y todo lo demás —la biblioteca, la lista de episodios— estaba al final de Ajustes, donde no lo encuentra nadie. Una herramienta en la que solo se puede hacer lo que cupo en dos desplegables no es una herramienta, es un formulario.',
+    async comprobar(ctx) {
+      const { humoDeLaPantalla } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+      const html = fuente(ctx, 'index.html');
+      const fallos = [];
+
+      // 1 · Lo que gobierna el canal vive EN EL INICIO, no escondido en Ajustes.
+      const inicio = html.slice(html.indexOf('id="v-inicio"'), html.indexOf('id="v-investigacion"'));
+      for (const [qué, id] of [
+        ['la biblioteca', 'panel-biblioteca'],
+        ['la lista de episodios', 'panel-episodios'],
+        ['qué episodio está abierto', 'panel-abierto'],
+      ]) {
+        if (!inicio.includes(`id="${id}"`)) fallos.push(`En el Inicio no se ve ${qué}.`);
+      }
+      // Y la biblioteca ANTES que los episodios: es lo primero que hay que hacer,
+      // y ponerla después es garantizar que nadie la genere.
+      if (inicio.indexOf('id="panel-biblioteca"') > inicio.indexOf('id="panel-episodios"')) {
+        fallos.push('La biblioteca va después de los episodios: se generarían episodios caros sin ella.');
+      }
+
+      // 2 · SE PUEDE ESCRIBIR UNA IDEA PROPIA. Con solo desplegables, la
+      // herramienta únicamente sabe hacer lo que cupo en un catálogo.
+      if (!/id="idea"/.test(inicio)) fallos.push('No hay dónde escribir una idea propia: solo se puede elegir de un menú.');
+      if (!/id="b-usar-idea"/.test(inicio)) fallos.push('No se puede convertir la idea propia en el caso directamente.');
+      const main = fuente(ctx, 'app/main.js');
+      const buscarFn = main.slice(main.indexOf('async function buscar()'), main.indexOf('\naccion(', main.indexOf('async function buscar()')));
+      if (!/P\.idea \|\| tema/.test(buscarFn)) {
+        fallos.push('La idea escrita no manda sobre el tema del menú: se escribiría y no serviría de nada.');
+      }
+
+      // 3 · SE PUEDE BORRAR un episodio, y su id NO se reutiliza. Reutilizarlo
+      // escribiría encima del material del que sigue vivo, sin un solo error.
+      const { borrarPieza, abrirPieza, sanear } = ctx.fn;
+      if (!/id="historial"/.test(inicio)) fallos.push('No hay lista de episodios donde borrar.');
+      const p = sanear({ piezas: [{ id: 'p01' }, { id: 'p02' }, { id: 'p03' }] });
+      borrarPieza(p, 'p02');
+      if (p.piezas.some((z) => z.id === 'p02')) fallos.push('Borrar un episodio no lo quita.');
+      const nueva = abrirPieza(p, { titulo: 'x' });
+      if (p.piezas.filter((z) => z.id === nueva.id).length > 1 || nueva.id === 'p03') {
+        fallos.push(
+          `Tras borrar, el episodio nuevo se llama ${nueva.id} y ya existe: sus imágenes ` +
+            'escribirían encima de las del que sigue vivo, en el almacén y sin avisar.',
+        );
+      }
+      // Y no se puede borrar el último ni la biblioteca.
+      try {
+        const solo = sanear({ piezas: [{ id: 'p01' }] });
+        borrarPieza(solo, 'p01');
+        fallos.push('Se puede borrar el único episodio y quedarse sin ninguno.');
+      } catch {
+        /* tiene que fallar */
+      }
+
+      // 4 · Y ARRANCA. Los tres botones nuevos se pulsan sin reventar.
+      const r = await humoDeLaPantalla({ parche, pulsa: ['b-episodio-nuevo'] });
+      fallos.push(...r.fallos);
+      if (!/todavía sin caso|—/.test(r.html('abierto-dice'))) {
+        fallos.push('El Inicio no dice qué episodio está abierto: los pasos parecen el estado de la herramienta.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: el id del episodio nuevo salía de contar los vivos, así
+    // que borrar uno hacía que el siguiente reutilizara su número.
+    romper: (ctx) =>
+      conFuncion(ctx, 'abrirPieza', (proyecto, opciones) => {
+        const antes = proyecto.numeroPiezas;
+        proyecto.numeroPiezas = ctx.fn.episodiosDe(proyecto).length;
+        const z = ctx.fn.abrirPieza(proyecto, opciones);
+        proyecto.numeroPiezas = Math.max(antes, proyecto.numeroPiezas);
+        return z;
+      }),
+  },
+
+  {
     nombre: 'la-pantalla-dice-lo-que-la-herramienta-hace-de-verdad',
     dice: '«¿Por qué me sigue diciendo todas esas cosas, si se supone que los casos ya no son reales, son ficticios?» El motor pasó a construir casos inventados y la pantalla se quedó entera hablando del otro modo: «Busca en internet casos reales», «Seis búsquedas: cronología, fuentes oficiales, prensa», «De un caso real a un video terminado». Y a un caso INVENTADO le pintaba una pastilla ámbar de «poco documentado», que es al revés de lo que es. Un texto que describe lo que la herramienta hacía ANTES no es un texto viejo: es una mentira sobre lo que va a pasar cuando pulses, y quien lo lee decide con eso.',
     async comprobar(ctx) {

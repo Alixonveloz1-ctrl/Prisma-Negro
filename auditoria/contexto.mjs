@@ -219,6 +219,8 @@ async function funcionesPuras() {
     normalizar: cfg.normalizar,
     sanear: est.sanear,
     abrirPieza: est.abrirPieza,
+    borrarPieza: est.borrarPieza,
+    episodiosDe: est.episodiosDe,
     reescribirPieza: est.reescribirPieza,
     ascendencia: est.ascendencia,
     duracionValida: mod.duracionValida,

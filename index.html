@@ -453,6 +453,35 @@ nav.abajo button svg{width:22px;height:22px}
           <p id="sub-inicio">De una idea a un video terminado, sin salir de aquí.</p>
         </div>
 
+        <!-- LO PRIMERO DE TODO: la biblioteca. Es la inversión que hace baratos a
+             todos los episodios, y estaba escondida en Ajustes: nadie la generaba
+             porque nadie sabía que existía. -->
+        <div class="panel" id="panel-biblioteca">
+          <h2>1 · Biblioteca del canal <span class="cuenta" id="cuenta-biblioteca"></span></h2>
+          <p class="nota chica">El elenco fijo y los sitios del canal. <b>Varias
+          personas por papel</b> —cinco peritos, cinco policías, cinco médicos, veinte
+          testigos— y <b>tres versiones de cada sitio</b>. Se paga una vez y ningún
+          episodio lo vuelve a pagar. La aplicación se acuerda de a quién usó: si un
+          episodio saca a un perito, los dos siguientes sacan a otro.</p>
+          <div id="resumen-biblioteca" class="nota chica"></div>
+          <div class="fila-btn" style="margin-top:10px">
+            <button class="btn primario" id="b-biblioteca-imagenes">Generar imágenes que faltan</button>
+            <button class="btn fantasma" id="b-biblioteca-clips">Generar clips del reparto</button>
+          </div>
+          <div id="aviso-biblioteca"></div>
+        </div>
+
+        <!-- TUS EPISODIOS: abrir, ver en qué estado están, y borrar. Estaba en
+             Ajustes, al final, y por eso «no tengo control de nada». -->
+        <div class="panel" id="panel-episodios">
+          <h2>2 · Tus episodios <span class="cuenta" id="cuenta-historial"></span></h2>
+          <div id="historial"></div>
+          <div class="fila-btn" style="margin-top:12px">
+            <button class="btn" id="b-episodio-nuevo">Empezar un episodio nuevo</button>
+          </div>
+          <div id="aviso-historial"></div>
+        </div>
+
         <div class="panel" id="panel-auto">
           <h2>Producción automática</h2>
           <p class="nota">Elige un caso y esto hace el resto sin parar: investigación, dirección, guion, narración, imágenes, música y montaje.</p>
@@ -466,6 +495,14 @@ nav.abajo button svg{width:22px;height:22px}
             <button class="btn peligro chico" id="b-detener">Detener</button>
           </div>
           <div id="aviso-auto"></div>
+        </div>
+
+        <!-- QUÉ EPISODIO ESTÁ ABIERTO. Sin esto, la pantalla arrancaba con los
+             pasos del último caso trabajado y parecía que la herramienta se había
+             quedado a medias sola: «el inicio me sale ya iniciado». -->
+        <div class="panel" id="panel-abierto">
+          <h2>3 · El episodio abierto <span class="cuenta" id="cuenta-abierto"></span></h2>
+          <p class="nota" id="abierto-dice"></p>
         </div>
 
         <!-- 1 · Investigación -->
@@ -492,12 +529,18 @@ nav.abajo button svg{width:22px;height:22px}
               <select id="epoca"></select>
             </div>
           </div>
+          <label for="idea">Tu propia idea (opcional)</label>
+          <input id="idea" placeholder="Un cuerpo dentro del tronco hueco de un roble, cuarenta años después…">
+          <p class="nota chica" style="margin-top:6px">Si escribes algo aquí, manda
+          sobre el tema: las propuestas salen de tu idea. Y con «Usar mi idea» se
+          convierte directamente en el caso, sin proponer nada.</p>
           <div class="fila-btn" style="margin-top:12px">
             <button class="btn primario" id="b-buscar-casos">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
               <span id="b-buscar-casos-texto">Buscar casos</span>
             </button>
             <button class="btn fantasma" id="b-otros-casos">Otros cinco</button>
+            <button class="btn fantasma" id="b-usar-idea">Usar mi idea</button>
           </div>
           <div id="zona-casos"></div>
           <div id="aviso-paso1"></div>
@@ -795,24 +838,6 @@ nav.abajo button svg{width:22px;height:22px}
         </div>
 
         <div class="panel">
-          <h2>Biblioteca del canal</h2>
-          <p class="nota chica">El elenco fijo del canal y sus sitios. <b>Varias
-          personas por papel</b> —cinco peritos, cinco policías, cinco médicos, veinte
-          testigos— y <b>tres versiones de cada sitio</b>. Se pagan una vez y ningún
-          episodio los vuelve a pagar.</p>
-          <p class="nota chica">La aplicación <b>se acuerda de a quién usó</b>: si un
-          episodio saca al perito Salgado, los dos siguientes sacan a otro. Por eso
-          hacen falta varias caras — con una sola, el mismo señor aparecería en todos
-          los documentales del canal.</p>
-          <div id="resumen-biblioteca" class="nota chica"></div>
-          <div class="fila-btn" style="margin-top:10px">
-            <button class="btn primario" id="b-biblioteca-imagenes">Generar imágenes que faltan</button>
-            <button class="btn fantasma" id="b-biblioteca-clips">Generar clips del reparto</button>
-          </div>
-          <div id="aviso-biblioteca"></div>
-        </div>
-
-        <div class="panel">
           <h2>Movimiento</h2>
           <label for="clips-episodio">Clips de video en este episodio · <b id="v-clips-episodio">12</b></label>
           <input id="clips-episodio" type="range" min="0" max="40" value="12">
@@ -846,11 +871,6 @@ nav.abajo button svg{width:22px;height:22px}
             <button class="btn peligro" id="b-nuevo">Nuevo proyecto</button>
           </div>
           <div id="aviso-proyecto"></div>
-        </div>
-        <div class="panel">
-          <h2>Historial de casos <span class="cuenta" id="cuenta-historial"></span></h2>
-          <div id="historial"></div>
-          <div id="aviso-historial"></div>
         </div>
         <div class="panel">
           <h2>Diagnóstico</h2>

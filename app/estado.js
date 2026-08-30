@@ -84,6 +84,25 @@ export function sanear(bruto) {
   p.tema = String(p.tema || '');
   p.temaId = String(p.temaId || '');
   p.epocaId = String(p.epocaId || '');
+  // La idea escrita a mano y las propuestas pagadas. Sin guardarlas, cinco
+  // propuestas desaparecen por recargar la pestaña — y se pagaron.
+  p.idea = String(p.idea || '');
+  p.casosPropuestos = Array.isArray(p.casosPropuestos) ? p.casosPropuestos : [];
+
+  // EL NÚMERO MÁS ALTO DE EPISODIO QUE SE HA LLEGADO A DAR. NUNCA BAJA.
+  //
+  // Sin esto, borrar un episodio es destruir material pagado sin avisar. El id se
+  // daba contando los episodios que hay: con p01, p02 y p03, borrar el p02 deja
+  // dos, y el siguiente se llamaría p03 — el mismo id que el que sigue vivo. Sus
+  // claves de material son `p03/tNNN/img`, así que la primera imagen del episodio
+  // nuevo ESCRIBE ENCIMA de la del viejo, en el almacén, sin un solo error.
+  //
+  // Se guarda el mayor jamás dado y se sigue desde ahí. Un hueco en la numeración
+  // no molesta a nadie; una colisión se lleva por delante horas de generación.
+  p.numeroPiezas = Math.max(
+    Number(p.numeroPiezas) || 0,
+    ...(Array.isArray(p.piezas) ? p.piezas : []).map((z) => Number(String(z?.id || '').match(/^p(\d+)$/)?.[1]) || 0),
+  );
 
   // EL REGISTRO DE REPARTO: qué persona y qué versión usó cada episodio.
   //
@@ -137,10 +156,11 @@ export const episodiosDe = (proyecto) => (proyecto?.piezas || []).filter((z) => 
  * vea y suene igual— y le da derecho a reutilizar su material (§3).
  */
 export function abrirPieza(proyecto, { caso = null, titulo = '', vieneDe = null } = {}) {
-  // Se cuentan los EPISODIOS, no las piezas: la biblioteca es una pieza y no lleva
-  // número de episodio. Contándolas todas, el primer caso después de crear la
-  // biblioteca se llamaría `p03` y quedaría un hueco donde nadie sabría qué había.
-  const n = episodiosDe(proyecto).length + 1;
+  // DEL CONTADOR QUE NUNCA BAJA, no de cuántos hay ahora. Ver `numeroPiezas` en
+  // `sanear`: contando los vivos, borrar uno haría que el siguiente reutilizara su
+  // id y escribiera encima de su material en el almacén.
+  const n = (proyecto.numeroPiezas || episodiosDe(proyecto).length) + 1;
+  proyecto.numeroPiezas = n;
   const z = piezaVacia(idPieza(n), titulo || caso?.titulo || 'Sin título');
   z.creado = Date.now();
   z.caso = caso;
@@ -213,6 +233,36 @@ export function reescribirPieza(proyecto, idVieja) {
   z.fichas = [...vieja.fichas];
   z.tratamiento = vieja.tratamiento ? structuredClone(vieja.tratamiento) : null;
   return z;
+}
+
+/**
+ * Borra un episodio del proyecto.
+ *
+ * NO borra el material del almacén, y es a propósito: lo generado está pagado y
+ * puede seguir sirviendo —la reutilización entre casos mira TODAS las piezas—, y
+ * un borrado en la nube no se puede deshacer desde un teléfono. Lo que se quita es
+ * el episodio de la lista.
+ *
+ * Y su id NO se reutiliza nunca: `numeroPiezas` solo sube. Ver `sanear`.
+ *
+ * Lo que sí se limpia es lo que dejaría de tener sentido: las continuaciones que
+ * colgaban de él se quedan sin padre —mejor huérfanas que apuntando a algo que no
+ * está—, y su entrada en el registro de reparto se va con él, porque preguntar
+ * «¿qué usó el episodio que ya no existe?» solo puede confundir a la rotación.
+ */
+export function borrarPieza(proyecto, id) {
+  const z = proyecto.piezas.find((x) => x.id === id);
+  if (!z) throw new Error('Ese episodio ya no está.');
+  if (z.esBiblioteca) throw new Error('La biblioteca no se borra: es lo que hace baratos a los demás.');
+  if (episodiosDe(proyecto).length <= 1) {
+    throw new Error('Es el único episodio. Abre otro antes de borrar este.');
+  }
+
+  proyecto.piezas = proyecto.piezas.filter((x) => x.id !== id);
+  for (const otra of proyecto.piezas) if (otra.vieneDe === id) otra.vieneDe = null;
+  if (proyecto.reparto) delete proyecto.reparto[id];
+  if (proyecto.piezaActiva === id) proyecto.piezaActiva = episodiosDe(proyecto)[0].id;
+  return proyecto;
 }
 
 /** La cadena de piezas de la que esta desciende, de la más cercana a la más lejana. */

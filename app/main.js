@@ -431,6 +431,7 @@ function pintarFiltros() {
     P.config.genero,
   );
   $('genero-dice').textContent = generoPorId(P.config.genero)?.resumen || '';
+  if ($('idea') && document.activeElement !== $('idea')) $('idea').value = P.idea || '';
 }
 
 /**
@@ -531,6 +532,9 @@ function minutosObjetivo() {
 
 function pintarTodo() {
   pintarModo();
+  // Las propuestas pagadas vuelven a salir tras recargar: estaban en una variable
+  // suelta y desaparecían al cerrar la pestaña.
+  if (!casos.length && P.casosPropuestos?.length) casos = P.casosPropuestos;
   // El formato elegido manda también en los VISORES: sin esta clase, la pantalla
   // enseñaba un 9:16 recortado a 16:9 y parecía que se generaba mal.
   document.body.classList.toggle('formato-vertical', !!P.config.formato.vertical);
@@ -548,6 +552,7 @@ function pintarTodo() {
   pintarPasos();
   pintarPestanas();
   pintarHistorial();
+  pintarEpisodioAbierto();
   pintarContinuacion();
   // La previa preparada es de la pieza que estaba abierta: al cambiar de caso ya no
   // vale, y dejarla puesta enseñaría el documental anterior como si fuera este.
@@ -685,16 +690,24 @@ async function buscar() {
   P.temaId = $('tema').value;
   P.epocaId = $('epoca').value;
   P.config.genero = $('genero').value;
+  // LA IDEA ESCRITA A MANO MANDA SOBRE EL TEMA DEL MENÚ.
+  //
+  // «No puedo sugerir yo un caso, porque no tengo nada donde escribir: tengo que
+  // elegir alguno de los temas o géneros que salen ahí.» Y era verdad: los dos
+  // únicos mandos eran desplegables cerrados, así que la herramienta solo sabía
+  // hacer lo que a mí se me ocurrió meter en un catálogo.
+  P.idea = $('idea').value.trim();
   const tema = temaPorId(P.temaId);
   const epoca = epocaPorId(P.epocaId);
   const genero = generoPorId(P.config.genero);
   const construyendo = P.config.investigacion.modo === 'construir';
+  const terreno = P.idea || tema?.nombre || '';
 
   $('zona-casos').innerHTML =
     `<p class="nota" style="margin-top:14px">` +
     (construyendo
-      ? `Inventando casos de ${escapar(genero.nombre.toLowerCase())}${tema ? ` · ${escapar(tema.nombre)}` : ''}…`
-      : `Buscando en internet${tema ? ` · ${escapar(tema.nombre)}` : ''} · ${escapar(epoca.nombre.toLowerCase())}…`) +
+      ? `Inventando casos de ${escapar(genero.nombre.toLowerCase())}${terreno ? ` · ${escapar(terreno)}` : ''}…`
+      : `Buscando en internet${terreno ? ` · ${escapar(terreno)}` : ''} · ${escapar(epoca.nombre.toLowerCase())}…`) +
     `</p>`;
 
   // Los dos modos devuelven LO MISMO —una lista de casos con la misma forma— y por
@@ -702,7 +715,7 @@ async function buscar() {
   const r = construyendo
     ? await investigacion.proponerCasos({
         genero,
-        tema: tema?.nombre || '',
+        tema: terreno,
         // La época no se cae en este modo: cambia de significado. Ahí no filtra una
         // búsqueda —no hay búsqueda— sino que dice CUÁNDO TRANSCURRE el caso que se
         // inventa, y en un crimen frío eso es medio género: el lapso entre los
@@ -711,13 +724,17 @@ async function buscar() {
         evitar: P.casosVistos,
       })
     : await investigacion.buscarCasos({
-        tema,
+        // Con idea escrita, el tema del menú pasa a ser el terreno que ella diga.
+        tema: P.idea ? { nombre: P.idea, busca: P.idea } : tema,
         epoca,
         // No repetir lo ya descartado: buscar dos veces y que salgan los mismos
         // cinco es la forma más rápida de que la herramienta parezca rota.
         evitar: P.casosVistos,
       });
   casos = r.casos;
+  // SE GUARDAN. Antes vivían en una variable suelta y se perdían al recargar: cinco
+  // propuestas pagadas que desaparecían por cerrar la pestaña.
+  P.casosPropuestos = casos;
   P.casosVistos = [...new Set([...P.casosVistos, ...casos.map((c) => c.titulo)])].slice(-60);
   await guardar();
   pintarCasos();
@@ -741,6 +758,70 @@ async function buscar() {
 }
 
 accion('b-buscar-casos', buscar, 'paso1');
+
+/**
+ * Tu idea, directamente como caso, sin proponer nada.
+ *
+ * «No puedo sugerir yo un caso.» Hay dos formas de sugerir y las dos hacen falta:
+ * dar un TERRENO —y que la herramienta proponga cinco dentro de él, que es lo que
+ * hace «Inventar casos»— o traer EL CASO YA PENSADO. Esto es lo segundo: se abre
+ * el episodio con lo que escribiste y de ahí en adelante todo cuelga de eso.
+ */
+accion(
+  'b-usar-idea',
+  async () => {
+    const idea = $('idea').value.trim();
+    if (!idea) throw new Error('Escribe tu idea arriba y vuelve a darle.');
+    P.config.genero = $('genero').value;
+    P.idea = idea;
+
+    // El título es la primera frase, o los primeros setenta caracteres: se puede
+    // cambiar en Ajustes, y pedirlo aquí sería un paso más antes de empezar.
+    const titulo = (idea.split(/[.\n]/)[0] || idea).trim().slice(0, 70);
+    const z = estado.abrirPieza(P, {
+      caso: {
+        id: `c${Date.now().toString(36)}`,
+        titulo,
+        gancho: '',
+        sinopsis: idea,
+        cuando: epocaPorId(P.epocaId)?.nombre || '',
+        donde: '',
+        porQueFunciona: '',
+        imagenSugerida: '',
+        documentado: false,
+        construido: P.config.investigacion.modo === 'construir',
+        fuentes: [],
+      },
+      titulo,
+    });
+    P.titulo = z.titulo;
+    casos = [];
+    P.casosPropuestos = [];
+    await guardar();
+    pintarTodo();
+    avisar(
+      'paso1',
+      `Episodio abierto con tu idea: «${titulo}». Ahora dale al paso 2 para construir el expediente.`,
+      'bueno',
+    );
+  },
+  'paso1',
+);
+
+/** Un episodio nuevo y vacío, sin caso: para empezar de cero. */
+accion(
+  'b-episodio-nuevo',
+  async () => {
+    const z = estado.abrirPieza(P, { titulo: 'Episodio nuevo' });
+    P.titulo = z.titulo;
+    casos = [];
+    P.casosPropuestos = [];
+    await guardar();
+    pintarTodo();
+    avisar('historial', `Abierto ${z.id}, vacío. Elige un caso en el paso 1.`, 'bueno');
+  },
+  'historial',
+);
 accion('b-otros-casos', buscar, 'paso1');
 
 function pintarCasos() {
@@ -2503,11 +2584,37 @@ function pintarContinuacion() {
   }
 }
 
+/**
+ * Qué episodio está abierto, dicho con todas las letras.
+ *
+ * «El inicio me sale ya iniciado el último caso que se investigó.» La aplicación
+ * abre el último episodio en el que se trabajó —que es lo correcto: se estaba a
+ * medias— pero no lo decía en ninguna parte, así que los pasos de abajo parecían
+ * el estado de la herramienta y no el de UN episodio concreto.
+ */
+function pintarEpisodioAbierto() {
+  const caja = $('abierto-dice');
+  if (!caja) return;
+  const z = pieza();
+  const hechas = [
+    z.caso ? 'caso elegido' : null,
+    z.fichas.length ? `${z.fichas.length} fichas` : null,
+    z.tratamiento?.premisa ? 'dirigido' : null,
+    (z.guion || '').trim() ? `${z.tomas.length} tomas` : null,
+    z.tomas.filter((t) => t.imagen === 'ok').length ? `${z.tomas.filter((t) => t.imagen === 'ok').length} imágenes` : null,
+  ].filter(Boolean);
+  $('cuenta-abierto').textContent = z.id;
+  caja.innerHTML = z.caso
+    ? `<b>${escapar(z.titulo || z.caso.titulo)}</b> — ${hechas.join(' · ') || 'recién abierto'}. ` +
+      `Los pasos de abajo son de ESTE episodio. Para trabajar en otro, ábrelo arriba.`
+    : `<b>${escapar(z.titulo || z.id)}</b> — todavía sin caso. Elige uno en el paso 1, ` +
+      `o escribe tu propia idea y dale a «Usar mi idea».`;
+}
+
 function pintarHistorial() {
   const caja = $('historial');
   if (!caja) return;
-  // La biblioteca no es un episodio: no se abre desde el historial, se mira en
-  // su propio panel de Ajustes.
+  // La biblioteca no es un episodio: no se abre desde aquí, tiene su propio panel.
   const piezas = estado.episodiosDe(P).sort((a, b) => (b.creado || 0) - (a.creado || 0));
   $('cuenta-historial').textContent = piezas.length > 1 ? `${piezas.length}` : '';
 
@@ -2523,11 +2630,15 @@ function pintarHistorial() {
       z.tomas.filter((t) => t.imagen === 'ok').length ? `${z.tomas.filter((t) => t.imagen === 'ok').length} imágenes` : '',
     ].filter(Boolean);
 
+    const fila = document.createElement('div');
+    fila.style.cssText = 'display:flex;gap:8px;align-items:stretch';
+
     const b = document.createElement('button');
+    b.style.flex = '1';
     if (z.id === P.piezaActiva) b.className = 'on';
     b.innerHTML =
-      `<b>${escapar(z.titulo || z.caso?.titulo || 'Sin título')}</b>` +
-      `<span>${padres.length ? `continuación de «${escapar(padres[0].titulo)}» · ` : ''}${partes.join(' · ')}</span>`;
+      `<b>${escapar(z.titulo || z.caso?.titulo || 'Sin título')}${z.id === P.piezaActiva ? ' · abierto' : ''}</b>` +
+      `<span>${escapar(z.id)} · ${padres.length ? `continuación de «${escapar(padres[0].titulo)}» · ` : ''}${partes.join(' · ')}</span>`;
     b.onclick = async () => {
       P.piezaActiva = z.id;
       P.titulo = z.titulo || P.titulo;
@@ -2535,7 +2646,27 @@ function pintarHistorial() {
       pintarTodo();
       avisar('historial', `Abierto: ${z.titulo}.`, 'bueno');
     };
-    caja.appendChild(b);
+    fila.appendChild(b);
+
+    // BORRAR, que no existía en ninguna parte. Se pregunta con el nombre delante:
+    // un «¿seguro?» a secas se contesta que sí sin leer.
+    const x = document.createElement('button');
+    x.className = 'btn peligro chico';
+    x.textContent = 'Borrar';
+    x.title = `Quitar «${z.titulo}» del proyecto`;
+    x.onclick = async () => {
+      if (!confirm(`¿Quitar «${z.titulo || z.id}» del proyecto?\n\nLo YA GENERADO no se borra de la nube —está pagado y otros episodios pueden reutilizarlo—, y su número no se vuelve a usar.`)) return;
+      try {
+        estado.borrarPieza(P, z.id);
+      } catch (e) {
+        return avisar('historial', e.message, 'malo');
+      }
+      await guardar();
+      pintarTodo();
+      avisar('historial', `Quitado. Quedan ${estado.episodiosDe(P).length}.`, 'bueno');
+    };
+    fila.appendChild(x);
+    caja.appendChild(fila);
   }
 }
 
