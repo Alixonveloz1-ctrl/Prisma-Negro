@@ -849,7 +849,87 @@ export const invariantes = [
     // Se rompe como estaba: la ficha del archivo sin botón de ver.
     romper: (ctx) =>
       editando(ctx, 'app/main.js', (t) =>
-        t.replace("  const tieneClip = x.video === 'ok' || !!x.heredadoVid;", '  const tieneClip = false;'),
+        t.replace(
+          "  if (vigente) {\n    const ver = document.createElement('button');",
+          "  if (false) {\n    const ver = document.createElement('button');",
+        ),
+      ),
+  },
+
+  {
+    nombre: 'la-ficha-no-anuncia-clip-listo-si-el-clip-es-de-la-imagen-anterior',
+    dice: '«Le sigue saliendo la opción de clip listo, cuando ese es un clip de la imagen pasada, de la imagen anterior, que ya no quiero.» La pastilla verde salía de `video === "ok"`: una bandera que decía que HABÍA un clip y no de qué imagen. Con la imagen ya rehecha, la ficha anunciaba «clip listo» en verde, ofrecía verlo, y —lo peor— NO ofrecía generar uno nuevo, porque para ella ya lo tenía. La ficha tiene que decir la verdad de las dos cosas: que ese clip no sirve, y que se puede pedir otro.',
+    async comprobar(ctx) {
+      const { humoDeLaPantalla, proyectoYaEmpezado } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+      const fallos = [];
+
+      // Se arranca de verdad con dos entradas idénticas salvo en los números: una
+      // con su clip al día y otra con el clip de la imagen anterior.
+      const conVersiones = (versionImagen, versionClip) => {
+        const p = proyectoYaEmpezado();
+        p.piezas.push({
+          id: 'biblioteca',
+          esBiblioteca: true,
+          titulo: 'x',
+          escenas: [{ n: 0, titulo: 'R' }, { n: 1, titulo: 'E' }],
+          tomas: [
+            {
+              i: 0, clave: 'personaje:perito:v1', personaje: 'perito', variante: 'v1',
+              imagen: 'ok', aprobada: true, movimiento: true, video: 'ok', versionImagen, versionClip,
+            },
+          ],
+        });
+        return { parche, proyecto: p };
+      };
+
+      const alDia = await humoDeLaPantalla(conVersiones(2, 2));
+      const caducado = await humoDeLaPantalla(conVersiones(2, 1));
+      fallos.push(...alDia.fallos, ...caducado.fallos);
+
+      const dice = (r) => r.textoDentro('galeria-biblioteca');
+      const botones = (r) => r.botonesDe('galeria-biblioteca');
+
+      // ── 1 · LA PASTILLA DICE LA VERDAD ────────────────────────────────────
+      if (!/clip listo/.test(dice(alDia))) {
+        fallos.push('Un clip que sí corresponde a su imagen no se anuncia: no se sabe qué está pagado.');
+      }
+      if (/clip listo/.test(dice(caducado))) {
+        fallos.push('La ficha sigue anunciando «clip listo» de un clip de la imagen anterior.');
+      }
+      if (!/imagen anterior/.test(dice(caducado))) {
+        fallos.push('No se dice que ese clip es de la imagen anterior: parece que la toma no tiene ninguno.');
+      }
+
+      // ── 2 · NO SE OFRECE VER LO QUE YA NO VALE ────────────────────────────
+      const rotulos = (r) => botones(r).map((b) => b.texto);
+      if (!rotulos(alDia).some((t) => /Ver el clip/.test(t))) {
+        fallos.push('Un clip al día no se puede ver.');
+      }
+      if (rotulos(caducado).some((t) => /Ver el clip/.test(t))) {
+        fallos.push('Se ofrece ver el clip de la imagen descartada: se mira lo que ya no va a salir.');
+      }
+
+      // ── 3 · Y SE PUEDE PEDIR UNO NUEVO ────────────────────────────────────
+      // Esto era lo que dejaba la toma sin salida: para la ficha ya lo tenía.
+      const nuevo = botones(caducado).find((b) => /Generar su clip/.test(b.texto));
+      if (!nuevo || nuevo.deshabilitado) {
+        fallos.push('La imagen rehecha no puede pedir un clip nuevo: se queda con el viejo o con ninguno.');
+      }
+      if (rotulos(alDia).some((t) => /Generar su clip/.test(t))) {
+        fallos.push('Se ofrece pagar otra vez el clip de una imagen que ya tiene el suyo.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: la bandera suelta manda en la ficha.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace(
+          '  const vigente = clipVigente(x, tomas);',
+          "  const vigente = x.video === 'ok' || !!x.heredadoVid;",
+        ),
       ),
   },
 
@@ -1082,8 +1162,8 @@ export const invariantes = [
     romper: (ctx) =>
       editando(ctx, 'app/main.js', (t) =>
         t.replace(
-          "if (x.video !== 'ok' && P.config.movimiento.politica.bibliotecaConVideo) {",
-          "if (x.movimiento && x.video !== 'ok' && P.config.movimiento.politica.bibliotecaConVideo) {",
+          'if (!vigente && P.config.movimiento.politica.bibliotecaConVideo) {',
+          'if (x.movimiento && !vigente && P.config.movimiento.politica.bibliotecaConVideo) {',
         ),
       ),
   },

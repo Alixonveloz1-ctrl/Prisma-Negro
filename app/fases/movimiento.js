@@ -147,5 +147,13 @@ export async function generarClip({ toma, tomas, pieza, config, tratamiento = nu
     throw new Error(`El clip de la toma ${toma.i} terminó pero el almacén no lo confirmó.`);
   }
 
-  return { ...toma, video: 'ok', bytesVideo: r.guardado.bytes };
+  // EL CLIP ANOTA DE QUÉ IMAGEN SALIÓ. Sin esto, `video: 'ok'` es una bandera
+  // suelta: dice que hay un clip y no dice si le corresponde a la imagen de
+  // ahora. Ver `clipVigente` en `comun/claves.mjs`.
+  return {
+    ...toma,
+    video: 'ok',
+    bytesVideo: r.guardado.bytes,
+    versionClip: Number(toma.versionImagen) || 0,
+  };
 }

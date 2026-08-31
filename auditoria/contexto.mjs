@@ -246,6 +246,7 @@ async function funcionesPuras() {
     tomaDelFotograma: cla.tomaDelFotograma,
     claveFotograma: cla.claveFotograma,
     claveClip: cla.claveClip,
+    clipVigente: cla.clipVigente,
     construirHoja: hoj.construirHoja,
     guionEntrega: hoj.guionEntrega,
     textoDePublicacion: met.textoDePublicacion,

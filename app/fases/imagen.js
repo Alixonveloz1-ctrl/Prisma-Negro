@@ -465,7 +465,14 @@ export async function generarImagen({ toma, tomas, pieza, config, tratamiento = 
   // respuesta: una imagen de 2K en base64 ocupa nueve megas y el tope es 4,5.
   await material(clave, 'image/png', { senal });
 
-  return { ...toma, imagen: 'ok', bytesImagen: r.guardado.bytes };
+  // CADA IMAGEN GENERADA SUBE LA VERSIÓN, y de ahí sale que un clip sepa si
+  // todavía le corresponde. Ver `clipVigente` en `comun/claves.mjs`.
+  return {
+    ...toma,
+    imagen: 'ok',
+    bytesImagen: r.guardado.bytes,
+    versionImagen: (Number(toma.versionImagen) || 0) + 1,
+  };
 }
 
 /**

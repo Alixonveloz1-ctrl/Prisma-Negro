@@ -40,7 +40,7 @@ import * as previa from './previa.js';
 import * as local from './local.js';
 import { material } from './material.js';
 import { deBase64 } from './imagenes.js';
-import { claveToma, claveMusica, claveFotograma, claveClip } from '../comun/claves.mjs';
+import { claveToma, claveMusica, claveFotograma, claveClip, clipVigente } from '../comun/claves.mjs';
 
 const $ = (id) => document.getElementById(id);
 
@@ -1810,6 +1810,9 @@ function tarjetaDeBiblioteca(x, tomas, mia) {
   const d = document.createElement('div');
   d.className = `pieza-mat${x.aprobada ? ' aprobada' : ''}`;
   const hay = x.imagen === 'ok';
+  // ¿El clip que hay le corresponde a la imagen que hay? Es lo único que decide
+  // si se puede ver, si se puede pedir otro y qué dice la pastilla.
+  const vigente = clipVigente(x, tomas);
   const { nombre, detalle, variante } = rotuloDeBiblioteca(x);
 
   const visual = document.createElement('div');
@@ -1826,17 +1829,21 @@ function tarjetaDeBiblioteca(x, tomas, mia) {
     // dice, y se pierde el visto bueno.
     (x.desfasada ? '<span class="pastilla p-falta">hay que rehacerla</span>' : '') +
     (x.aprobada ? '<span class="pastilla p-ok">aprobada</span>' : hay ? '<span class="pastilla p-aviso">por revisar</span>' : '') +
-    (x.video === 'ok'
+    // «CLIP LISTO» SOLO SI EL CLIP ES DE LA IMAGEN QUE HAY AHORA. Con la bandera
+    // suelta, un clip de la imagen descartada seguía anunciándose en verde y ni
+    // siquiera dejaba pedir uno nuevo. Ver `clipVigente`.
+    (vigente
       ? '<span class="pastilla p-ok">clip listo</span>'
-      : x.movimiento
-        ? '<span class="pastilla">lleva clip</span>'
-        : '');
+      : x.video === 'ok'
+        ? '<span class="pastilla p-falta">el clip es de la imagen anterior</span>'
+        : x.movimiento
+          ? '<span class="pastilla">lleva clip</span>'
+          : '');
   d.appendChild(cuerpo);
 
   // EL CLIP, SI LO TIENE. Se carga al tocarlo y no antes: son decenas de megas y
   // hay veinticuatro fichas en pantalla. Ver `verClip`.
-  const tieneClip = x.video === 'ok' || !!x.heredadoVid;
-  if (tieneClip) {
+  if (vigente) {
     const ver = document.createElement('button');
     ver.className = 'btn chico fantasma';
     ver.textContent = 'Ver el clip';
@@ -1919,7 +1926,7 @@ function tarjetaDeBiblioteca(x, tomas, mia) {
   //
   // Lo que no se toca: sigue haciendo falta la imagen y su visto bueno. El clip
   // sale de la imagen y es la fase más cara.
-  if (x.video !== 'ok' && P.config.movimiento.politica.bibliotecaConVideo) {
+  if (!vigente && P.config.movimiento.politica.bibliotecaConVideo) {
     const c = document.createElement('button');
     c.className = 'btn chico fantasma';
     const enFila = estadoEnFilaBiblioteca(x.i);
@@ -3067,7 +3074,9 @@ async function clipDeBiblioteca(i, decir = () => {}) {
   const t = z.tomas[k];
   if (t.imagen !== 'ok') throw new Error('Primero hay que generar su imagen: el clip sale de ella.');
   if (!t.aprobada) throw new Error('Dale antes el visto bueno a la imagen: el clip hereda lo que tenga.');
-  if (t.video === 'ok') throw new Error('Esta ya tiene su clip.');
+  // Por `clipVigente`, no por la bandera: un clip de la imagen anterior no cuenta
+  // como «ya lo tiene». Si contara, la toma se quedaría sin poder animarse nunca.
+  if (clipVigente(t, z.tomas)) throw new Error('Esta ya tiene su clip, y es de esta imagen.');
   if (filaClips.some((x) => x.i === i && x.zid === bibliotecaFase.ID_BIBLIOTECA)) return;
 
   const segundos = movimiento.duracionMasCercana(t.segundos || 6, P.config.videoModelo?.modelo);

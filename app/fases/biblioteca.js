@@ -51,6 +51,7 @@ import {
   planoDeVariante,
   planoDeRecurso,
 } from '../../comun/elenco.mjs';
+import { clipVigente } from '../../comun/claves.mjs';
 import {
   ESTILO_DEL_CANAL,
   SIN_TEXTO_LEGIBLE,
@@ -215,7 +216,10 @@ export function resumenBiblioteca(tomas, { bibliotecaConVideo = true } = {}) {
 export function clipsPosibles(tomas, { bibliotecaConVideo = true } = {}) {
   if (!bibliotecaConVideo) return [];
   return (tomas || []).filter(
-    (t) => t.movimiento && t.imagen === 'ok' && t.aprobada && t.video !== 'ok',
+    // `clipVigente` y no `video !== 'ok'`: un clip de la imagen ANTERIOR no cuenta
+    // como que ya lo tiene. Con la bandera suelta, una toma cuya imagen se rehizo
+    // se quedaba sin poder animarse nunca —ni desde su ficha ni desde aquí—.
+    (t) => t.movimiento && t.imagen === 'ok' && t.aprobada && !clipVigente(t, tomas || []),
   );
 }
 
@@ -340,6 +344,13 @@ export function sincronizarBiblioteca(pieza) {
       video: vieja.video || null,
       heredado: vieja.heredado || null,
       heredadoVid: vieja.heredadoVid || null,
+      // Y LOS NÚMEROS QUE DICEN SI EL CLIP ES DE ESTA IMAGEN. Esta lista es
+      // blanca: lo que no se nombre aquí desaparece en la siguiente carga. Sin
+      // estas dos líneas, un clip de la imagen descartada volvía a darse por bueno
+      // en cuanto se recargaba la aplicación —el fallo entero, resucitado por la
+      // puerta de atrás—. Ver `clipVigente`.
+      versionImagen: Number(vieja.versionImagen) || 0,
+      versionClip: Number(vieja.versionClip) || 0,
       desfasada,
       // El visto bueno se conserva, pero SOLO mientras haya imagen que avale y el
       // catálogo siga pidiendo lo mismo. Un «aprobada» sobre una imagen que ya no

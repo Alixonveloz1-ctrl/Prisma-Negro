@@ -121,6 +121,48 @@ export function tomaDelFotograma(toma, tomas) {
   return actual;
 }
 
+/**
+ * ¿EL CLIP DE ESTA TOMA SALIÓ DE LA IMAGEN QUE HAY AHORA?
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Le sigue saliendo la opción de clip listo, cuando ese es un clip de la imagen
+ *  anterior, que ya no quiero.»
+ *
+ * `video: 'ok'` era UNA BANDERA SUELTA: decía que existía un clip, y no decía de
+ * qué imagen había salido. Así que rehacer la imagen dejaba un clip huérfano que
+ * seguía dándose por bueno, y arreglarlo consistía en acordarse de apagar la
+ * bandera en cada sitio que rehace una imagen. Me acordé en dos y no bastó —
+ * porque el problema no era el olvido, era que la validez no estaba escrita en
+ * ninguna parte.
+ *
+ * Ahora sí: cada imagen generada sube `versionImagen`, y el clip anota en
+ * `versionClip` la versión de la que salió. Un clip vale si los dos números
+ * coinciden. No hay que apagar nada: si la imagen cambia, el clip deja de valer
+ * SOLO, venga el cambio de donde venga —rehacer, el catálogo, una restauración—.
+ *
+ * Un clip HEREDADO de otra pieza no se juzga aquí: su validez es de la toma de
+ * la que salió, en su propia pieza.
+ *
+ * Y sin números —material de antes de que esto existiera— manda `aprobada`: la
+ * única forma de que una imagen con clip haya perdido el visto bueno es que la
+ * imagen se haya rehecho o que el catálogo la haya dejado desfasada, y en los dos
+ * casos el clip que había ya no sirve.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export function clipVigente(toma, tomas) {
+  const dueña = tomaDelFotograma(toma, tomas);
+  if (toma.heredadoVid || dueña.heredadoVid) return true;
+  if (dueña.video !== 'ok') return false;
+
+  const deLaImagen = Number(dueña.versionImagen) || 0;
+  const delClip = Number(dueña.versionClip) || 0;
+  // Con números, mandan los números.
+  if (deLaImagen || delClip) return delClip === deLaImagen;
+  // Sin ellos: un clip sobre una imagen que ya nadie ha aprobado es un clip de la
+  // imagen anterior.
+  return dueña.imagen !== 'ok' || dueña.aprobada !== false;
+}
+
 /** La clave del fotograma que le toca a una toma, con la reutilización ya resuelta. */
 export function claveClip(pieza, toma, tomas) {
   // Un clip heredado de otra pieza: la clave viene entera.

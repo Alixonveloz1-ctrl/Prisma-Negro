@@ -9,7 +9,7 @@
 //
 // Cada regla del §5 viene de un defecto AUDIBLE. Las anotaciones dicen cuál.
 
-import { claveFotograma, claveClip, claveToma, nombreLocal, tomaDelFotograma } from './claves.mjs';
+import { claveFotograma, claveClip, claveToma, nombreLocal, tomaDelFotograma, clipVigente } from './claves.mjs';
 
 export const PREDETERMINADO = {
   fps: 30,
@@ -103,9 +103,10 @@ export function construirHoja({ pieza, tomas, escenas = [], config = {} }) {
       // de cámara — que es exactamente lo que pasa con las tomas fijas.
       ...(function () {
         const dueña = tomaDelFotograma(t, tomas);
-        const hayClip =
-          !!t.movimiento &&
-          !!(t.heredadoVid || dueña.heredadoVid || dueña.video === 'ok');
+        // Y el clip tiene que SALIR DE LA IMAGEN QUE HAY AHORA. Antes bastaba con
+        // que existiera: rehacer una imagen dejaba el montaje usando el clip de
+        // la que se había descartado. Ver `clipVigente`.
+        const hayClip = !!t.movimiento && clipVigente(t, tomas);
         return {
           archivo: hayClip ? claveClip(pieza, t, tomas) : claveFotograma(pieza, t, tomas),
           movimiento: hayClip,

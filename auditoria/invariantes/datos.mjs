@@ -3197,4 +3197,123 @@ export const invariantes = [
         }),
       ),
   },
+
+  {
+    nombre: 'un-clip-solo-vale-para-la-imagen-de-la-que-salio',
+    dice: '«Le sigue saliendo la opción de clip listo, cuando ese es un clip de la imagen pasada, de la imagen anterior, que ya no quiero.» `video: "ok"` era UNA BANDERA SUELTA: decía que existía un clip y no decía de qué imagen había salido. Así que mantenerla honrada consistía en acordarse de apagarla en CADA sitio que rehace una imagen; me acordé en dos y no bastó, porque el problema no era el olvido sino que la validez no estaba escrita en ninguna parte. Ahora cada imagen generada sube `versionImagen` y el clip anota en `versionClip` la que le dio origen: si los números no coinciden, el clip es de la imagen anterior y deja de valer SOLO, venga el cambio de donde venga.',
+    comprobar(ctx) {
+      const { clipVigente, construirHoja, clipsPosibles, sanear } = ctx.fn;
+      const fallos = [];
+
+      // ── 1 · LA TABLA DE VERDAD ────────────────────────────────────────────
+      const base = { i: 0, imagen: 'ok', aprobada: true, movimiento: true };
+      const casos = [
+        ['el clip salió de la imagen que hay ahora', { video: 'ok', versionImagen: 2, versionClip: 2 }, true],
+        ['el clip salió de la imagen ANTERIOR', { video: 'ok', versionImagen: 2, versionClip: 1 }, false],
+        // El caso de verdad de arriba: rehacer sube la imagen y el clip se queda
+        // en su número. Nadie tiene que apagar nada.
+        ['el clip es de antes de que hubiera números', { video: 'ok', versionImagen: 1, versionClip: 0 }, false],
+        ['no hay clip', { video: null, versionImagen: 3, versionClip: 3 }, false],
+        // Un clip HEREDADO de otra pieza no se juzga aquí: su validez es de la
+        // toma de la que salió, en su propia pieza.
+        ['el clip viene heredado de otra pieza', { video: null, heredadoVid: 'p09/t004/vid', versionImagen: 5, versionClip: 1 }, true],
+      ];
+      for (const [qué, extra, esperado] of casos) {
+        const t = { ...base, ...extra };
+        if (clipVigente(t, [t]) !== esperado) {
+          fallos.push(`Con «${qué}» el clip ${esperado ? 'no vale y debería' : 'vale y no debería'}.`);
+        }
+      }
+
+      // Y LO QUE YA ESTABA GENERADO SE CORRIGE SOLO. Sin estos dos casos habría
+      // que ir a mano por las treinta y ocho fichas ya pagadas: sin números manda
+      // el visto bueno, que es lo único que se cae al rehacer una imagen.
+      const viejoMalo = { ...base, aprobada: false, video: 'ok' };
+      if (clipVigente(viejoMalo, [viejoMalo])) {
+        fallos.push('Un clip de antes, sobre una imagen que ya nadie aprueba, sigue dándose por bueno.');
+      }
+      const viejoBueno = { ...base, aprobada: true, video: 'ok' };
+      if (!clipVigente(viejoBueno, [viejoBueno])) {
+        fallos.push('Un clip de antes, sobre su imagen aprobada, deja de valer: se tiraría lo ya pagado.');
+      }
+
+      // Y MANDA LA DUEÑA DEL FOTOGRAMA, no la toma que lo reutiliza: dos tomas con
+      // el mismo plano comparten imagen Y clip, así que rehacer la imagen de la
+      // dueña invalida el clip de las dos.
+      const dueña = { ...base, i: 0, video: 'ok', versionImagen: 2, versionClip: 1 };
+      const espejo = { ...base, i: 1, reusa: 0 };
+      if (clipVigente(espejo, [dueña, espejo])) {
+        fallos.push('La toma que reutiliza el fotograma da por bueno un clip que su dueña ya descartó.');
+      }
+
+      // ── 2 · Y SOBREVIVE A GUARDAR Y CARGAR ────────────────────────────────
+      // `sanear` devuelve lista blanca: un número que no esté se borra al recargar,
+      // y sin números la validez vuelve a ser una bandera suelta.
+      const vuelta = sanear({
+        piezas: [{ id: 'p01', tomas: [{ i: 0, video: 'ok', versionImagen: 3, versionClip: 2 }] }],
+      });
+      const t0 = vuelta.piezas[0].tomas[0];
+      if (t0.versionImagen !== 3 || t0.versionClip !== 2) {
+        fallos.push('Las versiones no sobreviven a recargar: al volver, el clip viejo se daría por bueno otra vez.');
+      }
+      // Y AL PONER LA BIBLIOTECA AL DÍA, que rehace cada toma desde el catálogo y
+      // conserva solo lo que nombra. Aquí se perdían: bastaba recargar la
+      // aplicación para que el clip descartado volviera a anunciarse en verde.
+      const [modelo] = ctx.fn.tomasDeBiblioteca();
+      const sinc = ctx.fn.sincronizarBiblioteca({
+        tomas: [{ ...modelo, imagen: 'ok', aprobada: true, video: 'ok', versionImagen: 3, versionClip: 2 }],
+      });
+      const t1 = sinc.tomas.find((t) => t.clave === modelo.clave) || {};
+      if (t1.versionImagen !== 3 || t1.versionClip !== 2) {
+        fallos.push('Sincronizar el archivo con el catálogo borra las versiones: el clip viejo resucita en la siguiente carga.');
+      }
+
+      // ── 3 · EL MONTAJE NO MONTA UN CLIP DE LA IMAGEN DESCARTADA ───────────
+      // Es lo que más dolía: la imagen mala se rehacía y el documental seguía
+      // llevando el clip de la cara deforme.
+      const plano = { encuadre: 'plano general', movimientoCamara: 'acercamiento lento', lugar: 'x', luz: 'y', sujetos: [], descripcion: 'd' };
+      const paraHoja = { escena: 0, segundos: 6, medida: true, plano, audio: 'ok', imagen: 'ok', movimiento: true, video: 'ok' };
+      const hoja = construirHoja({
+        pieza: 'p01',
+        tomas: [
+          { ...paraHoja, i: 0, versionImagen: 2, versionClip: 2 },
+          { ...paraHoja, i: 1, versionImagen: 2, versionClip: 1 },
+        ],
+        escenas: [{ n: 0 }],
+      });
+      const [alDia, caducado] = hoja.tomas;
+      if (alDia.archivo !== 'p01/t000/vid' || alDia.movimiento !== true) {
+        fallos.push('Un clip que sí corresponde a su imagen dejó de montarse: se tira lo pagado.');
+      }
+      if (caducado.archivo !== 'p01/t001/img' || caducado.movimiento !== false) {
+        fallos.push(`El montaje usa ${caducado.archivo}: el clip de la imagen descartada acaba en el documental.`);
+      }
+      // Y CAE DE PIE: baja a la imagen CON su recorrido de cámara, como cualquier
+      // toma sin clip. Sin esto saldría congelada.
+      if (!caducado.camara) {
+        fallos.push('La toma que pierde su clip caducado se queda sin recorrido de cámara: saldría congelada.');
+      }
+
+      // ── 4 · Y SE PUEDE PEDIR UNO NUEVO ────────────────────────────────────
+      // «Deberías darme la opción para generar un nuevo clip de esa imagen si yo
+      //  quiero.» Con la bandera suelta, la ficha creía que ya lo tenía: ni servía
+      //  el que había ni dejaba pedir otro.
+      const conClipViejo = { ...base, video: 'ok', versionImagen: 2, versionClip: 1 };
+      if (!clipsPosibles([conClipViejo]).length) {
+        fallos.push('Una imagen rehecha y aprobada no puede pedir un clip nuevo: se queda sin clip para siempre.');
+      }
+      const alCorriente = { ...base, video: 'ok', versionImagen: 2, versionClip: 2 };
+      if (clipsPosibles([alCorriente]).length) {
+        fallos.push('Se ofrece pagar otra vez el clip de una imagen que ya tiene el suyo.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: la bandera suelta. Existe un clip, luego vale — sin
+    // preguntar de qué imagen salió.
+    romper: (ctx) =>
+      conFuncion(ctx, 'clipVigente', (toma, tomas) => {
+        const dueña = ctx.fn.tomaDelFotograma(toma, tomas);
+        return dueña.video === 'ok' || !!dueña.heredadoVid || !!toma.heredadoVid;
+      }),
+  },
 ];

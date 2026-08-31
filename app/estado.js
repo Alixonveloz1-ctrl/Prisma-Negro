@@ -427,6 +427,13 @@ function sanearToma(bruto, i, proyecto) {
     // que todo lo de aquí: sin ella, cada recarga la borraría y la biblioteca
     // dejaría de saber que el catálogo cambió debajo de una imagen ya pagada.
     huella: String(t.huella || ''),
+    // ── DE QUÉ IMAGEN SALIÓ EL CLIP ────────────────────────────────────────
+    // `versionImagen` sube con cada imagen generada; `versionClip` guarda la que
+    // había cuando se generó el clip. Iguales = el clip le corresponde. En la
+    // lista blanca o mueren en cada carga —la avería de `heredado` otra vez— y
+    // con ellas volvería el clip de la imagen descartada dándose por bueno.
+    versionImagen: Math.max(0, Number(t.versionImagen) || 0),
+    versionClip: Math.max(0, Number(t.versionClip) || 0),
     // §8.1: cada toma conserva la referencia a la ficha que la respalda.
     fichas: Array.isArray(t.fichas) ? t.fichas : [],
     corteForzado: t.corteForzado === true,
