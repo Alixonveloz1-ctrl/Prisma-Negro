@@ -695,6 +695,77 @@ export const invariantes = [
   },
 
   {
+    nombre: 'un-clip-pagado-se-puede-ver-y-solo-uno-a-la-vez',
+    dice: '«Generé treinta y ocho clips y no puedo ver ninguno.» Y era literal: la ficha del archivo solo cargaba la IMAGEN. Un clip pagado se anunciaba con una pastilla verde —«clip listo»— y no había ninguna manera de verlo. Treinta y ocho veces lo más caro que genera esta herramienta, invisible. Y se enseña DE UNO EN UNO: un clip son decenas de megas, y cargar los veinticuatro de la pantalla es exactamente lo que tumbó el navegador con imágenes de dos megas.',
+    async comprobar(ctx) {
+      const { humoDeLaPantalla, proyectoYaEmpezado } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      // 1 · UNA FICHA CON CLIP OFRECE VERLO. Se arranca de verdad: una entrada con
+      // clip pagado y otra sin él.
+      const p = proyectoYaEmpezado();
+      p.piezas.push({
+        id: 'biblioteca',
+        esBiblioteca: true,
+        titulo: 'x',
+        escenas: [{ n: 0, titulo: 'R' }, { n: 1, titulo: 'E' }],
+        tomas: [
+          { i: 0, clave: 'personaje:perito:v1', personaje: 'perito', variante: 'v1', imagen: 'ok', aprobada: true, movimiento: true, video: 'ok' },
+          { i: 1, clave: 'personaje:perito:v2', personaje: 'perito', variante: 'v2', imagen: 'ok', aprobada: true, movimiento: true },
+        ],
+      });
+      const r = await humoDeLaPantalla({ parche, proyecto: p });
+      fallos.push(...r.fallos);
+      const botones = r.botonesDe('galeria-biblioteca').map((b) => b.texto);
+      if (!botones.some((t) => /Ver el clip/.test(t))) {
+        fallos.push('Una entrada con su clip pagado no ofrece verlo: lo más caro que se genera, invisible.');
+      }
+      // Y la que NO lo tiene no ofrece ver nada — ofrece generarlo.
+      if (botones.filter((t) => /Ver el clip/.test(t)).length !== 1) {
+        fallos.push('Se ofrece ver el clip de una entrada que no lo tiene.');
+      }
+
+      // 2 · NO SE CARGA SOLO. Veinticuatro clips de decenas de megas al abrir la
+      // pantalla es el fallo de memoria otra vez, multiplicado por treinta.
+      const i = main.indexOf('function tarjetaDeBiblioteca');
+      const ficha = i < 0 ? '' : main.slice(i, main.indexOf('\n}\n', i));
+      if (/materialLocal\([^)]*'video\/mp4'/.test(ficha)) {
+        fallos.push('La ficha carga el clip al pintarse: veinticuatro videos de golpe tumban el teléfono.');
+      }
+
+      // 3 · Y SOLO UNO VIVO A LA VEZ. Abrir el segundo suelta el primero, o son
+      // decenas de megas por cada clip que se mire.
+      if (!/function soltarClip\(\)/.test(main) || !/URL\.revokeObjectURL\(clipEnPantalla\.url\)/.test(main)) {
+        fallos.push('El clip que se deja de ver no se suelta: cada uno que abras se queda en memoria.');
+      }
+      const j = main.indexOf('async function verClip');
+      const cuerpo = j < 0 ? '' : main.slice(j, j + 1200);
+      if (!/soltarClip\(\);[\s\S]{0,120}createObjectURL/.test(cuerpo)) {
+        fallos.push('Se crea la URL del clip nuevo sin soltar la del anterior.');
+      }
+      // Y NADIE crea la URL de un clip por su cuenta: el episodio tenía la misma
+      // fuga, con archivos treinta veces más grandes que las imágenes.
+      for (const suelta of main.matchAll(/URL\.createObjectURL\(blob\)/g)) {
+        const alrededor = main.slice(Math.max(0, suelta.index - 400), suelta.index);
+        if (/video\/mp4/.test(alrededor) && !/function verClip/.test(alrededor)) {
+          fallos.push('Hay un clip que se abre fuera de `verClip`: esa URL no la suelta nadie.');
+          break;
+        }
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: la ficha del archivo sin botón de ver.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace("  const tieneClip = x.video === 'ok' || !!x.heredadoVid;", '  const tieneClip = false;'),
+      ),
+  },
+
+  {
     nombre: 'aprobar-fotos-no-tumba-el-navegador-ni-echa-fuera',
     dice: '«Cada vez que le apruebo una foto, se reinicia el navegador. Se reinicia la página y me saca de la sesión y tengo que estar cada dos minutos metiendo la contraseña.» Los dos síntomas eran un solo fallo. Aprobar repintaba la galería ENTERA y cada tarjeta hacía `URL.createObjectURL`, que MANTIENE VIVO EL BLOB hasta que se revoca — y no se revocaba ninguna: trece creadas en toda la aplicación, cuatro soltadas. Con imágenes de un par de megas, diez aprobaciones son cientos de megas retenidos; Safari en un iPhone descarga la pestaña. Y como la contraseña vivía en `sessionStorage`, la recarga te echaba fuera.',
     async comprobar(ctx) {

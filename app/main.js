@@ -1671,6 +1671,63 @@ function urlDeMaterial(clave, blob) {
   return url;
 }
 
+/**
+ * EL CLIP QUE SE ESTÁ VIENDO, y solo uno.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Generé treinta y ocho clips y no puedo ver ninguno.»
+ *
+ * Era literal: la ficha del archivo solo cargaba la IMAGEN. Un clip pagado se
+ * anunciaba con una pastilla verde —«clip listo»— y no había ninguna manera de
+ * verlo. Treinta y ocho veces lo más caro que genera esta herramienta, invisible.
+ *
+ * Y se enseña DE UNO EN UNO a propósito. Un clip son decenas de megas, y cargar
+ * los veinticuatro de la pantalla es exactamente lo que acaba de tumbar el
+ * navegador con imágenes de dos megas. Al abrir uno se suelta el anterior: en
+ * memoria hay como mucho un video, que es también como se ven.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+let clipEnPantalla = null;
+
+function soltarClip() {
+  if (!clipEnPantalla) return;
+  URL.revokeObjectURL(clipEnPantalla.url);
+  clipEnPantalla = null;
+}
+
+/**
+ * Carga un clip y lo pone en el hueco de su ficha. Suelta el que hubiera antes.
+ *
+ * Va aparte del almacén de imágenes porque su regla es otra: las imágenes se
+ * quedan mientras se vean, y los clips solo mientras se miran.
+ */
+async function verClip({ tarjeta, hueco, clave, boton }) {
+  boton.disabled = true;
+  const rotulo = boton.textContent;
+  boton.textContent = '…';
+  try {
+    const blob = await materialLocal(clave, 'video/mp4');
+    if (!blob) {
+      boton.textContent = 'no se pudo cargar';
+      return;
+    }
+    soltarClip();
+    const url = URL.createObjectURL(blob);
+    const video = document.createElement('video');
+    video.src = url;
+    video.controls = true;
+    video.playsInline = true;
+    video.preload = 'metadata';
+    tarjeta.replaceChild(video, hueco);
+    clipEnPantalla = { clave, url };
+    boton.remove();
+  } catch (e) {
+    boton.textContent = rotulo;
+    boton.disabled = false;
+    throw e;
+  }
+}
+
 /** Suelta todo lo que ya no está en pantalla. */
 function soltarUrles(enUso) {
   for (const [clave, url] of urlesDeMaterial) {
@@ -1775,6 +1832,23 @@ function tarjetaDeBiblioteca(x, tomas, mia) {
         ? '<span class="pastilla">lleva clip</span>'
         : '');
   d.appendChild(cuerpo);
+
+  // EL CLIP, SI LO TIENE. Se carga al tocarlo y no antes: son decenas de megas y
+  // hay veinticuatro fichas en pantalla. Ver `verClip`.
+  const tieneClip = x.video === 'ok' || !!x.heredadoVid;
+  if (tieneClip) {
+    const ver = document.createElement('button');
+    ver.className = 'btn chico fantasma';
+    ver.textContent = 'Ver el clip';
+    ver.onclick = () =>
+      verClip({
+        tarjeta: d,
+        hueco: d.firstChild,
+        clave: claveClip(bibliotecaFase.ID_BIBLIOTECA, x, tomas),
+        boton: ver,
+      }).catch((e) => avisar('biblioteca', e.message, 'malo'));
+    cuerpo.appendChild(ver);
+  }
 
   if (hay) {
     const clave = claveFotograma(bibliotecaFase.ID_BIBLIOTECA, x, tomas);
@@ -2777,22 +2851,14 @@ function pintarPorTipo() {
       const v = document.createElement('button');
       v.className = 'btn chico fantasma';
       v.textContent = 'Ver';
-      v.onclick = async () => {
-        v.disabled = true;
-        v.textContent = '…';
-        const blob = await materialLocal(claveClip(P.id, x, t), 'video/mp4');
-        if (blob) {
-          const video = document.createElement('video');
-          video.src = URL.createObjectURL(blob);
-          video.controls = true;
-          video.playsInline = true;
-          video.preload = 'metadata';
-          d.replaceChild(video, visual);
-          v.remove();
-        } else {
-          v.textContent = 'no se pudo cargar';
-        }
-      };
+      // Por `verClip`: uno a la vez, y el anterior se suelta. Esto creaba una URL
+      // de objeto por cada clip abierto y no soltaba ninguna — la misma fuga que
+      // tumbaba el navegador aprobando fotos, pero con archivos treinta veces
+      // más grandes.
+      v.onclick = () =>
+        verClip({ tarjeta: d, hueco: visual, clave: claveClip(P.id, x, t), boton: v }).catch((e) =>
+          avisar('previa', e.message, 'malo'),
+        );
       cuerpo.appendChild(v);
     }
     cajaClips.appendChild(d);
