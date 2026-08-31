@@ -23,6 +23,7 @@ import { pintarSelector } from './config.js';
 import { segmentarVerificado } from '../comun/segmentar.mjs';
 import { TEMAS, EPOCAS, EPOCA_POR_DEFECTO, temaPorId, epocaPorId } from '../comun/temas.mjs';
 import { GENEROS, generoPorId } from '../comun/generos.mjs';
+import { mundoDelCaso } from '../comun/estilos.mjs';
 import * as elenco from '../comun/elenco.mjs';
 import * as investigacion from './fases/investigacion.js';
 import * as guionFase from './fases/guion.js';
@@ -170,6 +171,16 @@ function accion(boton, hacer, donde = 'paso4') {
 
 const guardar = () => estado.guardar(P);
 const pieza = () => estado.piezaDe(P, P.piezaActiva);
+
+/**
+ * EN QUÉ PAÍS PASA ESTE EPISODIO, para las imágenes.
+ *
+ * Sale del caso, que ya trae un país y una ciudad REALES. Un caso viejo —de antes
+ * de que el caso llevara país— devuelve el mundo neutro: sin saber dónde pasa no
+ * se puede pedir el volante de ningún lado, que es exactamente el fallo original.
+ * Ver `mundoDelCaso` en `comun/estilos.mjs`.
+ */
+const mundoDeLaPieza = () => mundoDelCaso(pieza()?.caso || {});
 
 /**
  * Las fichas, el caso y el tema son DE LA PIEZA, no del proyecto.
@@ -848,6 +859,11 @@ function pintarCasos() {
           `<div class="cb"><b>${escapar(c.titulo)}</b><p>${escapar(c.gancho)}</p>` +
           `<div class="meta">${c.cuando ? `<span>${escapar(c.cuando)}</span>` : ''}` +
           `${c.donde ? `<span>· ${escapar(c.donde)}</span>` : ''}` +
+          // EL PAÍS, A LA VISTA Y ANTES DE ELEGIR. No es un dato de adorno: de él
+          // sale el mundo de TODAS las imágenes del episodio —los coches, las
+          // matrículas, los uniformes, por qué lado va el volante—. Si está mal,
+          // hay que verlo aquí y no ciento veintiséis imágenes después.
+          `${c.pais ? `<span class="pastilla">${escapar(c.pais)}</span>` : ''}` +
           `${c.construido ? '<span class="pastilla p-ok">ficción</span>' : c.documentado ? '' : '<span class="pastilla p-aviso">poco documentado</span>'}</div></div></button>`,
       )
       .join('') +
@@ -906,6 +922,7 @@ function pintarCasoElegido() {
   const c = pieza().caso;
   $('caso-elegido').innerHTML = c
     ? `<div class="ficha"><div class="cab">${escapar(c.cuando)} · ${escapar(c.donde)}` +
+      `${c.pais ? ` · <b>${escapar(c.pais)}</b>` : ''}` +
       `${pastillaDeCaso(c)}</div>` +
       `<p><b>${escapar(c.titulo)}</b></p><p style="margin-top:6px;color:var(--tinta-2)">${escapar(c.sinopsis)}</p>` +
       (c.fuentes?.length
@@ -1464,6 +1481,9 @@ accion('b-imagenes', async () => {
         pieza: P.id,
         config: P.config,
         tratamiento: pieza().tratamiento,
+        // El país del caso, para que el coche, las matrículas y los uniformes
+        // sean los de donde pasa la historia.
+        mundo: mundoDeLaPieza(),
         senal,
         alEsperar,
       }),
@@ -2972,6 +2992,7 @@ async function rehacerImagen(i) {
     pieza: P.id,
     config: P.config,
     tratamiento: pieza().tratamiento,
+    mundo: mundoDeLaPieza(),
   });
   const k = pieza().tomas.findIndex((t) => t.i === i);
   // `movimiento` se conserva: la toma sigue mereciendo moverse, solo que ahora le
@@ -3864,7 +3885,12 @@ accion(
   async () => {
     const toma = pieza().tomas.find((t) => t.plano);
     if (!toma) throw new Error('Dirige la pieza primero: sin ficha de plano no hay instrucción que enseñar.');
-    const txt = imagenFase.componerInstruccion(toma, P.config, { tratamiento: pieza().tratamiento });
+    // CON SU MUNDO. Enseñar la instrucción sin él enseñaría una que no es la que
+    // se manda, que es peor que no enseñar nada.
+    const txt = imagenFase.componerInstruccion(toma, P.config, {
+      tratamiento: pieza().tratamiento,
+      mundo: mundoDeLaPieza(),
+    });
     registro('estilo', [txt]);
   },
   'estilo',

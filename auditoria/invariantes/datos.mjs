@@ -3316,4 +3316,129 @@ export const invariantes = [
         return dueña.video === 'ok' || !!dueña.heredadoVid || !!toma.heredadoVid;
       }),
   },
+
+  {
+    nombre: 'el-caso-pasa-en-un-pais-real-y-solo-lo-pequeno-se-inventa',
+    dice: '«Debes inventar historias de cualquier parte del mundo. No tienen que ser de Latinoamérica. Que sea de Estados Unidos, de Inglaterra, de Rusia, de Panamá, de Colombia, de Perú. Cualquier país es válido, cualquier ciudad es válida. Es más: el país y la ciudad tienen que ser CORRECTOS. Ya lo que podemos inventar es el pueblo, el condado; eso es lo que hay que inventar, los lugares específicos pequeños.» El constructor pedía «nombres, pueblos, condados y organismos COMPLETAMENTE INVENTADOS», y con eso salían topónimos de fantasía: nadie siente que es real un caso ocurrido en un país que no existe. Y encima decía «condado» siempre, que es un marco anglosajón puesto por defecto — el mismo fallo del volante, pero en las palabras. Lo grande es real y verificable; lo pequeño es inventado, que es donde habría alguien real a quien señalar.',
+    comprobar(ctx) {
+      const inv = fuente(ctx, 'app/fases/investigacion.js');
+      const fallos = [];
+
+      // 1 · EL PAÍS Y LA CIUDAD VIAJAN APARTE. Metidos dentro de la frase de
+      // `donde` no se pueden leer, y de ellos cuelga el mundo de las imágenes.
+      for (const campo of ['pais', 'ciudad']) {
+        if (!new RegExp(`${campo}: \\{ type: 'string' \\}`).test(inv)) {
+          fallos.push(`El caso no trae «${campo}» como campo propio: el mundo de la imagen no puede leerlo.`);
+        }
+        if (!new RegExp(`required:[^\\]]*'${campo}'`).test(inv)) {
+          fallos.push(`«${campo}» no es obligatorio: el generador puede devolverlo vacío y nadie se entera.`);
+        }
+      }
+
+      // 2 · SE PIDEN REALES, Y CORRECTOS.
+      for (const [qué, re] of [
+        ['que el país y la ciudad son reales', /PA[IÍ]S Y LA CIUDAD SON REALES/i],
+        ['que lo pequeño se inventa', /LO PEQUE[NÑ]O SE INVENTA/i],
+        ['que el vocabulario del territorio es el de ese país', /se usa en ese pa[ií]s|palabra de ese pa[ií]s/i],
+      ]) {
+        if (!re.test(inv)) fallos.push(`El constructor de casos no dice ${qué}.`);
+      }
+
+      // 3 · Y NO SE CENTRALIZA EN NINGUNA REGIÓN. Esto es lo que había que
+      // deshacer: una decisión mía disfrazada de regla.
+      if (/pueblos, condados y organismos completamente inventados/i.test(inv)) {
+        fallos.push('Sigue pidiendo que los lugares sean todos inventados: los topónimos salen de fantasía.');
+      }
+      if (!/MUNDO ENTERO VALE|cualquier pa[ií]s/i.test(inv)) {
+        fallos.push('No se dice que vale cualquier país del mundo: los casos se amontonan en una sola región.');
+      }
+      // El aviso concreto: «condado» era la palabra por defecto para todo.
+      const abanico = ['condado', 'municipio', 'provincia', 'comuna', 'parroquia'];
+      const presentes = abanico.filter((x) => new RegExp(x, 'i').test(inv)).length;
+      if (presentes < 4) {
+        fallos.push(
+          `Solo ${presentes} de ${abanico.length} formas de dividir el territorio aparecen: ` +
+            'con una sola, todos los casos suenan al mismo país.',
+        );
+      }
+
+      // 4 · LO QUE NO CAMBIA: ninguna persona ni empresa real. El país es un
+      // contenedor; la gente es lo que se podría señalar.
+      if (!/Ni una persona real ni una empresa real/i.test(inv)) {
+        fallos.push('Se ha perdido la regla de que no hay personas ni empresas reales.');
+      }
+      if (!/documentado: false SIEMPRE|documentado":false/.test(inv)) {
+        fallos.push('El caso deja de declararse como ficción.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: todos los lugares inventados, y «condado» de oficio.
+    romper: (ctx) =>
+      editando(ctx, 'app/fases/investigacion.js', (t) =>
+        t.replace(
+          /'- EL MUNDO ENTERO VALE[\s\S]*?'- Que no se parezca a un caso real conocido/,
+          "'- Nombres, pueblos, condados y organismos completamente inventados.\\n' +\n        '- Que no se parezca a un caso real conocido",
+        ),
+      ),
+  },
+
+  {
+    nombre: 'cambiar-la-regla-del-mundo-no-tira-el-archivo-ya-pagado',
+    dice: '«La biblioteca ya está construida.» La huella cubre el ENCARGO ENTERO a propósito —para que cambiar una regla del canal marque lo que se generó con la anterior—, y eso es correcto hasta que la regla que cambia es una que no invalida nada: pasar del mundo hispanohablante al neutro marcaba de golpe las ciento veintiséis imágenes del archivo, tirando el visto bueno de todas, cuando un perito con bata, un pasillo o unas manos sobre una carpeta siguen valiendo igual. El aviso habría sido correcto y el coste, absurdo. Los encargos anteriores se aceptan uno a uno y por escrito; lo que de verdad ata a un país —patrullas, matrículas, fachadas— se rehace desde su ficha.',
+    comprobar(ctx) {
+      const { sincronizarBiblioteca, tomasDeBiblioteca, huellaDePlano, ENCARGOS_ANTERIORES } = ctx.fn;
+      const fallos = [];
+
+      if (!Array.isArray(ENCARGOS_ANTERIORES) || !ENCARGOS_ANTERIORES.length) {
+        return ['No hay lista de encargos anteriores: cambiar la regla del mundo marcaría todo el archivo.'];
+      }
+
+      const [modelo] = tomasDeBiblioteca();
+      const conHuella = (huella) =>
+        sincronizarBiblioteca({
+          tomas: [{ ...modelo, imagen: 'ok', aprobada: true, huella }],
+        }).tomas.find((t) => t.clave === modelo.clave) || {};
+
+      // 1 · UNA IMAGEN GENERADA CON EL ENCARGO ANTERIOR SIGUE VALIENDO.
+      for (const [n, encargo] of ENCARGOS_ANTERIORES.entries()) {
+        const vieja = conHuella(huellaDePlano(modelo.plano, encargo));
+        if (vieja.desfasada) {
+          fallos.push(`El encargo anterior ${n + 1} no se acepta: el archivo entero se marca por una regla que no lo invalida.`);
+        }
+        if (vieja.aprobada !== true) {
+          fallos.push(`Una imagen del encargo anterior ${n + 1} pierde el visto bueno: hay que volver a aprobarlas todas a mano.`);
+        }
+      }
+
+      // 2 · Y AL ACEPTARLA SE LA ADOPTA: se le pone la huella de ahora, para que
+      // esto no tenga que volver a preguntarse en cada carga.
+      const adoptada = conHuella(huellaDePlano(modelo.plano, ENCARGOS_ANTERIORES[0]));
+      if (adoptada.huella !== huellaDePlano(modelo.plano)) {
+        fallos.push('La imagen aceptada no se adopta al encargo de ahora: arrastraría la huella vieja para siempre.');
+      }
+
+      // 3 · PERO UN ENCARGO DESCONOCIDO SÍ MARCA. Si no, se habría cambiado una
+      // salvaguarda por un agujero: aceptar todo es no comprobar nada.
+      const otra = conHuella('huella-de-un-encargo-que-nadie-reconoce');
+      if (!otra.desfasada) {
+        fallos.push('Una imagen de un encargo desconocido se da por buena: el aviso de «hay que rehacerla» no avisa de nada.');
+      }
+      if (otra.aprobada === true) {
+        fallos.push('Una imagen desfasada conserva el visto bueno: se podría pagar su clip.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba antes del injerto: cualquier cambio de encargo marca
+    // todo lo generado y se lleva por delante el visto bueno de todo el archivo.
+    romper: (ctx) =>
+      conFuncion(ctx, 'sincronizarBiblioteca', (pieza) => {
+        const z = ctx.fn.sincronizarBiblioteca(pieza);
+        return {
+          ...z,
+          tomas: z.tomas.map((t) =>
+            t.huella && t.imagen === 'ok' ? { ...t, desfasada: true, aprobada: false } : t,
+          ),
+        };
+      }),
+  },
 ];

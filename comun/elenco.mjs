@@ -1162,7 +1162,13 @@ export const RECURSOS = [
         encuadre: 'plano detalle',
         lugar: 'una recta de la comarcal vista desde dentro de un coche',
         luz: 'el verde del salpicadero y los faros propios abriendo el asfalto',
-        descripcion: 'La carretera vista DESDE DENTRO del coche, desde el asiento del copiloto, a través del parabrisas con el limpiaparabrisas cruzando el cuadro; el salpicadero desenfocado ocupa el tercio inferior y el VOLANTE queda a la IZQUIERDA del cuadro.',
+        // SIN EL VOLANTE EN CUADRO, y es a propósito. Este plano es de ARCHIVO: se
+        // usa en episodios de países distintos, y el volante es justo lo que ata
+        // una imagen a un lado de la carretera. Decía «el VOLANTE a la IZQUIERDA»
+        // y con eso quedaba inservible para un caso en Inglaterra o en Japón. Se
+        // encuadra por el centro del parabrisas: la carretera se ve igual y no
+        // delata ningún país. Ver `MUNDO_NEUTRO`.
+        descripcion: 'La carretera vista DESDE DENTRO del coche, por el CENTRO del parabrisas, con el limpiaparabrisas cruzando el cuadro; el salpicadero desenfocado ocupa el tercio inferior. NO se ve el volante ni ninguno de los dos asientos delanteros: solo el parabrisas y el asfalto.',
         matiz: 'ya de madrugada, con el cielo aclarando por un lado del parabrisas',
       },
     ],
@@ -1514,7 +1520,8 @@ export const RECURSOS = [
         encuadre: 'plano medio',
         lugar: 'el interior del coche, desde el asiento de atrás',
         luz: 'luz de día entrando por el parabrisas, el interior en sombra',
-        descripcion: 'El interior visto DESDE EL ASIENTO DE ATRÁS: los reposacabezas delanteros ocupan el primer término en sombra y el parabrisas se abre al fondo como una ventana de luz, con el VOLANTE a la IZQUIERDA.',
+        // Lo mismo: sin volante. Ver la nota de `carretera-noche:v3`.
+        descripcion: 'El interior visto DESDE EL ASIENTO DE ATRÁS, centrado entre los dos asientos: los reposacabezas delanteros ocupan el primer término en sombra y el parabrisas se abre al fondo como una ventana de luz. NO se ve el volante.',
         matiz: 'de día, con el salpicadero cubierto de polvo',
       },
       {

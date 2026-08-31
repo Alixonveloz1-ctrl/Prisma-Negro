@@ -113,44 +113,90 @@ export const BARRERA_DOCUMENTAL =
   'No imites material de archivo auténtico ni fotografía de prensa real.';
 
 /**
- * DÓNDE PASA ESTO. Y es una regla del canal, no del guion.
+ * DÓNDE PASA ESTO. Y no es una regla del canal: es del CASO.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * «Estás manejando del lado derecho de la carretera, bien, pero el volante del
  *  lado derecho. Sé que hay un par de países donde se maneja así, pero eso no es
- *  lo normal. Este canal es en español y es para Latinoamérica.»
+ *  lo normal.»
  *
- * Salió un plano precioso desde dentro de un coche con el volante a la derecha.
- * Y el fallo no era de esa descripción: era que NADIE LE HABÍA DICHO NUNCA al
- * generador en qué mundo transcurre esto. Sin decirlo, cada imagen cae en el
- * promedio de lo que el modelo vio más, y ese promedio no es el de quien va a
- * mirar el canal.
+ * y más tarde, corrigiéndome:
  *
- * Esto no es sobre dónde ocurre la historia —puede ocurrir donde quiera y el guion
- * manda—: es sobre que nada de lo que se ve saque al espectador de la pieza. Un
- * volante en el lado que no toca lo saca en medio segundo, y ya no vuelve.
+ * «Debes inventar historias de cualquier parte del mundo. No tienen que ser de
+ *  Latinoamérica. Que sea de Estados Unidos, de Inglaterra, de Rusia, de Panamá,
+ *  de Colombia, de Perú. El país y la ciudad tienen que ser CORRECTOS.»
  *
- * Y hay una trampa que evitar en la dirección contraria: pedir «Latinoamérica» a
- * un generador devuelve una postal —colores saturados, folclore, tópico de
- * agencia de viajes—, que es igual de falso y encima cursi. Lo que se pide es un
- * sitio CORRIENTE, que es lo que hace que alguien reconozca su barrio.
+ * Los dos avisos dicen lo mismo, y yo entendí mal el primero.
+ *
+ * El fallo del volante nunca fue «esto no es Latinoamérica». Fue que NADIE LE
+ * HABÍA DICHO AL GENERADOR DÓNDE PASA LA HISTORIA, y sin decírselo cada imagen
+ * cae en el promedio de lo que el modelo vio más. La respuesta que puse —clavar
+ * el canal entero en un mundo hispanohablante con el volante a la izquierda—
+ * tapaba el síntoma y rompía el producto: con esa regla, un caso en Liverpool
+ * salía con el volante en el lado que no es. El MISMO fallo, del otro lado.
+ *
+ * Lo correcto es que el mundo de la imagen sea el del caso. Y como el caso ya
+ * lleva un país REAL y una ciudad REAL, no hay nada que adivinar.
+ *
+ * Quedan dos mundos, porque hay dos clases de imagen:
+ *
+ *   · LA DEL EPISODIO sabe dónde pasa, y se le dice.  → `mundoDelCaso`
+ *   · LA DE LA BIBLIOTECA no puede saberlo: es permanente y la misma cara sirve
+ *     para un episodio en Ohio y otro en Cusco. Así que no se le pide un país:
+ *     se le pide que NO DELATE NINGUNO.                → `MUNDO_NEUTRO`
+ *
+ * Y la trampa que sí valía para las dos: pedirle un país a un generador devuelve
+ * una POSTAL —colores saturados, folclore, tópico de agencia de viajes—, que es
+ * igual de falso y encima cursi. Lo que se pide es un sitio corriente.
  * ─────────────────────────────────────────────────────────────────────────────
  */
-export const MUNDO_DEL_CANAL =
-  // DE QUÉ MUNDO SE TRATA
-  'EL MUNDO DE ESTE CANAL ES HISPANOHABLANTE. Los coches, las calles, los ' +
-  'edificios, la ropa, los uniformes y los objetos de casa son los de una ciudad o ' +
-  'un pueblo de habla hispana corriente. ' +
-  // LO CONCRETO, que es lo que canta cuando falla
-  'LOS VEHÍCULOS LLEVAN EL VOLANTE A LA IZQUIERDA y se circula por el carril ' +
-  'DERECHO. Si se ve un salpicadero, un interior de coche o alguien al volante, el ' +
-  'volante va a la IZQUIERDA. ' +
-  'Nada que delate otro país: ni volante a la derecha, ni circulación por la ' +
-  'izquierda, ni cabinas, buzones, autobuses escolares, señales, semáforos, ' +
-  'matrículas, enchufes o furgones policiales con forma de otro sitio. ' +
-  // Y LA TRAMPA DEL OTRO LADO
-  'Y NO ES UNA POSTAL: nada de folclore, ni color turístico, ni tópicos. Es un ' +
-  'sitio corriente y trabajado, de los que a cualquiera le suenan a su barrio.';
+const NI_POSTAL =
+  'Y NO ES UNA POSTAL: nada de folclore, ni color turístico, ni tópicos de ' +
+  'agencia de viajes. Es un sitio corriente y trabajado, de los que a cualquiera ' +
+  'le suenan a su barrio.';
+
+/**
+ * El mundo de una imagen de ARCHIVO, que va a servir en episodios de países
+ * distintos. No se le pide un sitio: se le pide que no delate ninguno.
+ */
+export const MUNDO_NEUTRO =
+  'ESTA IMAGEN ES DE ARCHIVO: va a usarse en episodios que ocurren en países ' +
+  'distintos, así que NADA puede atarla a un país concreto. Ni banderas, ni ' +
+  'escudos, ni parches o insignias de un cuerpo identificable, ni matrículas, ni ' +
+  'carteles, ni señales de tráfico, ni buzones, ni uniformes de una policía ' +
+  'reconocible. La ropa es de trabajo, corriente y sin marcas. ' +
+  // El volante es justo lo que fija un país en medio segundo: si no se ve, no
+  // delata. Por eso los vehículos de archivo se ven por fuera.
+  'Si aparece un vehículo, se ve POR FUERA: no se ve el salpicadero ni el ' +
+  'volante, que es lo que ataría el plano a un lado de la carretera. ' +
+  NI_POSTAL;
+
+/**
+ * El mundo de una imagen DEL EPISODIO, que sí sabe dónde pasa.
+ *
+ * No llevo aquí una tabla de por qué lado circula cada país: sería doscientas
+ * filas que se quedan viejas y que yo no puedo mantener. Lo que se hace es
+ * NOMBRAR EL PAÍS y obligar a resolver la regla para ÉL —que es un dato que el
+ * generador sí tiene—, en vez de dejar que caiga en su promedio, que es lo que
+ * puso el volante donde no iba.
+ */
+export function mundoDelCaso({ pais = '', ciudad = '' } = {}) {
+  const donde = String(pais || '').trim();
+  if (!donde) return MUNDO_NEUTRO;
+  const sitio = String(ciudad || '').trim();
+  return (
+    `ESTO PASA EN ${(sitio ? `${sitio}, ${donde}` : donde).toUpperCase()}, Y SE TIENE QUE NOTAR. ` +
+    `Los vehículos, las matrículas, las señales, los semáforos, los buzones, los ` +
+    `enchufes, la arquitectura, la ropa y los uniformes son los de ${donde}: no los ` +
+    `de otro sitio, y no una mezcla de varios. ` +
+    // LO CONCRETO, que es lo que canta cuando falla.
+    `EL VOLANTE Y EL CARRIL: piensa por qué lado se circula en ${donde} antes de ` +
+    `dibujar ningún coche. Si en ${donde} se circula por la DERECHA, el volante va ` +
+    `a la IZQUIERDA; si se circula por la IZQUIERDA, el volante va a la DERECHA. ` +
+    `No lo mezcles y no lo dejes al azar. ` +
+    NI_POSTAL
+  );
+}
 
 /**
  * NADA DE LETRAS. Y no es una manía: es que no salen.

@@ -1329,14 +1329,25 @@ export const invariantes = [
           fallos.push(`Una etiqueta de voz no lleva nada que la distinga: ${e.split('\n')[0].slice(0, 50)}`);
         }
       }
-      // El canal narra en español LATINO. Una voz peninsular en medio de una
-      // narración latina se oye como otro narrador, igual que el §7.9 con los
-      // modelos expresivos.
-      if (/'es-ES'/.test(cuerpo)) {
-        fallos.push('El catálogo de voces deja pasar España: el canal narra en latino.');
-      }
-      if (!/REGIONES_LATINAS/.test(t)) {
+      // TODAS LAS DE ESPAÑOL, latinas y de España. «Ahora sí quiero que dejes
+      // voces latinas y voces de español de España también.» España estuvo fuera
+      // con un argumento que sonaba técnico y no lo era: dentro de un episodio
+      // narra UNA voz, siempre, así que mezclar acentos nunca fue el riesgo.
+      if (!/REGIONES_DE_VOZ/.test(t)) {
         fallos.push('No hay una lista explícita de las regiones que valen.');
+      }
+      for (const [qué, re] of [
+        ['España', /'es-ES'/],
+        ['México', /'es-MX'/],
+        ['el latino general', /'es-419'/],
+      ]) {
+        if (!re.test(t)) fallos.push(`El catálogo de voces deja fuera ${qué}: se ofrecen menos voces de las que hay.`);
+      }
+      // Y la región tiene que seguir SALIENDO en la etiqueta: ahora más que antes,
+      // porque con España dentro hay dos acentos en la misma lista y elegir a
+      // ciegas sería elegir el acento por accidente.
+      if (!/España/.test(t)) {
+        fallos.push('La región de España no tiene nombre legible: en el desplegable no se sabría cuál es cuál.');
       }
       // §7.9: las de entrega variable pueden ofrecerse, pero NUNCA por defecto. La
       // decisión es de quien narra; el valor por defecto es el que no arruina una
@@ -1368,7 +1379,7 @@ export const invariantes = [
     // de encajar al reformatear: lo marcó `--romper` como ciega.
     romper: (ctx) =>
       editando(ctx, 'api/_lib/proveedor.js', (t) =>
-        t.replace(/\$\{REGIONES_LATINAS\[reg\]\}/g, ''),
+        t.replace(/\$\{REGIONES_DE_VOZ\[reg\]\}/g, ''),
       ),
   },
 

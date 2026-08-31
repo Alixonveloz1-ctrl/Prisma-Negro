@@ -23,7 +23,7 @@ import { claveToma, tomaDelFotograma, claveClip, claveFotograma } from '../../co
 // episodio y qué no puede repetirse en los dos siguientes.
 import { elegirVariante } from './biblioteca.js';
 import { reducirReferencias, deBase64 } from '../imagenes.js';
-import { ESTILO_DEL_CANAL, BARRERA_DOCUMENTAL, SIN_TEXTO_LEGIBLE, MUNDO_DEL_CANAL } from '../../comun/estilos.mjs';
+import { ESTILO_DEL_CANAL, BARRERA_DOCUMENTAL, SIN_TEXTO_LEGIBLE, MUNDO_NEUTRO } from '../../comun/estilos.mjs';
 import * as local from '../local.js';
 import { material } from '../material.js';
 
@@ -361,7 +361,11 @@ export function elegirReferencias(toma, tomas, maximo = 3) {
  * el prompt fija el FORMATO y deja libre la PUESTA EN ESCENA. Por eso aquí se dice
  * explícitamente «decide tú el encuadre y la distancia».
  */
-export function componerInstruccion(toma, config, { conReferencias = false, tratamiento = null } = {}) {
+export function componerInstruccion(
+  toma,
+  config,
+  { conReferencias = false, tratamiento = null, mundo = MUNDO_NEUTRO } = {},
+) {
   const p = toma.plano;
   const v = tratamiento?.identidadVisual;
 
@@ -392,11 +396,12 @@ export function componerInstruccion(toma, config, { conReferencias = false, trat
     // cambio de aspecto.
     SIN_TEXTO_LEGIBLE,
     BARRERA_DOCUMENTAL,
-    // EN QUÉ MUNDO PASA. Va con las otras dos y por la misma razón: no es una
-    // decisión de este plano ni de este caso, es del canal entero, y si dependiera
-    // de que alguien lo escriba en cada descripción se perdería en la primera que
-    // se olvide.
-    MUNDO_DEL_CANAL,
+    // EN QUÉ MUNDO PASA. Esto SÍ es del caso —el episodio ocurre en un país real
+    // y concreto—, pero no se escribe en cada descripción de plano: se pasa una
+    // vez y llega a todas, porque si dependiera de que alguien lo escriba plano a
+    // plano se perdería en el primero que se olvide. Sin `mundo`, el neutro: una
+    // imagen que no sabe dónde pasa no puede inventárselo.
+    mundo,
     'Decide tú la puesta en escena: la distancia exacta, la posición de los sujetos y hacia dónde miran.',
   ];
 
@@ -421,7 +426,19 @@ export function componerInstruccion(toma, config, { conReferencias = false, trat
 }
 
 /** Genera el fotograma de una toma. */
-export async function generarImagen({ toma, tomas, pieza, config, tratamiento = null, senal, alEsperar }) {
+export async function generarImagen({
+  toma,
+  tomas,
+  pieza,
+  config,
+  tratamiento = null,
+  // EN QUÉ PAÍS PASA ESTE EPISODIO. Sin él, el mundo neutro: una imagen de
+  // archivo —o una toma de un caso sin país— no puede inventarse un sitio, y una
+  // del episodio tiene que llevar el suyo. Ver `mundoDelCaso`.
+  mundo = MUNDO_NEUTRO,
+  senal,
+  alEsperar,
+}) {
   if (!toma.plano) throw new Error(`La toma ${toma.i} no tiene ficha de plano. Dirige primero.`);
 
   const usaReferencias = !!config.imagen.aceptaReferencias && config.imagen.maxReferencias > 0;
@@ -445,6 +462,7 @@ export async function generarImagen({ toma, tomas, pieza, config, tratamiento = 
       instruccion: componerInstruccion(toma, config, {
         conReferencias: referencias.length > 0,
         tratamiento,
+        mundo,
       }),
       referencias,
       aspecto: config.formato.vertical ? '9:16' : '16:9',

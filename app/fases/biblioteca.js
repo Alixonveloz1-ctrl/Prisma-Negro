@@ -56,7 +56,7 @@ import {
   ESTILO_DEL_CANAL,
   SIN_TEXTO_LEGIBLE,
   BARRERA_DOCUMENTAL,
-  MUNDO_DEL_CANAL,
+  MUNDO_NEUTRO,
 } from '../../comun/estilos.mjs';
 
 /**
@@ -242,15 +242,58 @@ export function clipsPosibles(tomas, { bibliotecaConVideo = true } = {}) {
  */
 /**
  * TODO lo que se le pide al generador para una toma de biblioteca: su plano, y el
- * encargo que llevan TODAS las imágenes del canal.
+ * encargo que llevan TODAS las imágenes del archivo.
  *
- * Lo segundo estaba fuera y era un agujero. La regla de que el volante va a la
- * izquierda vive en `MUNDO_DEL_CANAL`, no en la descripción de la carretera: si la
- * huella solo mirara el plano, cambiar esa regla no habría marcado nada y las
- * imágenes generadas con el volante al revés se habrían quedado ahí, aprobadas y
- * listas para convertirse en clips. Lo que hay que vigilar es el ENCARGO ENTERO.
+ * Lo segundo estaba fuera y era un agujero. La regla del mundo no vive en la
+ * descripción de la carretera: si la huella solo mirara el plano, cambiar esa
+ * regla no habría marcado nada y las imágenes generadas con el volante al revés
+ * se habrían quedado ahí, aprobadas y listas para convertirse en clips. Lo que
+ * hay que vigilar es el ENCARGO ENTERO.
+ *
+ * El archivo lleva el mundo NEUTRO, no el de ningún país: la misma cara sirve
+ * para un episodio en Ohio y otro en Cusco, así que lo que se le pide es que no
+ * delate ninguno. El país lo pone el episodio. Ver `mundoDelCaso`.
  */
-const ENCARGO_DEL_CANAL = [ESTILO_DEL_CANAL, SIN_TEXTO_LEGIBLE, BARRERA_DOCUMENTAL, MUNDO_DEL_CANAL].join(' ');
+const ENCARGO_DEL_CANAL = [ESTILO_DEL_CANAL, SIN_TEXTO_LEGIBLE, BARRERA_DOCUMENTAL, MUNDO_NEUTRO].join(' ');
+
+/**
+ * LOS ENCARGOS DE ANTES QUE SIGUEN VALIENDO.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «La biblioteca ya está construida.»
+ *
+ * Cambiar la regla del mundo cambia el encargo, y cambiar el encargo marca como
+ * desfasada TODA la biblioteca: ciento veintiséis imágenes pagadas, aprobadas
+ * una a una en un teléfono, perdiendo el visto bueno de golpe por una decisión
+ * mía. El aviso sería correcto y el coste, absurdo.
+ *
+ * Y sobre todo sería falso en la mayoría: lo que ataba un plano a un país eran
+ * los uniformes, las matrículas y los carteles. Un perito con bata, un pasillo,
+ * unas manos sobre una carpeta no cambian porque ahora los casos puedan pasar en
+ * Rusia. Los que sí cambian —una patrulla, una fachada de comisaría— se rehacen
+ * uno a uno desde su ficha, que para eso está el botón.
+ *
+ * Así que las huellas de los encargos anteriores se aceptan. La lista solo crece
+ * y las cadenas de aquí NO SE EDITAN NUNCA: son historia, no configuración. Si se
+ * toca una, la huella que reconoce deja de coincidir y vuelve el marcado masivo.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+const MUNDO_HISPANO_DE_ANTES =
+  'EL MUNDO DE ESTE CANAL ES HISPANOHABLANTE. Los coches, las calles, los ' +
+  'edificios, la ropa, los uniformes y los objetos de casa son los de una ciudad o ' +
+  'un pueblo de habla hispana corriente. ' +
+  'LOS VEHÍCULOS LLEVAN EL VOLANTE A LA IZQUIERDA y se circula por el carril ' +
+  'DERECHO. Si se ve un salpicadero, un interior de coche o alguien al volante, el ' +
+  'volante va a la IZQUIERDA. ' +
+  'Nada que delate otro país: ni volante a la derecha, ni circulación por la ' +
+  'izquierda, ni cabinas, buzones, autobuses escolares, señales, semáforos, ' +
+  'matrículas, enchufes o furgones policiales con forma de otro sitio. ' +
+  'Y NO ES UNA POSTAL: nada de folclore, ni color turístico, ni tópicos. Es un ' +
+  'sitio corriente y trabajado, de los que a cualquiera le suenan a su barrio.';
+
+export const ENCARGOS_ANTERIORES = [
+  [ESTILO_DEL_CANAL, SIN_TEXTO_LEGIBLE, BARRERA_DOCUMENTAL, MUNDO_HISPANO_DE_ANTES].join(' '),
+];
 
 /**
  * La huella de lo que se le pidió al generador: un resumen corto del encargo.
@@ -326,7 +369,13 @@ export function sincronizarBiblioteca(pieza) {
     // ¿SIGUE PIDIENDO EL CATÁLOGO LO QUE SE GENERÓ? Una toma sin huella guardada es
     // de antes de que esto existiera: se le pone la de ahora y se la da por buena,
     // porque suponer que todo lo pagado está desfasado sería peor que no mirar.
-    const desfasada = !!vieja.huella && vieja.huella !== huella && vieja.imagen === 'ok';
+    //
+    // Y vale también la huella de un ENCARGO ANTERIOR: cambiar la regla del mundo
+    // no puede tirar el visto bueno de todo el archivo de una vez. Ver
+    // `ENCARGOS_ANTERIORES`.
+    const valeTambien = ENCARGOS_ANTERIORES.map((e) => huellaDePlano(nueva.plano, e));
+    const reconocida = vieja.huella === huella || valeTambien.includes(vieja.huella);
+    const desfasada = !!vieja.huella && !reconocida && vieja.imagen === 'ok';
     // Se conserva EL ÍNDICE y LO GENERADO; el plano vuelve a salir del catálogo,
     // que es la fuente de verdad de cómo se ve cada persona.
     return {

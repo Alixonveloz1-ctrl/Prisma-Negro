@@ -1270,60 +1270,83 @@ export const invariantes = [
   },
 
   {
-    nombre: 'nada-de-lo-que-se-ve-parece-de-otro-pais',
-    dice: '«Estás manejando del lado derecho de la carretera, bien, pero el volante del lado derecho. Sé que hay un par de países donde se maneja así, pero eso no es lo normal. Este canal es en español y es para Latinoamérica.» Salió un plano desde dentro de un coche con el volante a la derecha, y el fallo no era de esa descripción: era que NADIE le había dicho nunca al generador en qué mundo transcurre esto. Sin decirlo, cada imagen cae en el promedio de lo que el modelo vio más, y ese promedio no es el del público del canal. No es sobre dónde ocurre la historia —eso lo decide el guion—: es sobre que un volante en el lado que no toca saca al espectador de la pieza en medio segundo.',
+    nombre: 'la-imagen-sabe-en-que-pais-pasa-y-el-archivo-no-ata-a-ninguno',
+    dice: '«Estás manejando del lado derecho de la carretera, bien, pero el volante del lado derecho.» Y después: «Debes inventar historias de cualquier parte del mundo; el país y la ciudad tienen que ser CORRECTOS.» Los dos avisos dicen lo mismo y el primero lo entendí al revés: el fallo del volante no era «esto no es Latinoamérica», era que NADIE le había dicho al generador dónde pasa la historia, y sin decírselo cada imagen cae en el promedio de lo que el modelo vio más. Mi respuesta —clavar el canal entero en un mundo hispanohablante con el volante a la izquierda— tapaba el síntoma y rompía el producto: con ella, un caso en Liverpool salía con el volante en el lado que no es. El mismo fallo del otro lado. Ahora el mundo de la imagen es el del caso, que trae un país REAL; y el archivo, que sirve a episodios de países distintos, no puede delatar ninguno.',
     comprobar(ctx) {
-      const { componerInstruccion, MUNDO_DEL_CANAL, huellaDePlano, RECURSOS, ELENCO, planoDeRecurso, planoDeVariante } = ctx.fn;
+      const { componerInstruccion, MUNDO_NEUTRO, mundoDelCaso, huellaDePlano, RECURSOS, ELENCO, planoDeRecurso, planoDeVariante } = ctx.fn;
       const fallos = [];
       const toma = {
         i: 0,
         plano: { encuadre: 'plano general', lugar: 'una carretera', luz: 'faros', sujetos: [], descripcion: 'Un coche.' },
       };
 
-      // 1 · LA REGLA DICE LO CONCRETO. «Ambientación latinoamericana» no le sirve a
-      // un generador; «el volante a la izquierda» sí.
+      // ── 1 · EL MUNDO DEL EPISODIO NOMBRA SU PAÍS ──────────────────────────
+      // No vale «ambientación realista»: al generador hay que decirle el sitio.
+      const ingles = mundoDelCaso({ pais: 'Inglaterra', ciudad: 'Liverpool' });
+      if (!/INGLATERRA/i.test(ingles) || !/Liverpool/i.test(ingles)) {
+        fallos.push('El mundo del episodio no nombra el país ni la ciudad del caso: la imagen no sabe dónde pasa.');
+      }
+      // Y NO IMPONE UN LADO: plantea la regla para ESE país. Un «volante a la
+      // izquierda» fijo es el fallo original con otro disfraz.
+      if (/LOS VEHÍCULOS LLEVAN EL VOLANTE A LA IZQUIERDA/i.test(ingles)) {
+        fallos.push('El mundo del episodio impone el volante a la izquierda: en Inglaterra va al otro lado.');
+      }
       for (const [qué, re] of [
-        ['que el volante va a la izquierda', /volante a la IZQUIERDA/i],
-        ['por qué carril se circula', /carril\s+DERECHO/i],
-        ['que el mundo es hispanohablante', /hispanohablante/i],
-        // Y la trampa del otro lado: pedir «Latinoamérica» a secas devuelve una
-        // postal de agencia de viajes, que es igual de falso y encima cursi.
+        ['que hay que resolver el lado del volante para ese país', /volante/i],
+        ['por qué carril se circula', /carril|circula/i],
         ['que no es una postal turística', /no es una postal|folclore/i],
       ]) {
-        if (!re.test(MUNDO_DEL_CANAL || '')) fallos.push(`La regla del mundo no dice ${qué}.`);
+        if (!re.test(ingles)) fallos.push(`El mundo del episodio no dice ${qué}.`);
+      }
+      // Un caso SIN país no se inventa uno: cae al neutro.
+      if (mundoDelCaso({}) !== MUNDO_NEUTRO || mundoDelCaso() !== MUNDO_NEUTRO) {
+        fallos.push('Un caso sin país recibe un mundo inventado en vez del neutro.');
       }
 
-      // 2 · Y SALE EN LA INSTRUCCIÓN, venga la configuración que venga. Si dependiera
-      // de que alguien lo escriba en cada descripción, se perdería en la primera que
-      // se olvide.
+      // ── 2 · EL MUNDO DEL ARCHIVO NO ATA A NINGÚN PAÍS ─────────────────────
+      // La misma cara sirve para un episodio en Ohio y otro en Cusco.
+      for (const [qué, re] of [
+        ['que no puede llevar matrículas ni banderas ni carteles', /matr[ií]culas/i],
+        ['que no puede llevar uniformes reconocibles', /uniformes/i],
+        // El volante es LO QUE FIJA UN PAÍS EN MEDIO SEGUNDO: si no se ve, no ata.
+        ['que no se vea el volante', /volante/i],
+        ['que no es una postal turística', /no es una postal|folclore/i],
+      ]) {
+        if (!re.test(MUNDO_NEUTRO || '')) fallos.push(`El mundo del archivo no dice ${qué}.`);
+      }
+      if (/hispanohablante/i.test(MUNDO_NEUTRO || '')) {
+        fallos.push('El mundo del archivo sigue atado al mundo hispanohablante: no serviría para un caso en Rusia.');
+      }
+
+      // ── 3 · Y LLEGA A LA INSTRUCCIÓN, venga la configuración que venga ─────
       for (const config of [ctx.config, { ...ctx.config, imagen: {} }, {}]) {
-        if (!componerInstruccion(toma, config, { tratamiento: null }).includes(MUNDO_DEL_CANAL)) {
-          fallos.push('La regla del mundo no llega a la instrucción con alguna configuración.');
+        if (!componerInstruccion(toma, config, { tratamiento: null }).includes(MUNDO_NEUTRO)) {
+          fallos.push('Sin decir el mundo, la instrucción no lleva ni el neutro: la imagen se lo inventaría.');
+          break;
+        }
+        if (!componerInstruccion(toma, config, { tratamiento: null, mundo: ingles }).includes(ingles)) {
+          fallos.push('El mundo del caso no llega a la instrucción con alguna configuración.');
           break;
         }
       }
 
-      // 3 · Y DONDE EL CATÁLOGO ENSEÑA UN VOLANTE, LO DICE. La regla general es la
-      // red de seguridad; el plano que enseña un salpicadero tiene que decirlo
-      // encima, que es donde el generador mira primero.
+      // ── 4 · NINGÚN PLANO DEL CATÁLOGO ENSEÑA UN VOLANTE ───────────────────
+      // Antes esta comprobación exigía lo contrario —que dijera «a la IZQUIERDA»—
+      // y por eso el archivo tenía dos planos inservibles fuera del mundo hispano.
+      // Un plano permanente que enseña el puesto de conducción está eligiendo un
+      // país para siempre.
       const planos = [
         ...(RECURSOS || []).flatMap((r) => (r.variantes || []).map((v) => [`${r.id}:${v.id}`, planoDeRecurso(r, v)])),
         ...(ELENCO || []).flatMap((a) => (a.variantes || []).map((v) => [`${a.id}:${v.id}`, planoDeVariante(a, v)])),
       ];
       for (const [quién, p] of planos) {
         const t = `${p?.lugar} ${p?.descripcion}`;
-        if (/volante|salpicadero|al vol[aá]nte|conduciendo/i.test(t) && !/IZQUIERDA/.test(t)) {
-          fallos.push(`«${quién}» enseña el puesto de conducción y no dice de qué lado va el volante.`);
+        if (/\bvolante\b/i.test(t) && !/NO se ve el volante|sin volante/i.test(t)) {
+          fallos.push(`«${quién}» enseña el volante: ese plano del archivo solo vale para media docena de países.`);
         }
       }
 
-      // 4 · Y LA HUELLA CUBRE EL ENCARGO ENTERO, no solo el plano.
-      //
-      // Aquí estaba el agujero de verdad: la regla del volante vive en el encargo
-      // del canal, no en la descripción de la carretera. Con una huella que solo
-      // mirase el plano, cambiar esta regla no habría marcado NADA, y las imágenes
-      // generadas con el volante al revés se habrían quedado aprobadas y listas
-      // para convertirse en clips caros.
+      // ── 5 · LA HUELLA CUBRE EL ENCARGO ENTERO, no solo el plano ───────────
       const p = { encuadre: 'a', lugar: 'b', luz: 'c', descripcion: 'd' };
       if (huellaDePlano(p, 'encargo viejo') === huellaDePlano(p, 'encargo nuevo')) {
         fallos.push('Cambiar una regla del canal no cambia la huella: lo ya generado seguiría dándose por bueno.');
@@ -1333,11 +1356,11 @@ export const invariantes = [
       }
       return fallos;
     },
-    // Se rompe como estaba: sin la regla del mundo en la instrucción, que es
-    // exactamente de donde salió el volante a la derecha.
+    // Se rompe como estaba mal: la instrucción ignora el mundo del caso y se queda
+    // con el de siempre. Es exactamente el volante en el lado que no toca.
     romper: (ctx) =>
       conFuncion(ctx, 'componerInstruccion', (t, c, o) =>
-        ctx.fn.componerInstruccion(t, c, o).replace(ctx.fn.MUNDO_DEL_CANAL, ''),
+        ctx.fn.componerInstruccion(t, c, { ...o, mundo: undefined }),
       ),
   },
 

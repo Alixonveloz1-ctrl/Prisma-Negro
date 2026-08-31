@@ -37,12 +37,19 @@ const ESQUEMA_CASOS = {
           gancho: { type: 'string' },
           sinopsis: { type: 'string' },
           cuando: { type: 'string' },
+          // EL PAÍS Y LA CIUDAD VAN APARTE, y son reales. No es un adorno del
+          // texto: de aquí sale el mundo de TODAS las imágenes del episodio —por
+          // qué lado va el volante, cómo son las matrículas, los uniformes y la
+          // arquitectura—. Metidos dentro de `donde` no se podrían leer. Ver
+          // `mundoDelCaso` en `comun/estilos.mjs`.
+          pais: { type: 'string' },
+          ciudad: { type: 'string' },
           donde: { type: 'string' },
           porQueFunciona: { type: 'string' },
           imagenSugerida: { type: 'string' },
           documentado: { type: 'boolean' },
         },
-        required: ['titulo', 'gancho', 'sinopsis', 'cuando', 'donde', 'porQueFunciona', 'imagenSugerida', 'documentado'],
+        required: ['titulo', 'gancho', 'sinopsis', 'cuando', 'pais', 'ciudad', 'donde', 'porQueFunciona', 'imagenSugerida', 'documentado'],
       },
     },
   },
@@ -100,9 +107,14 @@ LO QUE TIENE QUE HABER, SIEMPRE:
 - La tecnología que lo resuelve décadas después, nombrada con precisión.
 
 REGLAS
-- Nombres, lugares y organismos COMPLETAMENTE INVENTADOS. Ni una persona real,
-  ni una empresa real, ni un cuerpo policial real. El condado, el pueblo y el
-  laboratorio se los inventa uno.
+- EL PAÍS Y LA CIUDAD SON REALES. Existen y se escriben bien, y todo lo que digas
+  de ellos encaja: el clima, el paisaje, la moneda, los oficios, y cómo se llaman
+  ALLÍ las divisiones del territorio —condado, municipio, partido, provincia,
+  comuna, parroquia, óblast—. Usa la palabra de ese país, nunca la de otro.
+- LO PEQUEÑO SE INVENTA, y es donde pasa el caso: el pueblo, el barrio, la calle,
+  el kilómetro de carretera, la comisaría, el juzgado, el laboratorio, la empresa.
+- Ni una persona real ni una empresa real. La comisaría, el forense y el juzgado
+  CONCRETOS del caso son inventados: ahí es donde habría alguien real señalado.
 - Coherencia absoluta: un nombre, una fecha o una edad se escriben una vez y no
   cambian. Antes de cerrar, relee y comprueba que nada se contradice.
 - Concreción de expediente. «Un objeto metálico» no vale; «una ficha de latón de
@@ -135,8 +147,28 @@ export async function proponerCasos({ genero = null, tema = null, epoca = null, 
         'Inventas premisas de episodio para un canal de ficción documental declarada. ' +
         'No son casos reales y no lo pretenden: son casos que PUDIERON pasar.\n\n' +
         'Reglas:\n' +
-        '- Nombres, pueblos, condados y organismos completamente inventados. Ni una ' +
-        'persona real, ni una empresa real, ni un cuerpo policial real.\n' +
+        // EL MUNDO ES EL MUNDO. Esto estuvo clavado en un solo sitio y era una
+        // decisión mía disfrazada de regla: «pueblos, condados y organismos
+        // inventados» con el canal entero atado a un mundo hispanohablante.
+        '- EL MUNDO ENTERO VALE: Estados Unidos, Inglaterra, Rusia, Japón, Panamá, ' +
+        'Colombia, Perú, Argentina, Marruecos, el que sea. No lo centres en una ' +
+        'región ni repitas país entre las propuestas: cinco casos, cinco sitios ' +
+        'distintos del mundo.\n' +
+        // LO GRANDE ES REAL. Es lo que hace que suene a expediente y no a fantasía.
+        '- EL PAÍS Y LA CIUDAD SON REALES Y CORRECTOS. Existen, se escriben bien, y ' +
+        'todo lo que digas de ellos encaja: el clima, el paisaje, la moneda, el ' +
+        'idioma, y cómo se llaman ALLÍ las divisiones del territorio —condado, ' +
+        'municipio, partido, provincia, comuna, parroquia, óblast, prefectura—. Usa ' +
+        'la palabra que se usa en ese país, nunca la traducida de otro.\n' +
+        // Y LO PEQUEÑO SE INVENTA. Ahí es donde pasa el caso y donde habría alguien
+        // real a quien señalar.
+        '- LO PEQUEÑO SE INVENTA: el pueblo, el barrio, la vereda, la calle, el ' +
+        'kilómetro de carretera, la comisaría, el juzgado, el laboratorio, la ' +
+        'empresa. El caso ocurre ahí, y ahí no puede haber nada real.\n' +
+        '- Ni una persona real ni una empresa real. Una institución nacional grande ' +
+        'puede nombrarse de pasada; la comisaría, el forense o el juzgado CONCRETOS ' +
+        'del caso —los que se equivocan, los que tapan, los que lo reabren— son ' +
+        'inventados: ahí es donde habría una persona real señalada.\n' +
         '- Que no se parezca a un caso real conocido: si suena a uno que existe, ' +
         'cámbialo. Se inventa, no se disfraza.\n' +
         '- Lo que engancha es que pudo pasar. Nada de sobrenatural salvo que el ' +
@@ -166,12 +198,16 @@ export async function proponerCasos({ genero = null, tema = null, epoca = null, 
         '- gancho: una frase de lo que engancha, sin exagerar ni prometer de más.\n' +
         '- sinopsis: 2 o 3 frases de qué pasó, ya con el detalle concreto.\n' +
         '- cuando: los años, con el lapso. «1981, resuelto en 2022».\n' +
-        '- donde: el lugar inventado.\n' +
+        '- pais: el país REAL, escrito como se escribe. «Estados Unidos», «Rusia».\n' +
+        '- ciudad: la ciudad REAL más cercana, la que existe y se puede buscar.\n' +
+        '- donde: el sitio del caso en una línea, con lo inventado dentro. «El ' +
+        'caserío de Las Tunitas, a 40 km de Barquisimeto».\n' +
         '- porQueFunciona: por qué da para episodio visual.\n' +
         '- imagenSugerida: descripción visual para la portada.\n' +
         '- documentado: false SIEMPRE. Esto es ficción declarada.\n\n' +
         'Responde ÚNICAMENTE con un objeto JSON así:\n' +
-        '{"casos":[{"titulo":"","gancho":"","sinopsis":"","cuando":"","donde":"",' +
+        '{"casos":[{"titulo":"","gancho":"","sinopsis":"","cuando":"","pais":"",' +
+        '"ciudad":"","donde":"",' +
         '"porQueFunciona":"","imagenSugerida":"","documentado":false}]}' +
         yaVistos,
       esquema: ESQUEMA_CASOS,
@@ -224,7 +260,17 @@ export async function construirCaso({ caso = null, genero = null, tema = null, c
           : '') +
         (caso
           ? `EL CASO QUE SE VA A CONTAR:\n${caso.titulo}\n${caso.sinopsis || ''}\n` +
-            `Cuándo: ${caso.cuando || 'lo decides tú'} · Dónde: ${caso.donde || 'lo decides tú'}\n\n` +
+            `Cuándo: ${caso.cuando || 'lo decides tú'} · Dónde: ${caso.donde || 'lo decides tú'}\n` +
+            // EL PAÍS Y LA CIUDAD, APARTE Y POR SU NOMBRE. Metidos solo dentro de
+            // `donde` se perdían: el expediente salía con nombres, oficios y
+            // divisiones territoriales de otro sitio que el de la historia.
+            (caso.pais
+              ? `País: ${caso.pais}${caso.ciudad ? ` · Ciudad: ${caso.ciudad}` : ''} — REALES. ` +
+                `Los nombres de las personas, los oficios, los cuerpos que ` +
+                `investigan y las divisiones del territorio son los que se usan ` +
+                `en ${caso.pais}, no los de otro país.\n`
+              : '') +
+            `\n` +
             `Construye el expediente COMPLETO de este caso. Lo de arriba es el ` +
             `punto de partida; todo lo demás —los nombres, las fechas exactas, el ` +
             `objeto, el sospechoso falso, el culpable— lo decides tú y no puede ` +

@@ -603,9 +603,30 @@ export async function voz({ texto: t, nombreVoz, velocidad = 1.0, tono = 0, marc
  * equivocado y con nombres idénticos a las buenas. Aquí se filtra por región y se
  * MUESTRA la región en la etiqueta.
  */
-// Las regiones que valen. España NO: este canal narra en español latino, y una voz
-// de España en medio de una narración latina se oye como otro narrador.
-const REGIONES_LATINAS = { 'es-US': 'Latino', 'es-MX': 'México', 'es-419': 'Latino' };
+/**
+ * Las regiones que valen.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Ahora sí quiero que dejes voces latinas y voces de español de España también.
+ *  Todas las voces en español y masculinas que estén disponibles.»
+ *
+ * España estaba fuera con un argumento que sonaba técnico —«una voz peninsular en
+ * medio de una narración latina se oye como otro narrador»— y no lo era: dentro de
+ * UN episodio narra UNA voz, siempre. Mezclar acentos nunca fue el riesgo; el
+ * riesgo era mezclar voces dentro de la misma narración, y de eso se encarga que
+ * la voz se elija una vez y se guarde.
+ *
+ * Lo que sí sigue filtrando: el idioma —cien voces del idioma equivocado no son un
+ * catálogo— y el género. Y la etiqueta dice de dónde es cada una, que es lo que
+ * permite elegir a sabiendas en vez de a ciegas.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+const REGIONES_DE_VOZ = {
+  'es-US': 'Latino',
+  'es-MX': 'México',
+  'es-419': 'Latino',
+  'es-ES': 'España',
+};
 
 // Las de entrega VARIABLE. Suenan mejor en una frase suelta y peor en quince
 // minutos, porque cada llamada la interpretan de nuevo (§7.9).
@@ -644,10 +665,10 @@ export async function vocesDisponibles(idioma = 'es', expresivas = false, genero
     // §7.10: se listaron todas y salieron cien, la mayoría del idioma equivocado y
     // con nombres idénticos a las buenas. Aquí se filtra por región Y por variante.
     //
-    // Fuera España: el canal narra en latino y una voz peninsular en medio suena a
-    // otro narrador. Y fuera las expresivas de entrega variable, que en narración
-    // larga cambian de tono entre llamadas (§7.9).
-    .filter((v) => REGIONES_LATINAS[v.languageCodes?.[0]])
+    // Latinas Y de España: todas las de español. Fuera solo las expresivas de
+    // entrega variable, que en narración larga cambian de tono entre llamadas
+    // (§7.9) — y esas se pueden encender a mano.
+    .filter((v) => REGIONES_DE_VOZ[v.languageCodes?.[0]])
     // El canal narra con voz masculina. Filtrar aquí y no en la pantalla evita que
     // una voz descartada llegue a estar seleccionable por un descuido.
     .filter((v) => !genero || v.ssmlGender === genero)
@@ -665,7 +686,7 @@ export async function vocesDisponibles(idioma = 'es', expresivas = false, genero
         // La etiqueta lleva la región y el género dentro: sin eso, dos voces
         // distintas se ven idénticas en el desplegable.
         etiqueta:
-          `${v.name.split('-').slice(2).join('-')} · ${REGIONES_LATINAS[reg]} · ` +
+          `${v.name.split('-').slice(2).join('-')} · ${REGIONES_DE_VOZ[reg]} · ` +
           `${GENEROS[v.ssmlGender] || ''}${variable ? ' · expresiva' : ''}`,
       };
     })
