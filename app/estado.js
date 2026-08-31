@@ -405,6 +405,10 @@ function sanearToma(bruto, i, proyecto) {
     // mirarlas una por una. Y va atado a que la imagen exista: un visto bueno sin
     // imagen detrás avalaría algo que no está, y de él cuelga pagar clips.
     aprobada: t.aprobada === true && t.imagen === 'ok',
+    // La huella del plano con el que se generó. En la lista blanca por lo mismo
+    // que todo lo de aquí: sin ella, cada recarga la borraría y la biblioteca
+    // dejaría de saber que el catálogo cambió debajo de una imagen ya pagada.
+    huella: String(t.huella || ''),
     // §8.1: cada toma conserva la referencia a la ficha que la respalda.
     fichas: Array.isArray(t.fichas) ? t.fichas : [],
     corteForzado: t.corteForzado === true,

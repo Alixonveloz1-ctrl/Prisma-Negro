@@ -206,26 +206,57 @@ export function clipsPosibles(tomas, { bibliotecaConVideo = true } = {}) {
  * reordenar entero sin que pase nada.
  * ─────────────────────────────────────────────────────────────────────────────
  */
+/**
+ * La huella del plano de una toma: un resumen corto de lo que se le pidió al
+ * generador.
+ *
+ * Sirve para una sola cosa, y es la que faltaba: SABER QUE EL CATÁLOGO CAMBIÓ
+ * DEBAJO DE UNA IMAGEN YA PAGADA. `sincronizarBiblioteca` vuelve a sacar el plano
+ * del catálogo en cada carga y conserva lo generado, así que reescribir una
+ * variante dejaba una imagen diciendo «carretera con niebla» donde el catálogo ya
+ * pedía otra cosa —y con su visto bueno puesto, lista para convertirse en un clip
+ * caro de algo que ya nadie pide—. Sin la huella eso no se ve: la toma sigue
+ * marcada como `ok` y no hay con qué comparar.
+ *
+ * No es criptografía y no lo necesita: solo tiene que cambiar cuando cambia el
+ * plano.
+ */
+export function huellaDePlano(plano) {
+  const texto = [plano?.encuadre, plano?.lugar, plano?.luz, plano?.descripcion].join('|');
+  let h = 5381;
+  for (let i = 0; i < texto.length; i++) h = ((h * 33) ^ texto.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
 export function sincronizarBiblioteca(pieza) {
   const previas = new Map((pieza?.tomas || []).filter((t) => t.clave).map((t) => [t.clave, t]));
   let siguiente = Math.max(-1, ...[...previas.values()].map((t) => Number(t.i) || 0)) + 1;
 
   const tomas = tomasDeBiblioteca().map((nueva) => {
+    const huella = huellaDePlano(nueva.plano);
     const vieja = previas.get(nueva.clave);
-    if (!vieja) return { ...nueva, i: siguiente++ };
+    if (!vieja) return { ...nueva, huella, i: siguiente++ };
+
+    // ¿SIGUE PIDIENDO EL CATÁLOGO LO QUE SE GENERÓ? Una toma sin huella guardada es
+    // de antes de que esto existiera: se le pone la de ahora y se la da por buena,
+    // porque suponer que todo lo pagado está desfasado sería peor que no mirar.
+    const desfasada = !!vieja.huella && vieja.huella !== huella && vieja.imagen === 'ok';
     // Se conserva EL ÍNDICE y LO GENERADO; el plano vuelve a salir del catálogo,
     // que es la fuente de verdad de cómo se ve cada persona.
     return {
       ...nueva,
       i: vieja.i,
+      huella,
       imagen: vieja.imagen || null,
       video: vieja.video || null,
       heredado: vieja.heredado || null,
       heredadoVid: vieja.heredadoVid || null,
-      // El visto bueno se conserva, pero SOLO mientras haya imagen que avale. Un
-      // «aprobada» sobre una imagen que ya no está diría que alguien miró algo que
-      // no existe, y con eso se podría pagar un clip a ciegas.
-      aprobada: vieja.imagen === 'ok' && vieja.aprobada === true,
+      desfasada,
+      // El visto bueno se conserva, pero SOLO mientras haya imagen que avale y el
+      // catálogo siga pidiendo lo mismo. Un «aprobada» sobre una imagen que ya no
+      // está —o que ya no es lo que se pide— diría que alguien miró algo que no
+      // existe, y con eso se podría pagar un clip a ciegas.
+      aprobada: vieja.imagen === 'ok' && vieja.aprobada === true && !desfasada,
     };
   });
 

@@ -257,7 +257,7 @@ export const GENEROS = [
 // Los recursos y el elenco viven en `comun/elenco.mjs` y se reexportan aquí para
 // que quien ya importaba el catálogo no tenga que saber que se partió en dos.
 export { ELENCO, RECURSOS, arquetipoPorId, recursoPorId, planoDeVariante, planoDeRecurso,
-  EPISODIOS_SIN_REPETIR, VERSIONES_MINIMAS } from './elenco.mjs';
+  sitioDeVariante, EPISODIOS_SIN_REPETIR, VERSIONES_MINIMAS, SITIOS_MINIMOS } from './elenco.mjs';
 
 /** Los papeles del elenco que usa un género, resueltos ya a sus entradas. */
 export function personajesDe(genero) {

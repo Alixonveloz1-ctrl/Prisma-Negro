@@ -199,6 +199,121 @@ export const invariantes = [
       ),
   },
 
+  {
+    nombre: 'cada-persona-del-elenco-se-rueda-en-su-sitio',
+    dice: '«¿Me vas a poner los testigos siempre en el mismo cuarto? ¿El policía siempre en el mismo escenario? La intención de tener varias versiones es que VARÍE.» Tener cinco peritos no sirve de nada si los cinco declaran en el mismo laboratorio, con el mismo encuadre y la misma luz: lo que se ve entonces no es un canal con reparto, es un decorado con cinco caras. Y no era un problema de redacción sino de estructura —el sitio vivía en el papel y solo la persona en la variante—, así que ninguna descripción lo habría arreglado.',
+    comprobar(ctx) {
+      const { ELENCO, planoDeVariante, SITIOS_MINIMOS } = ctx.fn;
+      const fallos = [];
+
+      for (const a of ELENCO || []) {
+        const v = a?.variantes || [];
+        if (v.length < 2) continue;
+        const planos = v.map((x) => planoDeVariante(a, x)).filter(Boolean);
+        if (planos.length !== v.length) {
+          fallos.push(`El papel «${a?.id}» no compone el plano de todas sus personas.`);
+          continue;
+        }
+
+        // 1 · SITIOS DISTINTOS DE VERDAD. No basta con que cambie la cara: tiene
+        // que cambiar dónde está y cómo se rueda.
+        const sitios = planos.map((p) => `${p.lugar} · ${p.encuadre}`);
+        const distintos = new Set(sitios).size;
+        const pedidos = Math.min(v.length, SITIOS_MINIMOS);
+        if (distintos < pedidos) {
+          fallos.push(
+            `Las ${v.length} personas de «${a?.id}» se ruedan en ${distintos} sitio(s) y hacen falta ` +
+              `${pedidos}: cambia la cara y no cambia el cuarto, que es lo que se ve.`,
+          );
+        }
+
+        // 2 · Y NINGÚN SITIO CARGA CON MEDIO PAPEL. Con veinte testigos y tres
+        // cocinas, la cuenta de arriba pasaría y seguirían siendo siete vecinos
+        // por cocina.
+        const cuantasPorSitio = new Map();
+        for (const s of sitios) cuantasPorSitio.set(s, (cuantasPorSitio.get(s) || 0) + 1);
+        const tope = Math.max(2, Math.ceil(v.length / SITIOS_MINIMOS));
+        for (const [s, n] of cuantasPorSitio) {
+          if (n > tope) {
+            fallos.push(`En «${a?.id}», ${n} personas comparten «${s}» y el tope es ${tope}: es el mismo plano repetido.`);
+            break;
+          }
+        }
+
+        // 3 · Y LA DESCRIPCIÓN FINAL DE CADA UNA ES SUYA. Dos personas en el mismo
+        // sitio siguen valiendo si se ruedan distinto; dos descripciones idénticas,
+        // no: son la misma imagen pedida dos veces.
+        if (new Set(planos.map((p) => p.descripcion)).size !== planos.length) {
+          fallos.push(`El papel «${a?.id}» pide dos veces la misma imagen: dos de sus personas tienen la misma descripción.`);
+        }
+      }
+      return fallos;
+    },
+    // Se rompe COMO ESTABA, con la función tal cual era: el sitio del papel para
+    // todo el mundo y la persona pegada delante.
+    romper: (ctx) =>
+      conFuncion(ctx, 'planoDeVariante', (a, v) =>
+        !a || !v
+          ? null
+          : {
+              encuadre: a.plano.encuadre,
+              movimientoCamara: 'fijo',
+              lugar: a.plano.lugar,
+              luz: a.plano.luz,
+              sujetos: [`${a.nombre} — ${v.persona}`],
+              descripcion: `${v.persona}. ${a.plano.descripcion}`,
+            },
+      ),
+  },
+
+  {
+    nombre: 'las-versiones-de-un-recurso-son-tres-planos-y-no-tres-tiempos',
+    dice: '«Ahí no se nota que varía: se ve como si la persona hubiese tomado una foto desde arriba y otra desde abajo, y ya. Debería ser otra carretera, otro ángulo.» Las tres versiones de la carretera eran la misma foto exacta con llovizna, con niebla y de madrugada. Un recurso vuelve en TODOS los episodios, así que es el que más canta: tres versiones que no se distinguen puestas una al lado de la otra son una sola versión pagada tres veces. Sigue siendo el mismo sitio —eso mantiene la unidad del canal— pero otro tramo, otro ángulo y otra altura de cámara.',
+    comprobar(ctx) {
+      const { RECURSOS, planoDeRecurso, VERSIONES_MINIMAS } = ctx.fn;
+      const fallos = [];
+
+      for (const r of RECURSOS || []) {
+        const v = r?.variantes || [];
+        if (v.length < 2) continue;
+        const planos = v.map((x) => planoDeRecurso(r, x)).filter(Boolean);
+
+        // El encuadre o el sitio tienen que cambiar. Cambiar solo el tiempo es lo
+        // que se veía igual.
+        const marcos = planos.map((p) => `${p.lugar} · ${p.encuadre}`);
+        const distintos = new Set(marcos).size;
+        const pedidos = Math.min(v.length, VERSIONES_MINIMAS);
+        if (distintos < pedidos) {
+          fallos.push(
+            `Las ${v.length} versiones de «${r?.id}» son ${distintos} plano(s): mismo sitio, mismo encuadre ` +
+              'y solo cambia el tiempo. Puestas una al lado de la otra no se distinguen.',
+          );
+        }
+        // Y la descripción de cada una tiene que ser suya, no la del recurso con
+        // una coletilla.
+        if (new Set(planos.map((p) => p.descripcion)).size !== planos.length) {
+          fallos.push(`El recurso «${r?.id}» pide dos veces la misma imagen.`);
+        }
+      }
+      return fallos;
+    },
+    // Se rompe COMO ESTABA: el plano del recurso para las tres versiones y el
+    // matiz pegado al final.
+    romper: (ctx) =>
+      conFuncion(ctx, 'planoDeRecurso', (r, v) =>
+        !r || !v
+          ? null
+          : {
+              encuadre: r.encuadre,
+              movimientoCamara: 'fijo',
+              lugar: r.lugar,
+              luz: r.luz,
+              sujetos: [],
+              descripcion: `${r.descripcion} ${v.matiz}.`,
+            },
+      ),
+  },
+
   // ── §4.3: la segmentación ─────────────────────────────────────────────────
   {
     nombre: 'la-segmentacion-cubre-el-guion-caracter-por-caracter',
