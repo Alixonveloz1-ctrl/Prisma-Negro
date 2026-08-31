@@ -1953,11 +1953,34 @@ async function rehacerImagenBiblioteca(i) {
   const z = laBiblioteca();
   const k = z.tomas.findIndex((t) => t.i === i);
   if (k < 0) throw new Error('No encuentro esa toma de la biblioteca.');
-  if (z.tomas[k].video === 'ok' && !confirm('Esta ya tiene su clip, y el clip salió de la imagen de ahora. Si la rehaces, el clip deja de corresponderse con ella y habría que rehacerlo también (se paga otra vez). ¿Sigo?')) {
+  // ── EL CLIP DE UNA IMAGEN QUE SE REHACE NO SOBREVIVE ──────────────────────
+  //
+  // «Rehíce una imagen que ya tenía clip. Obviamente ese clip tiene que quedar
+  //  inutilizable, eliminado por completo, porque si rehago la imagen es porque
+  //  estaba mala. Entonces me sigue usando el clip de la imagen mala.»
+  //
+  // Esto AVISABA y no hacía nada: dejaba `video: 'ok'` puesto. Así que el clip de
+  // la cara deforme seguía dándose por bueno, el montaje lo seguía usando, y la
+  // ficha ni siquiera ofrecía generar uno nuevo —porque para ella ya lo tenía—.
+  // Un aviso no es una consecuencia.
+  //
+  // Rehacer la imagen es decir que la anterior estaba mal. Todo lo que salió de
+  // ella está mal también: se marca como no generado y SE BORRA DEL ALMACÉN, para
+  // que no quede un archivo de una imagen mala esperando a que alguien lo use.
+  const tenia = z.tomas[k].video === 'ok' || !!z.tomas[k].heredadoVid;
+  if (
+    tenia &&
+    !confirm(
+      'Esta ya tiene su clip, y ese clip salió de la imagen que vas a rehacer.\n\n' +
+        'Se BORRA con ella: no sirve para la imagen nueva. Después podrás generar uno ' +
+        'nuevo desde su ficha, cuando apruebes la imagen. ¿Sigo?',
+    )
+  ) {
     return;
   }
   avisar('biblioteca', `Rehaciendo «${rotuloDeBiblioteca(z.tomas[k]).nombre}»…`);
   const clave = claveFotograma(bibliotecaFase.ID_BIBLIOTECA, z.tomas[k], z.tomas);
+  const claveVieja = tenia ? claveClip(bibliotecaFase.ID_BIBLIOTECA, z.tomas[k], z.tomas) : '';
   const nueva = await imagenFase.generarImagen({
     toma: z.tomas[k],
     tomas: z.tomas,
@@ -1965,11 +1988,42 @@ async function rehacerImagenBiblioteca(i) {
     config: P.config,
     tratamiento: null,
   });
-  z.tomas[k] = { ...nueva, aprobada: false };
+  // El visto bueno se cae —lo aprobado era la imagen anterior— y con él el clip.
+  // `movimiento` se CONSERVA: sigue siendo una toma que merece moverse, solo que
+  // ahora le falta el clip. Es lo que hace que la ficha vuelva a ofrecerlo.
+  z.tomas[k] = { ...nueva, aprobada: false, video: null, heredadoVid: null, bytesVideo: 0 };
   await refrescar(clave);
+  if (claveVieja) await tirarElClip(claveVieja);
   await guardar();
   pintarBiblioteca();
-  avisar('biblioteca', 'Imagen rehecha. Míralas y dale «Está bien» si vale.', 'bueno');
+  avisar(
+    'biblioteca',
+    tenia
+      ? 'Imagen rehecha y su clip viejo borrado. Míralas, dale «Está bien» si vale, y genérale un clip nuevo si lo quieres.'
+      : 'Imagen rehecha. Míralas y dale «Está bien» si vale.',
+    'bueno',
+  );
+}
+
+/**
+ * Tira un clip: del almacén, de la copia local y de la memoria.
+ *
+ * Se borra DE VERDAD y no solo se desmarca. Un archivo de video hecho a partir de
+ * una imagen que se descartó no le sirve a nadie, y dejarlo ahí es dejar que
+ * cualquier camino que mire el almacén en vez del proyecto lo dé por bueno — que
+ * es exactamente cómo se recupera material tras un corte de red.
+ */
+async function tirarElClip(clave, donde = 'biblioteca') {
+  soltarClip();
+  await refrescar(clave);
+  try {
+    await llamar('borrar', { clave });
+  } catch (e) {
+    // Que no se pueda borrar no puede impedir rehacer la imagen: lo importante ya
+    // está hecho —la toma dice que no tiene clip— y el archivo se sobrescribe
+    // cuando se genere el siguiente, porque la clave es la misma.
+    avisar(donde, `La imagen se rehízo. El clip viejo no se pudo borrar del almacén: ${e.message}`);
+  }
 }
 
 /**
@@ -2890,6 +2944,20 @@ async function rehacerVoz(i) {
 
 async function rehacerImagen(i) {
   const toma = pieza().tomas.find((t) => t.i === i);
+  // El mismo agujero que en el archivo: el clip salió de la imagen que se va a
+  // tirar, así que no vale. Ver `tirarElClip`.
+  const tenia = toma.video === 'ok' || !!toma.heredadoVid;
+  if (
+    tenia &&
+    !confirm(
+      'Esta toma ya tiene su clip, y ese clip salió de la imagen que vas a rehacer.\n\n' +
+        'Se BORRA con ella: no sirve para la imagen nueva. Después podrás convertirla ' +
+        'en clip otra vez desde la galería. ¿Sigo?',
+    )
+  ) {
+    return;
+  }
+  const claveVieja = tenia ? claveClip(P.id, toma, pieza().tomas) : '';
   avisar('previa', `Rehaciendo la imagen de la toma ${i + 1}…`);
   const nueva = await imagenFase.generarImagen({
     toma,
@@ -2899,11 +2967,20 @@ async function rehacerImagen(i) {
     tratamiento: pieza().tratamiento,
   });
   const k = pieza().tomas.findIndex((t) => t.i === i);
-  pieza().tomas[k] = nueva;
+  // `movimiento` se conserva: la toma sigue mereciendo moverse, solo que ahora le
+  // falta el clip — y por eso la galería vuelve a ofrecerlo.
+  pieza().tomas[k] = { ...nueva, video: null, heredadoVid: null, bytesVideo: 0 };
   await refrescar(`${P.id}/t${String(i).padStart(3, '0')}/img`);
+  if (claveVieja) await tirarElClip(claveVieja, 'previa');
   await guardar();
   pintarPorTipo();
-  avisar('previa', 'Imagen rehecha: ya está en la galería. El montado se actualiza al preparar.', 'bueno');
+  avisar(
+    'previa',
+    tenia
+      ? 'Imagen rehecha y su clip viejo borrado: ya no se monta el de la imagen mala. Puedes generarle uno nuevo desde la galería.'
+      : 'Imagen rehecha: ya está en la galería. El montado se actualiza al preparar.',
+    'bueno',
+  );
 }
 
 /**

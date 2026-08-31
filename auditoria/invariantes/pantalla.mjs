@@ -695,6 +695,94 @@ export const invariantes = [
   },
 
   {
+    nombre: 'rehacer-una-imagen-se-lleva-por-delante-su-clip',
+    dice: '«Rehíce una imagen que ya tenía clip. Obviamente ese clip tiene que quedar inutilizable, eliminado por completo, porque si rehago la imagen es porque estaba mala. Entonces me sigue usando el clip de la imagen mala.» Rehacer una imagen es decir que la anterior estaba mal, y todo lo que salió de ella está mal también. Esto AVISABA y no hacía nada: dejaba `video: ok` puesto, así que el montaje seguía usando el clip de la cara deforme y la ficha ni siquiera ofrecía generar uno nuevo —porque para ella ya lo tenía—. Un aviso no es una consecuencia.',
+    async comprobar(ctx) {
+      const { humoDeLaPantalla, proyectoYaEmpezado } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      // 1 · LOS DOS SITIOS QUE REHACEN UNA IMAGEN tiran su clip. El archivo y el
+      // episodio: el mismo agujero estaba en los dos.
+      for (const [donde, marca] of [
+        ['el archivo', 'async function rehacerImagenBiblioteca'],
+        ['el episodio', 'async function rehacerImagen(i)'],
+      ]) {
+        const i = main.indexOf(marca);
+        const cuerpo = i < 0 ? '' : main.slice(i, main.indexOf('\n}\n', i));
+        if (!cuerpo) {
+          fallos.push(`No se encuentra cómo se rehace una imagen en ${donde}.`);
+          continue;
+        }
+        if (!/video: null, heredadoVid: null/.test(cuerpo)) {
+          fallos.push(`Rehacer una imagen en ${donde} deja su clip dado por bueno: se monta el de la imagen mala.`);
+        }
+        if (!/tirarElClip\(/.test(cuerpo)) {
+          fallos.push(`En ${donde} el clip viejo se desmarca pero no se borra: queda un video de una imagen descartada.`);
+        }
+        // Y `movimiento` NO se toca: la toma sigue mereciendo moverse, y es lo que
+        // hace que vuelva a ofrecerse el clip. Borrarlo dejaría la imagen nueva
+        // sin forma de animarse.
+        if (/movimiento: false/.test(cuerpo)) {
+          fallos.push(`Rehacer en ${donde} quita el movimiento: la imagen nueva se quedaría sin poder animarse.`);
+        }
+      }
+
+      // 2 · Y SE BORRA DE VERDAD DEL ALMACÉN. Desmarcarlo no basta: la
+      // recuperación tras un corte mira el almacén, no el proyecto, y daría por
+      // bueno el archivo de la imagen descartada.
+      const j = main.indexOf('async function tirarElClip');
+      const tirar = j < 0 ? '' : main.slice(j, j + 900);
+      if (!/llamar\('borrar', \{ clave \}\)/.test(tirar)) {
+        fallos.push('El clip viejo no se borra del almacén: queda esperando a que algo lo dé por bueno.');
+      }
+      if (!/soltarClip\(\)/.test(tirar) || !/refrescar\(clave\)/.test(tirar)) {
+        fallos.push('El clip borrado sigue en la copia local o en memoria: se seguiría viendo el viejo.');
+      }
+
+      // 3 · Y LA FICHA VUELVE A OFRECER EL CLIP. Arrancando de verdad: con clip
+      // ofrece verlo y no generarlo; sin clip, al revés.
+      const conBiblioteca = (video) => {
+        const p = proyectoYaEmpezado();
+        p.piezas.push({
+          id: 'biblioteca',
+          esBiblioteca: true,
+          titulo: 'x',
+          escenas: [{ n: 0, titulo: 'R' }, { n: 1, titulo: 'E' }],
+          tomas: [{ i: 0, clave: 'personaje:perito:v1', personaje: 'perito', variante: 'v1', imagen: 'ok', aprobada: true, movimiento: true, video }],
+        });
+        return { parche, proyecto: p };
+      };
+      const con = await humoDeLaPantalla(conBiblioteca('ok'));
+      const sin = await humoDeLaPantalla(conBiblioteca(null));
+      fallos.push(...con.fallos, ...sin.fallos);
+
+      const textos = (r) => r.botonesDe('galeria-biblioteca').map((b) => b.texto);
+      if (textos(con).some((t) => /Generar su clip/.test(t))) {
+        fallos.push('Una entrada que ya tiene clip ofrece generarlo otra vez: se pagaría dos veces.');
+      }
+      if (!textos(sin).some((t) => /Generar su clip/.test(t))) {
+        fallos.push('Tras rehacer la imagen, su ficha no ofrece un clip nuevo: la toma se queda sin poder animarse.');
+      }
+      if (textos(sin).some((t) => /Ver el clip/.test(t))) {
+        fallos.push('Se ofrece ver un clip que ya no existe.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: se avisa y se deja el clip dado por bueno.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace(
+          "z.tomas[k] = { ...nueva, aprobada: false, video: null, heredadoVid: null, bytesVideo: 0 };",
+          'z.tomas[k] = { ...nueva, aprobada: false };',
+        ),
+      ),
+  },
+
+  {
     nombre: 'un-clip-pagado-se-puede-ver-y-solo-uno-a-la-vez',
     dice: '«Generé treinta y ocho clips y no puedo ver ninguno.» Y era literal: la ficha del archivo solo cargaba la IMAGEN. Un clip pagado se anunciaba con una pastilla verde —«clip listo»— y no había ninguna manera de verlo. Treinta y ocho veces lo más caro que genera esta herramienta, invisible. Y se enseña DE UNO EN UNO: un clip son decenas de megas, y cargar los veinticuatro de la pantalla es exactamente lo que tumbó el navegador con imágenes de dos megas.',
     async comprobar(ctx) {
