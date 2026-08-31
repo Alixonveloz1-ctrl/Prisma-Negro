@@ -115,29 +115,35 @@ export function sanear(bruto) {
   p.reparto = p.reparto && typeof p.reparto === 'object' && !Array.isArray(p.reparto) ? p.reparto : {};
 
   p.fichas = Array.isArray(p.fichas) ? p.fichas.map(sanearFicha) : [];
-  p.piezas = Array.isArray(p.piezas) && p.piezas.length
-    ? p.piezas.map((z, n) => sanearPieza(z, n, p))
-    : [piezaVacia(p.id, p.titulo)];
+  // SIN EPISODIOS ES UN ESTADO VÁLIDO, y esto no puede rellenarlo.
+  //
+  // Aquí había un `: [piezaVacia(...)]` para la lista vacía, y desde que borrar el
+  // último episodio está permitido eso sería deshacerlo: se borra, se recarga y
+  // vuelve a aparecer un episodio en blanco. Un proyecto NUEVO sigue naciendo con
+  // su pieza porque se la pone `nuevoProyecto`; lo que no se hace es resucitar lo
+  // que alguien borró a propósito.
+  p.piezas = Array.isArray(p.piezas) ? p.piezas.map((z, n) => sanearPieza(z, n, p)) : [];
 
   // Mudanza de los proyectos de antes: el caso, el tema y las fichas vivían en el
   // proyecto. Se pasan a la primera pieza, que es de donde eran. Solo si esa pieza
   // no los trae ya, para no pisar nada.
-  const primera = p.piezas[0];
-  if (!primera.caso && p.caso) primera.caso = p.caso;
-  if (!primera.tema && p.tema) primera.tema = p.tema;
-  if (!primera.fichas.length && p.fichas.length) primera.fichas = p.fichas;
-  if (!primera.creado) primera.creado = p.creado;
+  const primera = p.piezas.find((z) => !z.esBiblioteca);
+  if (primera) {
+    if (!primera.caso && p.caso) primera.caso = p.caso;
+    if (!primera.tema && p.tema) primera.tema = p.tema;
+    if (!primera.fichas.length && p.fichas.length) primera.fichas = p.fichas;
+    if (!primera.creado) primera.creado = p.creado;
+  }
   for (const z of p.piezas) z.fichas = z.fichas.map(sanearFicha);
 
-  // Cuál se está mirando. Si apunta a una que ya no está, la primera.
+  // Cuál se está mirando. Si apunta a uno que ya no está, el primero.
   //
   // Y NUNCA LA BIBLIOTECA: no tiene guion ni voz ni montaje, así que dejarla
-  // activa deja la pantalla entera en un estado que no lleva a ningún sitio. Se
-  // mira desde su propio panel.
+  // activa deja la pantalla entera en un estado que no lleva a ningún sitio —y
+  // peor: cualquier fase escribiría dentro de ella, encima de las 141 imágenes que
+  // se pagan una sola vez—. Sin ningún episodio, vacío: es lo que dice la verdad.
   const montables = p.piezas.filter((z) => !z.esBiblioteca);
-  p.piezaActiva = montables.some((z) => z.id === p.piezaActiva)
-    ? p.piezaActiva
-    : (montables[0] || p.piezas[0]).id;
+  p.piezaActiva = montables.some((z) => z.id === p.piezaActiva) ? p.piezaActiva : montables[0]?.id || '';
 
   return p;
 }
@@ -254,14 +260,26 @@ export function borrarPieza(proyecto, id) {
   const z = proyecto.piezas.find((x) => x.id === id);
   if (!z) throw new Error('Ese episodio ya no está.');
   if (z.esBiblioteca) throw new Error('La biblioteca no se borra: es lo que hace baratos a los demás.');
-  if (episodiosDe(proyecto).length <= 1) {
-    throw new Error('Es el único episodio. Abre otro antes de borrar este.');
-  }
 
+  // ───────────────────────────────────────────────────────────────────────────
+  // BORRAR ES BORRAR, Y NO HAY QUE HACER NADA ANTES.
+  //
+  // «No puedo eliminar el episodio si no genero otro primero. ¿Qué es eso? Si
+  //  eliminar es eliminar, ¿por qué tengo que a juro generar otro antes?»
+  //
+  // Aquí había un `if (episodiosDe(proyecto).length <= 1) throw`, y no estaba
+  // defendiendo nada suyo: estaba defendiendo una comodidad MÍA —que
+  // `piezaActiva` siempre apuntara a algo, para no tener que pensar en el caso de
+  // cero episodios—. El precio lo pagaba él: para tirar un episodio que no
+  // quería, tenía que crear otro que tampoco quería.
+  //
+  // Ahora el proyecto puede quedarse sin ningún episodio y la pantalla lo dice.
+  // Quien tenía que aguantar el caso de cero era el código, no la persona.
+  // ───────────────────────────────────────────────────────────────────────────
   proyecto.piezas = proyecto.piezas.filter((x) => x.id !== id);
   for (const otra of proyecto.piezas) if (otra.vieneDe === id) otra.vieneDe = null;
   if (proyecto.reparto) delete proyecto.reparto[id];
-  if (proyecto.piezaActiva === id) proyecto.piezaActiva = episodiosDe(proyecto)[0].id;
+  if (proyecto.piezaActiva === id) proyecto.piezaActiva = episodiosDe(proyecto)[0]?.id || '';
   return proyecto;
 }
 
@@ -541,9 +559,31 @@ export async function listarRemotos() {
 
 // ── Consultas sobre el modelo ─────────────────────────────────────────────────
 
+/**
+ * La pieza abierta.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * DOS CUIDADOS, Y LOS DOS SE PAGARON.
+ *
+ * 1. SOLO EPISODIOS. Esto caía a `proyecto.piezas[0]`, y desde que la biblioteca
+ *    es una pieza más, `piezas[0]` puede SER LA BIBLIOTECA. Con el proyecto sin
+ *    episodios, la pantalla habría abierto la biblioteca como si fuera un
+ *    episodio y cualquier fase habría escrito dentro de ella.
+ *
+ * 2. SIN NINGUNO, UNA PIEZA VACÍA SUELTA. Desde que se puede borrar el último
+ *    episodio, «no hay ninguno» es un estado normal, y la pantalla lee
+ *    `pieza().tomas` en veinte sitios antes de pintar nada. Devolver una pieza
+ *    vacía —que NO está en el proyecto, así que nada de lo que se escriba en ella
+ *    se guarda— deja que todo se pinte a cero en vez de reventar.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
 export function piezaDe(proyecto, idPiezaBuscada) {
-  return proyecto.piezas.find((z) => z.id === idPiezaBuscada) || proyecto.piezas[0];
+  const episodios = episodiosDe(proyecto);
+  return episodios.find((z) => z.id === idPiezaBuscada) || episodios[0] || piezaVacia('', 'Sin episodio');
 }
+
+/** ¿Hay algún episodio abierto? Lo que separa pintar a cero de poder generar. */
+export const hayEpisodio = (proyecto) => episodiosDe(proyecto).length > 0;
 
 /** Cuánto dura la pieza según lo que hay medido ahora mismo. */
 export function duracionDe(pieza) {

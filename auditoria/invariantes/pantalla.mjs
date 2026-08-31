@@ -137,7 +137,7 @@ export const invariantes = [
 
   {
     nombre: 'las-pestanas-caben-en-la-barra-de-abajo',
-    dice: 'Con seis pestañas en 390 px cada una tiene ~65 px. Un nombre largo se sale y pisa al de al lado: se leía «INICIOINVESTIGACIÓNGUION» (§7.13).',
+    dice: 'Con siete pestañas en 390 px cada una tiene ~56 px. Un nombre largo se sale y pisa al de al lado: se leía «INICIOINVESTIGACIÓNGUION» (§7.13). Y cada sección que se añade estrecha a todas las demás, así que el tope se calcula, no se recuerda.',
     async comprobar(ctx) {
       const js = ctx.fuentes.get('app/main.js') || '';
       const fallos = [];
@@ -173,7 +173,7 @@ export const invariantes = [
         ...ctx,
         fuentes: new Map(ctx.fuentes).set(
           'app/main.js',
-          js.replace("['investigacion', 'Investigación', 'Fichas']", "['investigacion', 'Investigación', 'Investigación']"),
+          js.replace("['biblioteca', 'Archivo del canal', 'Archivo']", "['biblioteca', 'Archivo del canal', 'Archivo del canal']"),
         ),
       };
     },
@@ -334,6 +334,157 @@ export const invariantes = [
   },
 
   {
+    nombre: 'cada-cosa-tiene-su-seccion-y-el-inicio-es-un-inicio',
+    dice: '«El inicio no es un inicio, el inicio es la biblioteca. La aplicación tiene que tener un inicio y que se vea el generador, y luego todo por sección, como si fuesen su propia página: poder entrar al catálogo de imágenes, a la sección de generar episodio, a la sección de episodios guardados, la sección de ajustes.» El Inicio se fue llenando de todo lo que iba haciendo falta —la biblioteca entera de 141 fichas, la lista de episodios, los seis pasos de producción— hasta dejar de ser una pantalla y pasar a ser el sitio donde estaba todo. Un inicio dice en qué estado estás y por dónde se entra; no es donde se hace el trabajo.',
+    async comprobar(ctx) {
+      const { humoDeLaPantalla } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+      const html = fuente(ctx, 'index.html');
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      /** El trozo de HTML de una vista, de su `<section>` a la siguiente. */
+      const vista = (id) => {
+        const desde = html.indexOf(`id="v-${id}"`);
+        if (desde < 0) return null;
+        const hasta = html.indexOf('<section ', desde);
+        return html.slice(desde, hasta < 0 ? html.length : hasta);
+      };
+
+      // 1 · CADA COSA EN SU SECCIÓN, y no dos veces.
+      for (const [qué, panel, donde] of [
+        ['el archivo del canal', 'panel-biblioteca', 'biblioteca'],
+        ['la lista de episodios', 'panel-episodios', 'episodios'],
+        ['qué episodio está abierto', 'panel-abierto', 'episodios'],
+        ['el paso de elegir caso', 'paso1', 'guion'],
+        ['el guion', 'id="guion"', 'guion'],
+      ]) {
+        const marca = panel.startsWith('id=') ? panel : `id="${panel}"`;
+        const suya = vista(donde);
+        if (!suya) {
+          fallos.push(`No existe la sección «${donde}».`);
+          continue;
+        }
+        if (!suya.includes(marca)) fallos.push(`${qué} no está en su sección («${donde}»).`);
+        if ((html.split(marca).length - 1) > 1) fallos.push(`${qué} está pintado en dos sitios: uno de los dos miente.`);
+      }
+
+      // 2 · Y EL INICIO NO ES EL VERTEDERO. Si vuelve a tener dentro la biblioteca
+      // o los pasos de producción, ha vuelto a ser lo que era.
+      const inicio = vista('inicio') || '';
+      for (const [qué, marca] of [
+        ['el archivo entero', 'id="panel-biblioteca"'],
+        ['la lista de episodios', 'id="panel-episodios"'],
+        ['los pasos de producción', 'id="paso1"'],
+        ['el editor del guion', 'id="guion"'],
+      ]) {
+        if (inicio.includes(marca)) fallos.push(`El Inicio vuelve a llevar dentro ${qué}: no es un inicio, es donde está todo.`);
+      }
+
+      // 3 · Pero SÍ dice en qué estado está y por dónde se entra. Un inicio vacío
+      // sería igual de inútil, en la otra dirección.
+      for (const [qué, marca] of [
+        ['en qué estado está el canal', 'id="estado-canal"'],
+        ['por dónde se entra a cada sección', 'id="entradas-inicio"'],
+        ['el generador de un tirón', 'id="b-producir"'],
+      ]) {
+        if (!inicio.includes(marca)) fallos.push(`El Inicio no dice ${qué}.`);
+      }
+
+      // 4 · Las secciones que él nombró existen como vistas de verdad.
+      const filas = [...main.matchAll(/\['([\w-]+)',\s*'([^']+)',\s*'([^']+)'\]/g)].map((m) => m[1]);
+      for (const id of ['inicio', 'biblioteca', 'episodios', 'guion', 'previa', 'ajustes']) {
+        if (!filas.includes(id)) fallos.push(`«${id}» no es una sección propia: no sale en la barra.`);
+      }
+
+      // 5 · Y ARRANCANDO DE VERDAD, el Inicio pinta sus entradas. Una lista vacía
+      // se vería igual que una llena mirando solo el HTML.
+      const r = await humoDeLaPantalla({ parche });
+      fallos.push(...r.fallos);
+      if (r.hijosDe('entradas-inicio') < 4) {
+        fallos.push(`El Inicio pinta ${r.hijosDe('entradas-inicio')} entradas: no lleva a las secciones.`);
+      }
+      if (!/pastilla/.test(r.html('estado-canal'))) {
+        fallos.push('El Inicio no dice cómo va el canal al arrancar.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: el archivo entero, otra vez dentro del Inicio.
+    romper: (ctx) =>
+      editando(ctx, 'index.html', (t) =>
+        t.replace('<div class="panel" id="panel-biblioteca">', '<div class="panel" id="panel-biblioteca" data-en-inicio>')
+          .replace('<div class="panel">\n          <h2>Cómo va el canal</h2>', '<div class="panel" id="panel-biblioteca">\n          <h2>Cómo va el canal</h2>'),
+      ),
+  },
+
+  {
+    nombre: 'borrar-un-episodio-es-borrarlo-y-no-pide-nada-a-cambio',
+    dice: '«No puedo eliminar el episodio si no genero otro primero. ¿Qué es eso? Si eliminar es eliminar, ¿por qué tengo que a juro generar otro antes?» Había un «es el único episodio, abre otro antes de borrar este», y no defendía nada suyo: defendía una comodidad del código —que `piezaActiva` siempre apuntara a algo— para no tener que aguantar el caso de cero episodios. El precio lo pagaba él: para tirar un episodio que no quería, tenía que crear otro que tampoco quería. Quien tiene que aguantar el caso raro es el código.',
+    async comprobar(ctx) {
+      const { borrarPieza, sanear, piezaDe, hayEpisodio } = ctx.fn;
+      const { humoDeLaPantalla } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+      const fallos = [];
+
+      // 1 · EL ÚLTIMO SE BORRA. Sin excusas y sin pedir nada antes.
+      const solo = sanear({ piezas: [{ id: 'p01' }], piezaActiva: 'p01' });
+      try {
+        borrarPieza(solo, 'p01');
+      } catch (e) {
+        fallos.push(`No se puede borrar el único episodio: «${e.message}». Borrar es borrar.`);
+        return fallos;
+      }
+      if (solo.piezas.some((z) => !z.esBiblioteca)) fallos.push('Borrar el único episodio no lo quita.');
+      if (hayEpisodio(solo)) fallos.push('Tras borrar el único episodio, la aplicación sigue creyendo que hay uno.');
+
+      // 2 · Y EL PROYECTO SIN EPISODIOS NO SE ROMPE NI ABRE EL ARCHIVO POR ERROR.
+      //
+      // Esto es lo caro de verdad: `piezaDe` caía a `piezas[0]`, y desde que el
+      // archivo del canal es una pieza más, `piezas[0]` PUEDE SER EL ARCHIVO. Sin
+      // episodios, la pantalla habría abierto el archivo como si fuera un episodio
+      // y cualquier fase habría escrito dentro de él —encima de las 141 imágenes
+      // que se pagan una sola vez—.
+      const conArchivo = sanear({
+        piezas: [
+          { id: 'biblioteca', esBiblioteca: true, tomas: [{ i: 0, clave: 'recurso:x:v1', imagen: 'ok' }] },
+          { id: 'p01' },
+        ],
+        piezaActiva: 'p01',
+      });
+      borrarPieza(conArchivo, 'p01');
+      const z = piezaDe(conArchivo, conArchivo.piezaActiva);
+      if (z?.esBiblioteca || z?.id === 'biblioteca') {
+        fallos.push('Sin episodios se abre EL ARCHIVO como si fuera uno: generar encima se llevaría la biblioteca entera.');
+      }
+      if (!z || !Array.isArray(z.tomas)) {
+        fallos.push('Sin episodios no hay pieza que pintar: la pantalla reventaría antes de dibujar nada.');
+      }
+      if (z?.tomas?.length) fallos.push('La pieza vacía trae tomas de otro sitio.');
+
+      // 3 · Y LA PANTALLA ARRANCA SIN NINGUNO Y LO DICE, en vez de enseñar los seis
+      // pasos de un episodio que no existe.
+      const r = await humoDeLaPantalla({ parche, proyecto: { id: 'vacio', piezaActiva: '', piezas: [] } });
+      fallos.push(...r.fallos);
+      if (!/[Nn]inguno|sin episodio/i.test(r.html('abierto-dice'))) {
+        fallos.push('Con el proyecto sin episodios, la pantalla no dice que no hay ninguno.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba, con la condición tal cual: el último no se borra.
+    romper: (ctx) =>
+      conFuncion(ctx, 'borrarPieza', (proyecto, id) => {
+        if (ctx.fn.episodiosDe(proyecto).length <= 1) {
+          throw new Error('Es el único episodio. Abre otro antes de borrar este.');
+        }
+        return ctx.fn.borrarPieza(proyecto, id);
+      }),
+  },
+
+  {
     nombre: 'el-inicio-se-puede-gobernar-desde-el-inicio',
     dice: '«El inicio me sale ya iniciado el último caso. No veo los casos generados para borrarlos. No tengo control de nada. No puedo sugerir yo un caso, porque no tengo nada donde escribir.» Cuatro huecos y el mismo origen: el Inicio era el flujo de UN episodio y todo lo demás —la biblioteca, la lista de episodios— estaba al final de Ajustes, donde no lo encuentra nadie. Una herramienta en la que solo se puede hacer lo que cupo en dos desplegables no es una herramienta, es un formulario.',
     async comprobar(ctx) {
@@ -344,35 +495,20 @@ export const invariantes = [
       const html = fuente(ctx, 'index.html');
       const fallos = [];
 
-      // 1 · Lo que gobierna el canal vive EN EL INICIO, no escondido en Ajustes.
-      const inicio = html.slice(html.indexOf('id="v-inicio"'), html.indexOf('id="v-investigacion"'));
-      for (const [qué, id] of [
-        ['la biblioteca', 'panel-biblioteca'],
-        ['la lista de episodios', 'panel-episodios'],
-        ['qué episodio está abierto', 'panel-abierto'],
-      ]) {
-        if (!inicio.includes(`id="${id}"`)) fallos.push(`En el Inicio no se ve ${qué}.`);
-      }
-      // Y la biblioteca ANTES que los episodios: es lo primero que hay que hacer,
-      // y ponerla después es garantizar que nadie la genere.
-      if (inicio.indexOf('id="panel-biblioteca"') > inicio.indexOf('id="panel-episodios"')) {
-        fallos.push('La biblioteca va después de los episodios: se generarían episodios caros sin ella.');
-      }
-
-      // 2 · SE PUEDE ESCRIBIR UNA IDEA PROPIA. Con solo desplegables, la
+      // 1 · SE PUEDE ESCRIBIR UNA IDEA PROPIA. Con solo desplegables, la
       // herramienta únicamente sabe hacer lo que cupo en un catálogo.
-      if (!/id="idea"/.test(inicio)) fallos.push('No hay dónde escribir una idea propia: solo se puede elegir de un menú.');
-      if (!/id="b-usar-idea"/.test(inicio)) fallos.push('No se puede convertir la idea propia en el caso directamente.');
+      if (!/id="idea"/.test(html)) fallos.push('No hay dónde escribir una idea propia: solo se puede elegir de un menú.');
+      if (!/id="b-usar-idea"/.test(html)) fallos.push('No se puede convertir la idea propia en el caso directamente.');
       const main = fuente(ctx, 'app/main.js');
       const buscarFn = main.slice(main.indexOf('async function buscar()'), main.indexOf('\naccion(', main.indexOf('async function buscar()')));
       if (!/P\.idea \|\| tema/.test(buscarFn)) {
         fallos.push('La idea escrita no manda sobre el tema del menú: se escribiría y no serviría de nada.');
       }
 
-      // 3 · SE PUEDE BORRAR un episodio, y su id NO se reutiliza. Reutilizarlo
+      // 2 · SE PUEDE BORRAR un episodio, y su id NO se reutiliza. Reutilizarlo
       // escribiría encima del material del que sigue vivo, sin un solo error.
       const { borrarPieza, abrirPieza, sanear } = ctx.fn;
-      if (!/id="historial"/.test(inicio)) fallos.push('No hay lista de episodios donde borrar.');
+      if (!/id="historial"/.test(html)) fallos.push('No hay lista de episodios donde borrar.');
       const p = sanear({ piezas: [{ id: 'p01' }, { id: 'p02' }, { id: 'p03' }] });
       borrarPieza(p, 'p02');
       if (p.piezas.some((z) => z.id === 'p02')) fallos.push('Borrar un episodio no lo quita.');
@@ -383,20 +519,21 @@ export const invariantes = [
             'escribirían encima de las del que sigue vivo, en el almacén y sin avisar.',
         );
       }
-      // Y no se puede borrar el último ni la biblioteca.
+      // Y la biblioteca no se borra: no es un episodio, es lo que hace baratos a
+      // todos los demás.
       try {
-        const solo = sanear({ piezas: [{ id: 'p01' }] });
-        borrarPieza(solo, 'p01');
-        fallos.push('Se puede borrar el único episodio y quedarse sin ninguno.');
+        const conArchivo = sanear({ piezas: [{ id: 'p01' }, { id: 'biblioteca', esBiblioteca: true }] });
+        borrarPieza(conArchivo, 'biblioteca');
+        fallos.push('Se puede borrar el archivo del canal desde la lista de episodios.');
       } catch {
         /* tiene que fallar */
       }
 
-      // 4 · Y ARRANCA. Los tres botones nuevos se pulsan sin reventar.
+      // 3 · Y ARRANCA. Los botones se pulsan sin reventar.
       const r = await humoDeLaPantalla({ parche, pulsa: ['b-episodio-nuevo'] });
       fallos.push(...r.fallos);
       if (!/todavía sin caso|—/.test(r.html('abierto-dice'))) {
-        fallos.push('El Inicio no dice qué episodio está abierto: los pasos parecen el estado de la herramienta.');
+        fallos.push('No se dice qué episodio está abierto: los pasos parecen el estado de la herramienta.');
       }
       return fallos;
     },

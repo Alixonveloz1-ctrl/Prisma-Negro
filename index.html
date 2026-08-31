@@ -462,17 +462,61 @@ nav.abajo button svg{width:22px;height:22px}
       </div>
 
       <!-- INICIO: el flujo entero, paso a paso -->
+      <!-- ═══ INICIO ══════════════════════════════════════════════════════════
+           «El inicio no es un inicio, el inicio es la biblioteca. La aplicación
+            tiene que tener un inicio y que se vea el generador, y luego todo por
+            sección, como si fuesen su propia página.»
+
+           Tenía razón: el Inicio se había convertido en el sitio donde estaba
+           TODO —la biblioteca entera, la lista de episodios, los seis pasos de
+           producción— y por eso no era un inicio, era un vertedero. Aquí solo se
+           dice en qué estado está el canal y por dónde se entra. Cada cosa tiene
+           su sección. -->
       <section id="v-inicio" class="vista">
         <div class="saludo">
-          <h1 id="titulo-inicio">Crea un documental</h1>
-          <p id="sub-inicio">De una idea a un video terminado, sin salir de aquí.</p>
+          <h1 id="titulo-inicio">Crea ficción documental</h1>
+          <p id="sub-inicio">De una idea a un episodio terminado, sin salir de aquí.</p>
         </div>
 
-        <!-- LO PRIMERO DE TODO: la biblioteca. Es la inversión que hace baratos a
-             todos los episodios, y estaba escondida en Ajustes: nadie la generaba
-             porque nadie sabía que existía. -->
+        <div class="panel">
+          <h2>Cómo va el canal</h2>
+          <div id="estado-canal" class="nota chica"></div>
+        </div>
+
+        <!-- LAS ENTRADAS. Cada una lleva a su sección y dice en qué está. -->
+        <div class="hist" id="entradas-inicio"></div>
+
+        <div class="panel" id="panel-auto">
+          <h2>Producción automática</h2>
+          <p class="nota">Elige un caso y esto hace el resto sin parar: expediente, dirección, guion, narración, imágenes, música y montaje.</p>
+          <div class="fila-btn" style="margin-top:13px">
+            <button class="btn primario grande" id="b-producir">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9z"/></svg>
+              Producir el episodio entero
+            </button>
+          </div>
+          <div class="fila-btn" style="margin-top:9px">
+            <button class="btn peligro chico" id="b-detener">Detener</button>
+          </div>
+          <div id="aviso-auto"></div>
+        </div>
+
+        <p class="pie">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" style="width:15px;height:15px"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 7 18.2l1.9-5.8L4 8.8h6.1z"/></svg>
+          Cada fase se genera por separado. Solo cobra lo que generas.
+        </p>
+      </section>
+
+      <!-- ═══ ARCHIVO DEL CANAL ═══════════════════════════════════════════════
+           La inversión que hace baratos a todos los episodios. Estaba dentro del
+           Inicio y lo ocupaba entero. -->
+      <section id="v-biblioteca" class="vista oculto">
+        <div class="saludo">
+          <h1>Archivo del canal</h1>
+          <p>El elenco y los sitios que se pagan una vez y valen para todos los episodios.</p>
+        </div>
         <div class="panel" id="panel-biblioteca">
-          <h2>1 · Biblioteca del canal <span class="cuenta" id="cuenta-biblioteca"></span></h2>
+          <h2>Catálogo <span class="cuenta" id="cuenta-biblioteca"></span></h2>
           <p class="nota chica">El elenco fijo y los sitios del canal. <b>Varias
           personas por papel</b> —cinco peritos, cinco policías, cinco médicos, veinte
           testigos— y <b>tres versiones de cada sitio</b>. Se paga una vez y ningún
@@ -503,42 +547,49 @@ nav.abajo button svg{width:22px;height:22px}
             <button class="btn fantasma chico" id="b-biblioteca-mas">Ver más</button>
           </div>
         </div>
+      </section>
 
-        <!-- TUS EPISODIOS: abrir, ver en qué estado están, y borrar. Estaba en
-             Ajustes, al final, y por eso «no tengo control de nada». -->
-        <div class="panel" id="panel-episodios">
-          <h2>2 · Tus episodios <span class="cuenta" id="cuenta-historial"></span></h2>
-          <div id="historial"></div>
-          <div class="fila-btn" style="margin-top:12px">
-            <button class="btn" id="b-episodio-nuevo">Empezar un episodio nuevo</button>
-          </div>
-          <div id="aviso-historial"></div>
-        </div>
-
-        <div class="panel" id="panel-auto">
-          <h2>Producción automática</h2>
-          <p class="nota">Elige un caso y esto hace el resto sin parar: investigación, dirección, guion, narración, imágenes, música y montaje.</p>
-          <div class="fila-btn" style="margin-top:13px">
-            <button class="btn primario grande" id="b-producir">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9z"/></svg>
-              Producir el documental entero
-            </button>
-          </div>
-          <div class="fila-btn" style="margin-top:9px">
-            <button class="btn peligro chico" id="b-detener">Detener</button>
-          </div>
-          <div id="aviso-auto"></div>
+      <!-- ═══ EPISODIOS ═══════════════════════════════════════════════════════
+           Abrir, ver en qué estado están, y BORRAR sin condiciones. -->
+      <section id="v-episodios" class="vista oculto">
+        <div class="saludo">
+          <h1>Episodios</h1>
+          <p>Todos los que has empezado. Se abren, se siguen y se borran desde aquí.</p>
         </div>
 
         <!-- QUÉ EPISODIO ESTÁ ABIERTO. Sin esto, la pantalla arrancaba con los
              pasos del último caso trabajado y parecía que la herramienta se había
              quedado a medias sola: «el inicio me sale ya iniciado». -->
         <div class="panel" id="panel-abierto">
-          <h2>3 · El episodio abierto <span class="cuenta" id="cuenta-abierto"></span></h2>
+          <h2>El episodio abierto <span class="cuenta" id="cuenta-abierto"></span></h2>
           <p class="nota" id="abierto-dice"></p>
         </div>
 
-        <!-- 1 · Investigación -->
+        <div class="panel" id="panel-episodios">
+          <h2>Tus episodios <span class="cuenta" id="cuenta-historial"></span></h2>
+          <div id="historial"></div>
+          <div class="fila-btn" style="margin-top:12px">
+            <button class="btn primario" id="b-episodio-nuevo">Empezar un episodio nuevo</button>
+          </div>
+          <div id="aviso-historial"></div>
+        </div>
+      </section>
+
+      <!-- ═══ EL EPISODIO: caso, expediente, dirección y guion ════════════════ -->
+      <section id="v-guion" class="vista oculto">
+        <div class="saludo">
+          <h1>El episodio</h1>
+          <p>El caso, el expediente y el guion. De aquí sale todo lo demás.</p>
+        </div>
+        <div id="sin-episodio" class="panel oculto">
+          <h2>No hay ningún episodio abierto</h2>
+          <p class="nota">Empieza uno en <b>Casos</b>, o abre uno de los que ya tienes.</p>
+          <div class="fila-btn" style="margin-top:12px">
+            <button class="btn primario" id="b-ir-episodios">Ir a Episodios</button>
+          </div>
+        </div>
+
+        <!-- 1 · El caso -->
         <div class="paso" id="paso1">
           <div class="paso-cab">
             <div class="paso-n">1</div>
@@ -600,6 +651,20 @@ nav.abajo button svg{width:22px;height:22px}
           <div id="aviso-paso2"></div>
         </div>
 
+        <!-- EL EXPEDIENTE. Tenía vista propia —«Investigación»— con una pestaña
+             para él solo, y era la misma faena que el paso de arriba: el material
+             del que sale el guion. Dos sitios para una cosa es un sitio de más. -->
+        <div class="panel">
+          <h2>Caso elegido <span class="cuenta" id="cuenta-fichas"></span></h2>
+          <div id="caso-elegido"></div>
+          <div class="fila-btn" style="margin-top:14px">
+            <button class="btn primario" id="b-fichas">Buscar fichas</button>
+            <button class="btn fantasma" id="b-mas-fichas">Buscar más</button>
+          </div>
+          <div id="aviso-investigacion"></div>
+        </div>
+        <div class="panel"><h2>Fichas</h2><div id="fichas"></div></div>
+
         <!-- 3 · Dirección y guion -->
         <div class="paso espera" id="paso3">
           <div class="paso-cab">
@@ -618,6 +683,23 @@ nav.abajo button svg{width:22px;height:22px}
           </div>
           <div id="tratamiento"></div>
           <div id="aviso-paso3"></div>
+        </div>
+
+        <div class="panel">
+          <h2>El guion</h2>
+          <label for="minutos">Duración objetivo (minutos)</label>
+          <input id="minutos" type="number" min="3" max="40" value="30" inputmode="numeric">
+          <div class="fila-btn" style="margin-top:13px">
+            <button class="btn primario" id="b-escribir">Escribir el guion</button>
+            <button class="btn fantasma" id="b-segmentar">Partir en tomas</button>
+          </div>
+          <label for="guion">Texto</label>
+          <textarea id="guion" spellcheck="false" placeholder="«## » abre una escena. Una línea en blanco separa tomas."></textarea>
+          <div class="fila-btn" style="margin-top:12px">
+            <button class="btn fantasma chico" id="b-guardar">Guardar</button>
+            <button class="btn fantasma chico" id="b-subir">Guardar en la nube</button>
+          </div>
+          <div id="aviso-guion"></div>
         </div>
 
         <!-- 4 · Generación -->
@@ -680,46 +762,6 @@ nav.abajo button svg{width:22px;height:22px}
           <div id="aviso-paso6"></div>
         </div>
 
-        <p class="pie">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" style="width:15px;height:15px"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 7 18.2l1.9-5.8L4 8.8h6.1z"/></svg>
-          Cada fase se genera por separado. Solo cobra lo que generas.
-        </p>
-      </section>
-
-      <!-- INVESTIGACIÓN -->
-      <section id="v-investigacion" class="vista oculto">
-        <div class="saludo"><h1>Investigación</h1><p>Hecho, fuente, fecha y cita. El guion sale de aquí.</p></div>
-        <div class="panel">
-          <h2>Caso elegido <span class="cuenta" id="cuenta-fichas"></span></h2>
-          <div id="caso-elegido"></div>
-          <div class="fila-btn" style="margin-top:14px">
-            <button class="btn primario" id="b-fichas">Buscar fichas</button>
-            <button class="btn fantasma" id="b-mas-fichas">Buscar más</button>
-          </div>
-          <div id="aviso-investigacion"></div>
-        </div>
-        <div class="panel"><h2>Fichas</h2><div id="fichas"></div></div>
-      </section>
-
-      <!-- GUION -->
-      <section id="v-guion" class="vista oculto">
-        <div class="saludo"><h1>Guion</h1><p>Es el insumo del que sale todo lo demás. Puedes editarlo.</p></div>
-        <div class="panel">
-          <h2>Escribir</h2>
-          <label for="minutos">Duración objetivo (minutos)</label>
-          <input id="minutos" type="number" min="3" max="40" value="30" inputmode="numeric">
-          <div class="fila-btn" style="margin-top:13px">
-            <button class="btn primario" id="b-escribir">Escribir el guion</button>
-            <button class="btn fantasma" id="b-segmentar">Partir en tomas</button>
-          </div>
-          <label for="guion">Texto</label>
-          <textarea id="guion" spellcheck="false" placeholder="«## » abre una escena. Una línea en blanco separa tomas."></textarea>
-          <div class="fila-btn" style="margin-top:12px">
-            <button class="btn fantasma chico" id="b-guardar">Guardar</button>
-            <button class="btn fantasma chico" id="b-subir">Guardar en la nube</button>
-          </div>
-          <div id="aviso-guion"></div>
-        </div>
         <div class="panel oculto" id="panel-continuar">
           <h2>Continuación</h2>
           <p class="nota chica" id="nota-continuar"></p>

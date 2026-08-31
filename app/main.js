@@ -51,7 +51,8 @@ const escapar = (s) =>
 // aquí. Con dos listas, una acaba teniendo una pestaña que la otra no.
 const ICONO = {
   inicio: '<path d="M3 10l9-7 9 7v10a1 1 0 01-1 1h-5v-7H9v7H4a1 1 0 01-1-1z"/>',
-  investigacion: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
+  biblioteca: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-6 6"/>',
+  episodios: '<path d="M4 5h16v14H4z"/><path d="M4 10h16M9 5v14"/>',
   guion: '<path d="M4 4h11l5 5v11H4z"/><path d="M8 13h8M8 17h5"/>',
   tomas: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M10 9l5 3-5 3z"/>',
   previa: '<path d="M2 6a2 2 0 012-2h11a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2z"/><path d="M17 9l5-3v12l-5-3"/>',
@@ -63,10 +64,29 @@ const ICONO = {
 // unas con otras y se leía «INICIOINVESTIGACIÓNGUION». La anchura es una invariante,
 // no un detalle de estilo (§7.13), así que el nombre corto es parte de la definición
 // de la vista y no un apaño de CSS.
+// ─────────────────────────────────────────────────────────────────────────────
+// UNA SECCIÓN POR COSA, Y EL INICIO ES UN INICIO.
+//
+// «El inicio no es un inicio, el inicio es la biblioteca. La aplicación tiene que
+//  tener un inicio y que se vea el generador, y luego todo por sección, como si
+//  fuesen su propia página: poder entrar al catálogo de imágenes, a la sección de
+//  generar episodio, a la sección de episodios guardados, la sección de ajustes.»
+//
+// El Inicio se había ido llenando de todo lo que iba haciendo falta —la
+// biblioteca entera, la lista de episodios, los seis pasos de producción— hasta
+// que dejó de ser una pantalla y pasó a ser el sitio donde estaba todo. Ahora el
+// Inicio dice en qué estado está el canal y por dónde se entra, y cada cosa vive
+// en su sección.
+//
+// La vista «Investigación» desaparece y su panel se va con el episodio: buscar
+// fichas y construir el expediente son la misma faena que el paso 2, y tenerla en
+// dos sitios era un sitio de más.
+// ─────────────────────────────────────────────────────────────────────────────
 const VISTAS = [
   ['inicio', 'Inicio', 'Inicio'],
-  ['investigacion', 'Investigación', 'Fichas'],
-  ['guion', 'Guion', 'Guion'],
+  ['biblioteca', 'Archivo del canal', 'Archivo'],
+  ['episodios', 'Episodios', 'Casos'],
+  ['guion', 'El episodio', 'Guion'],
   ['tomas', 'Tomas', 'Tomas'],
   ['previa', 'Previa', 'Previa'],
   ['ajustes', 'Ajustes', 'Ajustes'],
@@ -529,6 +549,7 @@ function pintarTodo() {
   pintarPestanas();
   pintarHistorial();
   pintarEpisodioAbierto();
+  pintarInicio();
   pintarContinuacion();
   // La previa preparada es de la pieza que estaba abierta: al cambiar de caso ya no
   // vale, y dejarla puesta enseñaría el documental anterior como si fuera este.
@@ -773,11 +794,15 @@ accion(
     P.casosPropuestos = [];
     await guardar();
     pintarTodo();
-    avisar('historial', `Abierto ${z.id}, vacío. Elige un caso en el paso 1.`, 'bueno');
+    // Y SE VA AL EPISODIO. Abrir uno y quedarse en la lista obliga a buscar por
+    // dónde se sigue, que es lo mismo que no haberlo abierto.
+    ir('guion');
+    avisar('paso1', `Abierto ${z.id}, vacío. Elige un caso aquí o escribe tu propia idea.`, 'bueno');
   },
   'historial',
 );
 accion('b-otros-casos', buscar, 'paso1');
+accion('b-ir-episodios', async () => ir('episodios'), 'paso1');
 
 function pintarCasos() {
   // Sin resultados hay que LIMPIAR: si no, se queda colgado el «Buscando en
@@ -2880,9 +2905,77 @@ function pintarContinuacion() {
  * medias— pero no lo decía en ninguna parte, así que los pasos de abajo parecían
  * el estado de la herramienta y no el de UN episodio concreto.
  */
+/**
+ * El Inicio: en qué estado está el canal y por dónde se entra.
+ *
+ * No genera nada y no tiene formularios. Es el mapa: cuánto archivo hay, cuántos
+ * episodios, cuál está abierto, y un botón por sección que dice en qué está.
+ */
+function pintarInicio() {
+  const caja = $('estado-canal');
+  if (caja) {
+    const b = bibliotecaFase.resumenBiblioteca(tomasParaPintar(), P.config.movimiento.politica);
+    const eps = estado.episodiosDe(P);
+    caja.innerHTML =
+      `<div class="reparto">` +
+      `<span class="pastilla ${b.imagenesFaltan ? '' : 'p-ok'}">${b.total - b.imagenesFaltan} de ${b.total} imágenes de archivo</span>` +
+      (b.porRevisar ? `<span class="pastilla p-aviso">${b.porRevisar} por revisar</span>` : '') +
+      `<span class="pastilla">${eps.length} episodio${eps.length === 1 ? '' : 's'}</span>` +
+      `<span class="pastilla">${P.config.guion.minutos} min por episodio</span>` +
+      `</div>`;
+  }
+
+  const entradas = $('entradas-inicio');
+  if (!entradas) return;
+  const z = pieza();
+  const hay = estado.hayEpisodio(P);
+  const b = bibliotecaFase.resumenBiblioteca(tomasParaPintar(), P.config.movimiento.politica);
+  const filas = [
+    ['biblioteca', 'Archivo del canal',
+      b.imagenesFaltan
+        ? `Faltan ${b.imagenesFaltan} imágenes por generar de ${b.total}.`
+        : b.porRevisar
+          ? `${b.porRevisar} imágenes generadas y sin revisar.`
+          : `${b.total} imágenes listas y aprobadas.`],
+    ['episodios', 'Episodios',
+      hay
+        ? `${estado.episodiosDe(P).length} guardados. Abierto: ${z.titulo || z.id}.`
+        : 'No tienes ninguno. Empieza uno aquí.'],
+    ['guion', 'El episodio',
+      hay
+        ? `El caso, el expediente, el guion y la generación de «${z.titulo || z.id}».`
+        : 'Necesita un episodio abierto.'],
+    ['previa', 'Previa', hay ? 'Escucha y mira lo generado, o el montaje entero.' : 'Necesita un episodio abierto.'],
+    ['ajustes', 'Ajustes', 'Generadores, formato, voz y copia en la nube.'],
+  ];
+  entradas.innerHTML = '';
+  for (const [vista, titulo, dice] of filas) {
+    const el = document.createElement('button');
+    el.innerHTML = `<b>${escapar(titulo)}</b><span>${escapar(dice)}</span>`;
+    el.onclick = () => ir(vista);
+    entradas.appendChild(el);
+  }
+}
+
 function pintarEpisodioAbierto() {
+  // SIN EPISODIOS es un estado normal desde que borrar es borrar. La pantalla lo
+  // dice y esconde los pasos, en vez de enseñar los seis pasos de un episodio que
+  // no existe.
+  const hay = estado.hayEpisodio(P);
+  $('sin-episodio')?.classList.toggle('oculto', hay);
+  for (const id of ['paso1', 'paso2', 'paso3', 'paso4', 'paso5', 'paso6']) {
+    $(id)?.classList.toggle('oculto', !hay);
+  }
+
   const caja = $('abierto-dice');
   if (!caja) return;
+  if (!hay) {
+    $('cuenta-abierto').textContent = '';
+    caja.innerHTML =
+      'Ninguno. Dale a <b>Empezar un episodio nuevo</b> aquí abajo. El archivo del ' +
+      'canal no se toca: sigue donde estaba y no se vuelve a pagar.';
+    return;
+  }
   const z = pieza();
   const hechas = [
     z.caso ? 'caso elegido' : null,
@@ -2894,8 +2987,8 @@ function pintarEpisodioAbierto() {
   $('cuenta-abierto').textContent = z.id;
   caja.innerHTML = z.caso
     ? `<b>${escapar(z.titulo || z.caso.titulo)}</b> — ${hechas.join(' · ') || 'recién abierto'}. ` +
-      `Los pasos de abajo son de ESTE episodio. Para trabajar en otro, ábrelo arriba.`
-    : `<b>${escapar(z.titulo || z.id)}</b> — todavía sin caso. Elige uno en el paso 1, ` +
+      `Se trabaja en «El episodio». Para cambiar a otro, ábrelo en la lista de abajo.`
+    : `<b>${escapar(z.titulo || z.id)}</b> — todavía sin caso. Elígelo en «El episodio», ` +
       `o escribe tu propia idea y dale a «Usar mi idea».`;
 }
 
@@ -3206,7 +3299,11 @@ const PASOS_AUTO = [
 accion(
   'b-producir',
   async () => {
-    if (!pieza().caso) throw new Error('Elige un caso primero, en el paso 1.');
+    // Sin episodio abierto, `pieza()` devuelve una pieza vacía SUELTA —no está en
+    // el proyecto—, así que producir escribiría en algo que no se guarda nunca. Se
+    // para aquí y se dice dónde se empieza.
+    if (!estado.hayEpisodio(P)) throw new Error('No hay ningún episodio abierto. Empieza uno en «Casos».');
+    if (!pieza().caso) throw new Error('Elige un caso primero, en «El episodio».');
 
     // Los clips de movimiento NO entran aquí a propósito: son la fase más cara con
     // diferencia (§4.7) y arrancarlos sin preguntar es la forma de despertarse con

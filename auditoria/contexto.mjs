@@ -225,6 +225,8 @@ async function funcionesPuras() {
     abrirPieza: est.abrirPieza,
     borrarPieza: est.borrarPieza,
     episodiosDe: est.episodiosDe,
+    piezaDe: est.piezaDe,
+    hayEpisodio: est.hayEpisodio,
     reescribirPieza: est.reescribirPieza,
     ascendencia: est.ascendencia,
     duracionValida: mod.duracionValida,
