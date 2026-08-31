@@ -150,6 +150,83 @@ export async function probarCadena() {
     pasos.push(paso('modelos', false, `No se pudo hablar con el proveedor de IA: ${e.message}`));
   }
 
+  // ── 4b. LA CUOTA DEL GENERADOR DE IMÁGENES ─────────────────────────────────
+  //
+  // ───────────────────────────────────────────────────────────────────────────
+  // «Lleva media hora ahí y no avanza. Ni genera nada.»
+  //
+  // El paso de arriba prueba el modelo de TEXTO, y el de texto iba bien: los casos
+  // se escribían, el guion se escribía. Lo que estaba muerto era la IMAGEN, y este
+  // diagnóstico decía que todo estaba correcto. Un diagnóstico que da luz verde
+  // mientras la fase más usada no puede generar nada es peor que no tenerlo.
+  //
+  // Y SE PRUEBA SIN GENERAR NADA, que es lo que lo hace utilizable: se manda una
+  // petición deliberadamente VACÍA al modelo de imagen. Vertex contesta antes de
+  // generar, y el código dice exactamente lo que hace falta saber:
+  //
+  //   400  → la cuenta puede llamar al modelo y hay cuota. La petición está mal
+  //          A PROPÓSITO: eso es lo que se buscaba, y no cuesta un céntimo.
+  //   429  → LA CUOTA ESTÁ AGOTADA. Es esto, y en tres segundos en vez de media
+  //          hora mirando una barra parada.
+  //   403  → la cuenta no puede usar ese modelo, o la API no está activada.
+  //   404  → ese modelo no existe en esa región.
+  // ───────────────────────────────────────────────────────────────────────────
+  try {
+    const eleccion = process.env.MODELO_IMAGEN || PREDETERMINADO.imagen;
+    const grafias = grafiasDe('imagen', eleccion);
+    let r;
+    let modelo = grafias[0];
+    for (const id of grafias) {
+      modelo = id;
+      r = await fetch(`${rutaDeModelo(id)}:generateContent`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'X-Goog-User-Project': proyecto(),
+        },
+        // Sin `contents`: la petición es inválida a propósito y no genera nada.
+        body: JSON.stringify({}),
+      });
+      if (r.status !== 404 && r.status !== 403) break;
+    }
+    const d = await r.json().catch(() => ({}));
+    const msg = d?.error?.message || `HTTP ${r.status}`;
+
+    if (r.status === 400) {
+      pasos.push(paso('imagen', true, `${etiquetaDe('imagen', eleccion)} acepta llamadas y tiene cuota (${modelo}).`));
+    } else if (r.status === 429) {
+      pasos.push(
+        paso(
+          'imagen',
+          false,
+          `La cuota del generador de imágenes está agotada. Google dice: ${msg}`,
+          'Si el mensaje habla de «per minute», se abre sola al pasar el minuto. Si habla de ' +
+            '«per day» o el límite es 0, hay que pedir cuota en Google Cloud → IAM y ' +
+            'administración → Cuotas, buscando el modelo, y comprobar que el proyecto tiene ' +
+            'facturación activada. Esperar no lo arregla.',
+        ),
+      );
+    } else if (r.status === 403) {
+      pasos.push(
+        paso('imagen', false, `La cuenta no puede usar el generador de imágenes: ${msg}`,
+          'Falta el rol de usuario de Vertex AI, o la API de Vertex no está activada en ESTE proyecto.'),
+      );
+    } else if (r.status === 404) {
+      pasos.push(
+        paso('imagen', false, `Ninguna grafía de «${etiquetaDe('imagen', eleccion)}» contesta. Se probaron: ${grafias.join(', ')}.`,
+          'Elige otro generador de imagen en Ajustes.'),
+      );
+    } else if (r.ok) {
+      // No debería pasar —la petición iba vacía— pero si contesta, hay cuota.
+      pasos.push(paso('imagen', true, `${etiquetaDe('imagen', eleccion)} responde (${modelo}).`));
+    } else {
+      pasos.push(paso('imagen', false, `El generador de imágenes respondió ${r.status}: ${msg}`));
+    }
+  } catch (e) {
+    pasos.push(paso('imagen', false, `No se pudo probar el generador de imágenes: ${e.message}`));
+  }
+
   // ── 5. El montador ─────────────────────────────────────────────────────────
   // Ya no hace falta configurarlo: tiene nombre por defecto. Se comprueba si está
   // desplegado con ese nombre. No hace falta para generar, solo para montar, así

@@ -422,9 +422,26 @@ export async function llamar(modo, datos = {}, { reintentos = 2, senal, alEspera
         ultimo = err;
         continue;
       }
+      // ── LO QUE DICE EL PROVEEDOR NO SE BORRA ─────────────────────────────
+      //
+      // Aquí había un `err.message = '...es el límite por minuto de tu proyecto'`
+      // que TIRABA el mensaje de Google y lo sustituía por una suposición mía. Y
+      // la suposición podía ser falsa: Vertex distingue cuota por minuto, por día
+      // y límite cero —un modelo que el proyecto no tiene habilitado—, y lo dice
+      // en el mensaje, con el nombre de la métrica y a menudo un enlace.
+      //
+      // Borrando eso, media hora esperando no enseña NADA: ni si la ventana se va
+      // a abrir, ni qué hay que tocar en Google Cloud. Lo que se sabe se dice, y
+      // lo que se supone va detrás y marcado como suposición.
       err.message =
-        'Se agotó la cuota del proveedor y sigue agotada tras varios minutos esperando. ' +
-        'No es un fallo de la herramienta: es el límite por minuto de tu proyecto en Google Cloud.';
+        `${err.message}\n\n` +
+        'La cuota sigue agotada tras varios minutos esperando. No es un fallo de la ' +
+        'herramienta: es un límite de tu proyecto en Google Cloud. Si el mensaje de ' +
+        'arriba habla de «per minute», se abre sola en cuanto pase el minuto; si habla ' +
+        'de «per day» o el límite es 0, esperar no sirve y hay que pedir cuota en ' +
+        'Google Cloud (IAM y administración → Cuotas) o comprobar que el modelo está ' +
+        'habilitado en ESTE proyecto.';
+      err.motivo = 'cuota';
       throw err;
     }
 

@@ -78,7 +78,16 @@ export default async function handler(req, res) {
     // §7.1: cuando un fallo no cuadra, sospecha del tamaño antes que del reloj.
     const msg = String(err?.message || err);
     const esTamano = /413|too large|payload|entity too large/i.test(msg);
-    return res.status(esTamano ? 413 : 500).json({
+    // EL CÓDIGO DEL PROVEEDOR SE CONSERVA, y no es un detalle.
+    //
+    // Esto devolvía 500 SIEMPRE. Un 429 de Vertex —«se agotó la cuota», que es un
+    // «espera»— llegaba al navegador como 500, o sea «algo se rompió arriba». Se
+    // salvaba de milagro porque la puerta del navegador también mira el TEXTO del
+    // error, pero cualquier cosa que dependa del código —la cabecera `retry-after`,
+    // distinguir un «espera» de una avería— estaba mirando un número inventado
+    // aquí. Un código de estado es información del proveedor: no se pisa.
+    const estado = Number(err?.estado);
+    return res.status(esTamano ? 413 : estado >= 400 && estado < 600 ? estado : 500).json({
       ok: false,
       error: esTamano
         ? `${msg} — probablemente sea el tope de 4,5 MB, no un tiempo agotado.`

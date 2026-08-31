@@ -498,6 +498,108 @@ export const invariantes = [
   },
 
   {
+    nombre: 'esperar-por-la-cuota-se-abandona-cuando-no-sirve-y-se-dice-por-que',
+    dice: '«Lleva media hora ahí y no avanza. Ni genera nada.» Esperar por la cuota está bien para una ventana POR MINUTO —se abre a la primera espera— y es una trampa para cualquier otra: una cuota diaria, o un modelo que el proyecto no tiene habilitado y contesta «límite 0», no se abren nunca, y la herramienta daba vueltas horas sin generar nada ni decir por qué. La señal que las distingue no hay que adivinarla: si la ventana es por minuto, algo sale bien en cuanto pasa el minuto. Dos esperas seguidas sin generar NADA significan que no es eso, y entonces lo único útil es parar y enseñar lo que contestó el proveedor.',
+    async comprobar(ctx) {
+      const { Cola } = ctx.fn;
+      const fallos = [];
+
+      const conCuota = async (siempreFalla) => {
+        const cola = new Cola();
+        let esperas = 0;
+        cola.esperarConCuenta = async () => {
+          esperas++;
+        };
+        let n = 0;
+        const r = await cola.ejecutar(
+          'prueba',
+          [0, 1, 2],
+          async () => {
+            n++;
+            // `siempreFalla` = la cuota no se abre nunca. Si no, se abre al tercer
+            // intento, como una ventana por minuto de verdad.
+            if (siempreFalla || n <= 2) {
+              const e = new Error('Quota exceeded for quota metric ... limit: 0 per day');
+              e.estado = 429;
+              throw e;
+            }
+            return 'ok';
+          },
+          { alTerminarUno: () => {} },
+        );
+        return { r, esperas, intentos: n };
+      };
+
+      // 1 · LA CUOTA QUE NO SE ABRE: se para, y pronto.
+      const dura = await conCuota(true);
+      if (!dura.r.sinCuota) {
+        fallos.push('Con la cuota cerrada para siempre, la tanda no se rinde: sigue esperando sin generar nada.');
+      }
+      if (dura.esperas > 3) {
+        fallos.push(`Espera ${dura.esperas} veces sin generar nada antes de rendirse: eso es media hora mirando una barra parada.`);
+      }
+      // Y LO QUE DICE EL PROVEEDOR VIAJA ENTERO hasta quien lo tiene que leer: es
+      // lo único que dice si hay que pedir cuota, activar facturación o esperar.
+      if (!/limit: 0 per day/.test(String(dura.r.sinCuota || ''))) {
+        fallos.push('Al rendirse no se conserva lo que contestó el proveedor: no hay con qué arreglarlo.');
+      }
+      if (dura.r.hechas !== 0) fallos.push(`Dice que hizo ${dura.r.hechas} y no generó ninguna.`);
+
+      // 2 · Y LA VENTANA QUE SÍ SE ABRE sigue funcionando como antes: se espera lo
+      // que haga falta y no se pierde ni una unidad.
+      const blanda = await conCuota(false);
+      if (blanda.r.sinCuota) fallos.push('Una cuota que sí se abre se trata como si no fuera a abrirse nunca.');
+      if (blanda.r.hechas !== 3 || blanda.r.fallos.length) {
+        fallos.push(`Con la cuota abriéndose, se generaron ${blanda.r.hechas} de 3 con ${blanda.r.fallos.length} fallos.`);
+      }
+
+      // 3 · Y EL MENSAJE DEL PROVEEDOR NO SE BORRA EN EL CAMINO. Aquí había un
+      // `err.message = '...'` que tiraba lo que decía Google y lo sustituía por una
+      // suposición —«es el límite por minuto»— que podía ser falsa.
+      const api = ctx.fuentes.get('app/api.js') || '';
+      if (/err\.message =\s*\n?\s*'Se agotó la cuota/.test(api)) {
+        fallos.push('El mensaje del proveedor se sustituye por una suposición: media hora esperando no enseña nada.');
+      }
+      if (!/err\.message =\s*\n?\s*`\$\{err\.message\}/.test(api)) {
+        fallos.push('El mensaje del proveedor no se conserva al rendirse por cuota.');
+      }
+      // Y la puerta del servidor conserva el CÓDIGO del proveedor: devolver 500
+      // para un 429 es llamar avería a un «espera».
+      const ia = ctx.fuentes.get('api/ia.js') || '';
+      if (!/const estado = Number\(err\?\.estado\)/.test(ia) || !/estado >= 400 && estado < 600 \? estado : 500/.test(ia)) {
+        fallos.push('La puerta devuelve 500 para cualquier fallo: un 429 del proveedor llega como avería.');
+      }
+
+      // 4 · Y EL DIAGNÓSTICO PRUEBA LA IMAGEN, no solo el texto. El de texto iba
+      // bien mientras la imagen estaba muerta, y la pantalla decía que todo bien.
+      const salud = ctx.fuentes.get('api/_lib/salud.js') || '';
+      if (!/paso\('imagen'/.test(salud)) {
+        fallos.push('El diagnóstico no prueba el generador de imágenes: da luz verde con la fase más usada muerta.');
+      }
+      if (!/r\.status === 429/.test(salud)) {
+        fallos.push('El diagnóstico no distingue la cuota agotada del resto: es lo que hay que poder ver en tres segundos.');
+      }
+      // Y SIN GENERAR NADA: un diagnóstico que cuesta dinero no se pulsa.
+      if (!/body: JSON\.stringify\(\{\}\)/.test(salud)) {
+        fallos.push('La prueba del generador de imágenes genera una imagen de verdad: un diagnóstico que cobra no se usa.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: se espera siempre, pase lo que pase.
+    romper: (ctx) => {
+      const Original = ctx.fn.Cola;
+      class ColaTerca extends Original {
+        async ejecutar(nombre, unidades, hacerUno, opciones = {}) {
+          const r = await super.ejecutar(nombre, unidades, hacerUno, opciones);
+          // Lo de antes: nunca se rinde, así que nunca hay nada que enseñar.
+          return { ...r, sinCuota: null };
+        }
+      }
+      return conFuncion(ctx, 'Cola', ColaTerca);
+    },
+  },
+
+  {
     nombre: 'la-cuota-agotada-para-la-tanda-pero-no-pierde-la-unidad',
     dice: '«Llega el momento en que el mensaje dice que se está generando pero no se genera nada. Media hora y no se generó nada. Debería ponerse en cola para que cuando ya se quite el límite continúe la generación; si no, de nada me sirve dar el botón de generar todo.» La llamada esperaba sus ocho minutos a que se abriera la ventana de cuota y, si seguía cerrada, lanzaba. La cola daba esa unidad POR PERDIDA y pasaba a la siguiente, que se estrellaba contra la misma pared, esperaba otros ocho minutos y también se perdía. Ciento cuarenta veces. La cuota no es un fallo: es un «ahora no», y lo que tiene que parar es la TANDA, no la unidad.',
     async comprobar(ctx) {

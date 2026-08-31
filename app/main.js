@@ -2144,6 +2144,22 @@ function informar(r, que, donde = 'paso4') {
   if (r.detenida) {
     return avisar(donde, `${que}: detenido en ${r.hechas} de ${r.total}. Lo hecho está guardado.`);
   }
+  // LA TANDA SE PARÓ PORQUE ESPERAR NO SERVÍA, y eso no es «fallaron N de M»: es
+  // una sola cosa que hay que arreglar en Google Cloud. Se dice aparte y con el
+  // mensaje del proveedor ENTERO, que es lo único que dice qué tocar. Enterrado
+  // entre errores repetidos no lo lee nadie.
+  if (r.sinCuota) {
+    avisar(
+      donde,
+      `${que}: parado en ${r.hechas} de ${r.total}. La cuota de tu proyecto en Google Cloud no se abre, ` +
+        'así que esperar más no sirve. Lo generado está guardado.',
+      'malo',
+    );
+    return registro(donde, [
+      'Esto es lo que contestó Google, tal cual:',
+      ...String(r.sinCuota).split('\n').filter(Boolean),
+    ]);
+  }
   if (r.fallos.length) {
     avisar(donde, `${que}: ${r.fallos.length} de ${r.total} fallaron. Vuelve a darle: solo repite lo que falta.`, 'malo');
     return registro(donde, r.fallos.map((f) => `· ${f.error}`));

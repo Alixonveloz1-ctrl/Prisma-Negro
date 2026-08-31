@@ -42,12 +42,32 @@ export class Detenida extends Error {
 // unidad—, espera con una cuenta atrás a la vista, y vuelve a intentar LA MISMA
 // unidad. Nada se pierde y no hay que estar delante.
 //
-// Las esperas van en minutos porque los segundos ya se probaron abajo. Y hay un
-// final: una cuota por minuto se abre en minutos, pero una cuota DIARIA no se abre
-// hoy, y esperar seis horas con la pantalla encendida no ayuda a nadie.
 // ─────────────────────────────────────────────────────────────────────────────
-const ESPERAS_DE_TANDA = [60, 120, 300, 600, 900, 1800];
-const TOPE_DE_ESPERA_TOTAL = 6 * 3600 * 1000;
+// Y ESPERAR SOLO SIRVE SI LA TANDA AVANZA. Esto también se aprendió mirándolo.
+//
+// «Lleva media hora ahí y no avanza. Ni genera nada.»
+//
+// La primera versión de esto esperaba 1, 2, 5, 10, 15 y 30 minutos, hasta seis
+// horas, reintentando siempre la misma unidad. Y eso está bien para una cuota POR
+// MINUTO —se abre a la primera espera— pero es una trampa para cualquier otra:
+// una cuota diaria, o un modelo que el proyecto no tiene habilitado y contesta
+// «límite 0», no se abren nunca. La herramienta se pasaba media hora dando vueltas
+// sin generar nada y sin decir por qué.
+//
+// La señal que lo distingue es simple y no hace falta adivinarla: SI LA VENTANA ES
+// POR MINUTO, ALGO SALE BIEN EN CUANTO PASA EL MINUTO. Así que dos esperas
+// seguidas sin que se genere ni una sola cosa —un minuto y tres— significan que no
+// es la ventana del minuto, y seguir esperando es tirar el tiempo. Se para y se
+// dice LO QUE CONTESTÓ EL PROVEEDOR, que es lo que permite arreglarlo.
+//
+// Un acierto reinicia la cuenta: una cuota que va y viene sigue funcionando como
+// antes, esperando lo que haga falta.
+// ─────────────────────────────────────────────────────────────────────────────
+const ESPERAS_DE_TANDA = [60, 180];
+/** Esperas seguidas SIN QUE SE GENERE NADA antes de darse por vencido. */
+const ESPERAS_SIN_AVANZAR = ESPERAS_DE_TANDA.length;
+/** Y un tope total, para la cuota intermitente que nunca deja de fallar del todo. */
+const TOPE_DE_ESPERA_TOTAL = 60 * 60 * 1000;
 
 /** ¿Es la cuota del proveedor, o sea un «ahora no» y no un «no»? */
 const esCuota = (e) =>
@@ -142,7 +162,12 @@ export class Cola {
         }
 
         // ── LA CUOTA PARA LA TANDA, NO PIERDE LA UNIDAD ──────────────────────
-        if (ultimoError && esCuota(ultimoError) && esperadoTotal < TOPE_DE_ESPERA_TOTAL) {
+        if (
+          ultimoError &&
+          esCuota(ultimoError) &&
+          esperasSeguidas < ESPERAS_SIN_AVANZAR &&
+          esperadoTotal < TOPE_DE_ESPERA_TOTAL
+        ) {
           const ms = ESPERAS_DE_TANDA[Math.min(esperasSeguidas, ESPERAS_DE_TANDA.length - 1)] * 1000;
           esperasSeguidas++;
           esperadoTotal += ms;
@@ -155,6 +180,23 @@ export class Cola {
           );
           i--; // LA MISMA UNIDAD otra vez. No cuenta como hecha ni como fallida.
           continue;
+        }
+
+        // ── Y SI ESPERAR NO SIRVIÓ, SE PARA Y SE DICE POR QUÉ ────────────────
+        //
+        // Dos esperas seguidas sin generar ni una sola cosa: no es la ventana del
+        // minuto. Seguir es lo que le costó media hora mirando una barra parada.
+        // Se corta la tanda entera —no solo esta unidad— con el mensaje del
+        // proveedor delante, que es lo único que dice qué hay que tocar.
+        if (ultimoError && esCuota(ultimoError) && esperasSeguidas >= ESPERAS_SIN_AVANZAR) {
+          fallos.push({ i, unidad: unidades[i], error: String(ultimoError.message || ultimoError) });
+          this.sinCuota = String(ultimoError.message || ultimoError);
+          decir(
+            `Se para: tras esperar ${Math.round(esperadoTotal / 60000)} minutos no se generó nada. ` +
+              'Esto no es la cuota por minuto —esa se abre sola—. Lo que contestó el proveedor está abajo. ' +
+              `Lo generado (${hechas}) está guardado y al volver a darle solo se repite lo que falta.`,
+          );
+          break;
         }
 
         if (ultimoError) {
@@ -189,7 +231,12 @@ export class Cola {
       donde,
     });
 
-    return { hechas, total, fallos, detenida, esperadoTotal };
+    // `sinCuota` lleva EL MENSAJE DEL PROVEEDOR, tal cual, cuando la tanda se paró
+    // porque esperar no servía. Quien la llama lo enseña: es lo único que dice qué
+    // hay que tocar en Google Cloud.
+    const sinCuota = this.sinCuota || null;
+    this.sinCuota = null;
+    return { hechas, total, fallos, detenida, esperadoTotal, sinCuota };
   }
 }
 
