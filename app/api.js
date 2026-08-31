@@ -129,6 +129,9 @@ const dormir = (ms, senal) =>
  */
 const MAX_DURACION_FUNCION = 60000;
 const TOPE_DE_PETICION = MAX_DURACION_FUNCION * 2;
+// Preguntar por una ficha del almacén no genera nada: si no contesta en quince
+// segundos, no va a contestar.
+const TOPE_DE_CONSULTA = 15000;
 
 function conTope(senal, ms) {
   const control = new AbortController();
@@ -217,12 +220,26 @@ function mensajeDeRespuestaCruda(estado, modo = '') {
 const FRESCO_MS = 4 * 60 * 1000;
 
 async function llegoDeTodasFormas(clave, senal) {
+  // CON SU TOPE DE TIEMPO, y esta era la avería.
+  //
+  // ───────────────────────────────────────────────────────────────────────────
+  // «Lleva media hora ahí y no avanza. Ni genera nada.»
+  //
+  // Esta llamada NO TENÍA TOPE: pasaba solo la señal de fuera. Y se hace en cada
+  // 5xx de una llamada que escribe material — o sea, en el camino de CADA imagen
+  // en cuanto algo va mal arriba. Si se colgaba, se colgaba para siempre: sin
+  // error, sin reintento, sin cambiar el cartel de la pantalla.
+  //
+  // Le puse tope a la petición grande y me dejé esta, que corre justo después y
+  // por el mismo cable. Un tope que cubre una de las dos puertas no es un tope.
+  // ───────────────────────────────────────────────────────────────────────────
+  const reloj = conTope(senal, TOPE_DE_CONSULTA);
   try {
     const r = await fetch(PUERTA, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ modo: 'ficha', clave, acceso: claveAcceso }),
-      signal: senal,
+      signal: reloj.signal,
     });
     if (!r.ok) return null;
     const c = await r.json();
@@ -233,6 +250,8 @@ async function llegoDeTodasFormas(clave, senal) {
   } catch {
     // Si ni siquiera se puede preguntar, se reintenta como siempre.
     return null;
+  } finally {
+    reloj.soltar();
   }
 }
 
@@ -307,6 +326,8 @@ export async function llamar(modo, datos = {}, { reintentos = 2, senal, alEspera
     }
 
     let r;
+    let cuerpo;
+    let crudo = false;
     // `tope` se puede bajar desde fuera. Existe para poder COMPROBAR que una
     // petición colgada se corta: con dos minutos fijos, la comprobación tardaría
     // dos minutos y nadie la ejecutaría nunca.
@@ -331,6 +352,21 @@ export async function llamar(modo, datos = {}, { reintentos = 2, senal, alEspera
         }),
         signal: reloj.signal,
       });
+      // ── Y EL CUERPO TAMBIÉN CUENTA ────────────────────────────────────────
+      //
+      // Leer el cuerpo estaba FUERA del `try` y DESPUÉS del `finally`, así que se
+      // hacía con el reloj YA SOLTADO. Una respuesta cuyas cabeceras llegan y cuyo
+      // cuerpo no termina nunca —lo normal en una red móvil que cambia de celda a
+      // mitad— se quedaba colgada exactamente igual que antes, con el tope puesto
+      // y sin servir de nada. Un tope que cubre media conversación no es un tope.
+      try {
+        cuerpo = await r.json();
+      } catch (e) {
+        // Abortar LEYENDO EL CUERPO no es «esto no era JSON»: es el cuelgue otra
+        // vez. Se deja subir para que lo trate el reintento de abajo.
+        if (e?.name === 'AbortError') throw e;
+        crudo = true;
+      }
     } catch (e) {
       // Detenerse a mano y agotarse el tiempo abortan igual, así que hay que
       // distinguirlos por QUIÉN abortó: si la señal de fuera está abortada, lo
@@ -349,10 +385,7 @@ export async function llamar(modo, datos = {}, { reintentos = 2, senal, alEspera
       reloj.soltar();
     }
 
-    let cuerpo;
-    try {
-      cuerpo = await r.json();
-    } catch {
+    if (crudo) {
       // 504 NO ES TAMAÑO, ES TIEMPO. Y el mensaje decía lo contrario.
       //
       // Cuando la plataforma corta la función por tiempo devuelve una página de
@@ -412,9 +445,13 @@ export async function llamar(modo, datos = {}, { reintentos = 2, senal, alEspera
     if (esEspera(r.status, cuerpo.error)) {
       frenar();
       if (esperas < REINTENTOS_DE_ESPERA) {
-        // Si el proveedor dice cuánto hay que esperar, se le hace caso.
-        const dice = Number(r.headers.get('retry-after')) * 1000;
-        const cuanto = Math.max(dice || 0, ESPERAS[esperas] || ESPERAS[ESPERAS.length - 1]);
+        // Si el proveedor dice cuánto hay que esperar, se le hace caso — PERO CON
+        // UN TECHO. Una cuota diaria puede contestar «vuelve dentro de 40.000
+        // segundos», y eso aquí es `dormir(40000000)`: once horas quieto, con un
+        // solo cartel puesto y sin forma de saber que no está colgado. Pasado el
+        // techo, quien decide es la cola, que para la tanda y lo dice.
+        const dice = Math.min(Number(r.headers.get('retry-after')) * 1000 || 0, TECHO_DE_ESPERA);
+        const cuanto = Math.max(dice, ESPERAS[esperas] || ESPERAS[ESPERAS.length - 1]);
         esperas++;
         alEsperar?.(cuanto, 'cuota');
         await dormir(cuanto, senal);
@@ -472,6 +509,8 @@ export async function llamar(modo, datos = {}, { reintentos = 2, senal, alEspera
 // vez de las dos haciendo lo mismo.
 // ─────────────────────────────────────────────────────────────────────────────
 const ESPERAS = [30000, 60000, 90000];
+/** Y nada de aquí abajo duerme más que esto de una sentada. Ver `retry-after`. */
+const TECHO_DE_ESPERA = 120000;
 const REINTENTOS_DE_ESPERA = ESPERAS.length;
 
 /**

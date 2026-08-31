@@ -173,6 +173,28 @@ const CAMINOS = [
     dice: /colgada/i,
   },
   {
+    // EL CUERPO QUE NO TERMINA. Las cabeceras llegan, el cuerpo no.
+    //
+    // Es lo normal en una red móvil que cambia de celda a mitad de la respuesta, y
+    // se colaba entero: el tope se soltaba al llegar las cabeceras y `r.json()`
+    // esperaba sin reloj. Un tope que cubre media conversación no es un tope.
+    nombre: 'las cabeceras llegan y el cuerpo se cuelga, luego vuelve',
+    respuestas: [{ tipo: 'cuelga-cuerpo' }, { tipo: 'ok', cuerpo: { ok: true, texto: 'listo' } }],
+    tope: 20,
+    esperado: 'vale',
+  },
+  {
+    // Y LA CONSULTA AL ALMACÉN, que corre justo después de un 5xx en cualquier
+    // llamada que escribe material — o sea, en el camino de CADA imagen. No tenía
+    // tope ninguno: si se colgaba, se colgaba para siempre y sin cambiar el cartel.
+    nombre: 'la consulta al almacén se cuelga tras un corte por tiempo',
+    datos: { guardarEn: 'p01/t000/img' },
+    respuestas: [{ tipo: 'crudo', estado: 504, texto: '<html>Gateway Timeout</html>' }],
+    fichaCuelga: true,
+    esperado: 'falla',
+    dice: /tiempo/i,
+  },
+  {
     nombre: 'se pulsa detener',
     respuestas: [{ tipo: 'revienta' }],
     abortar: true,
@@ -198,6 +220,15 @@ export async function humoDeLaPuerta({ parche = null } = {}) {
   let pedidos = 0;
   let generaciones = 0;
   let ficha = { existe: false, bytes: 0, actualizado: null };
+  let fichaCuelga = false;
+
+  /** Una petición que no vuelve nunca, salvo que la aborten. */
+  const colgada = (s) =>
+    new Promise((_res, rej) => {
+      const cortar = () => rej(Object.assign(new Error('abortada'), { name: 'AbortError' }));
+      if (s?.aborted) return cortar();
+      s?.addEventListener('abort', cortar, { once: true });
+    });
 
   globalThis.indexedDB = indexedDbDeMentira();
   // Y la conexión cacheada de `local.js` se suelta A LA IDA Y A LA VUELTA: si se
@@ -224,6 +255,8 @@ export async function humoDeLaPuerta({ parche = null } = {}) {
     // Preguntar por una ficha NO es generar: es lo que se hace para NO generar.
     // Va aparte para poder contar las generaciones de verdad.
     if (cuerpo?.modo === 'ficha') {
+      // La consulta que no vuelve. Sin tope propio, esto cuelga la tanda entera.
+      if (fichaCuelga) return colgada(opciones.signal);
       return new Response(JSON.stringify({ ok: true, ficha }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -237,16 +270,20 @@ export async function humoDeLaPuerta({ parche = null } = {}) {
     // es exactamente lo que tiene que hacer el tope de tiempo. Sin ese tope, esta
     // promesa no se cumple nunca y la llamada se queda colgada — que es el fallo
     // que este camino viene a cazar.
-    if (paso.tipo === 'cuelga') {
-      return new Promise((_res, rej) => {
-        const s = opciones.signal;
-        if (s?.aborted) return rej(Object.assign(new Error('abortada'), { name: 'AbortError' }));
-        s?.addEventListener(
-          'abort',
-          () => rej(Object.assign(new Error('abortada'), { name: 'AbortError' })),
-          { once: true },
-        );
+    if (paso.tipo === 'cuelga') return colgada(opciones.signal);
+    // LAS CABECERAS SÍ, EL CUERPO NO. Se devuelve una respuesta de verdad cuyo
+    // flujo no se cierra nunca: `r.json()` espera y espera.
+    if (paso.tipo === 'cuelga-cuerpo') {
+      const s = opciones.signal;
+      const flujo = new ReadableStream({
+        start(control) {
+          control.enqueue(new TextEncoder().encode('{"ok":'));
+          const cortar = () => control.error(Object.assign(new Error('abortada'), { name: 'AbortError' }));
+          if (s?.aborted) cortar();
+          else s?.addEventListener('abort', cortar, { once: true });
+        },
       });
+      return new Response(flujo, { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
     if (paso.tipo === 'crudo') {
       return new Response(paso.texto, { status: paso.estado, headers: { 'Content-Type': 'text/html' } });
@@ -284,6 +321,7 @@ export async function humoDeLaPuerta({ parche = null } = {}) {
                   : c.ficha.actualizado,
           }
         : { existe: false, bytes: 0, actualizado: null };
+      fichaCuelga = !!c.fichaCuelga;
       const control = new AbortController();
       if (c.abortar) control.abort();
 

@@ -884,6 +884,49 @@ export const invariantes = [
       if (!/finally \{\s*reloj\.soltar\(\);/.test(api)) {
         fallos.push('El temporizador del tope no se suelta al terminar la petición: se acumulan uno por llamada.');
       }
+
+      // ── NINGUNA PUERTA SE QUEDA SIN TOPE, Y ESTA ES LA REGLA QUE FALTABA ────
+      //
+      // Le puse tope a la petición grande y me dejé la consulta al almacén, que
+      // corre JUSTO DESPUÉS y por el mismo cable. Media hora colgado. Un tope que
+      // cubre una de las dos puertas no es un tope, así que se cuentan: cada
+      // `fetch` a la puerta tiene que llevar una señal con reloj, no la de fuera.
+      const conSenalPelada = [...api.matchAll(/fetch\(PUERTA[\s\S]{0,600}?signal:\s*([\w.]+)/g)]
+        .map((m) => m[1])
+        .filter((x) => x !== 'reloj.signal');
+      if (conSenalPelada.length) {
+        fallos.push(
+          `Hay ${conSenalPelada.length} llamada(s) a la puerta con la señal pelada (${conSenalPelada.join(', ')}): ` +
+            'sin reloj propio, si esa se cuelga se cuelga todo y sin decir nada.',
+        );
+      }
+
+      // Y EL TOPE CUBRE LA CONVERSACIÓN ENTERA, no solo las cabeceras. Leer el
+      // cuerpo iba después del `finally`, o sea con el reloj ya soltado: una
+      // respuesta cuyo cuerpo no termina —lo normal en una red móvil que cambia de
+      // celda— se colgaba igual, con el tope puesto y sin servir de nada.
+      const fin = api.indexOf('finally {\n      reloj.soltar();');
+      const inicio = api.indexOf('const reloj = conTope(senal, tope);');
+      const leeCuerpo = api.indexOf('cuerpo = await r.json();');
+      if (!(inicio >= 0 && leeCuerpo > inicio && fin > leeCuerpo)) {
+        fallos.push('El cuerpo de la respuesta se lee con el reloj ya soltado: un cuerpo que no termina cuelga igual.');
+      }
+      // Y abortar leyendo el cuerpo NO puede confundirse con «esto no era JSON»:
+      // sería tratar un cuelgue como una respuesta rara y seguir adelante.
+      if (!/if \(e\?\.name === 'AbortError'\) throw e;/.test(api)) {
+        fallos.push('Un cuelgue leyendo el cuerpo se toma por una respuesta que no es JSON.');
+      }
+
+      // Y NINGUNA ESPERA DE UNA SENTADA PUEDE SER ETERNA: una cuota diaria puede
+      // contestar «vuelve dentro de 40.000 segundos», y eso es once horas quieto
+      // con un cartel puesto.
+      const techo = Number(/const TECHO_DE_ESPERA = (\d+)/.exec(api)?.[1] || 0);
+      if (!(techo > 0 && techo <= 300000)) {
+        fallos.push(`Una sola espera puede durar ${techo || 'lo que diga el proveedor'}: sin techo, «retry-after» duerme la tanda horas.`);
+      }
+      if (!/Math\.min\(Number\(r\.headers\.get\('retry-after'\)\) \* 1000 \|\| 0, TECHO_DE_ESPERA\)/.test(api)) {
+        fallos.push('El «retry-after» del proveedor se obedece sin techo.');
+      }
       // Y detenerse a mano tiene que seguir distinguiéndose de agotarse el tiempo:
       // los dos abortan, pero uno es una decisión y el otro una avería.
       if (!/if \(senal\?\.aborted\) throw new ErrorPuerta\('Detenido\.'\)/.test(api)) {
