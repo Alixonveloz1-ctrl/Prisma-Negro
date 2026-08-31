@@ -695,6 +695,91 @@ export const invariantes = [
   },
 
   {
+    nombre: 'aprobar-fotos-no-tumba-el-navegador-ni-echa-fuera',
+    dice: '«Cada vez que le apruebo una foto, se reinicia el navegador. Se reinicia la página y me saca de la sesión y tengo que estar cada dos minutos metiendo la contraseña.» Los dos síntomas eran un solo fallo. Aprobar repintaba la galería ENTERA y cada tarjeta hacía `URL.createObjectURL`, que MANTIENE VIVO EL BLOB hasta que se revoca — y no se revocaba ninguna: trece creadas en toda la aplicación, cuatro soltadas. Con imágenes de un par de megas, diez aprobaciones son cientos de megas retenidos; Safari en un iPhone descarga la pestaña. Y como la contraseña vivía en `sessionStorage`, la recarga te echaba fuera.',
+    async comprobar(ctx) {
+      const { humoDeLaPantalla, proyectoYaEmpezado } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      // 1 · LO QUE SE CREA SE SUELTA. Se cuenta sobre el código: cada
+      // `createObjectURL` que no pase por el almacén de URL es una fuga.
+      const sueltas = [...main.matchAll(/URL\.createObjectURL\(/g)].length;
+      const porElAlmacen = /function urlDeMaterial\(/.test(main);
+      if (!porElAlmacen) {
+        fallos.push('No hay almacén de URL de objeto: cada repintado crea blobs nuevos y ninguno se suelta.');
+      }
+      if (!/URL\.revokeObjectURL\(url\);\s*urlesDeMaterial\.delete\(clave\);/.test(main.replace(/\s+/g, ' ').replace(/ /g, ' '))
+        && !/URL\.revokeObjectURL\(url\)/.test(main)) {
+        fallos.push('Las URL de objeto no se revocan nunca: el blob se queda vivo y la memoria solo sube.');
+      }
+      // Y la galería SUELTA lo que ya no se ve. Sin esta llamada, el almacén crece
+      // igual que antes, solo que ordenado.
+      if (!/soltarUrles\(new Set\(/.test(main)) {
+        fallos.push('La galería no suelta las imágenes que salen de pantalla: la memoria crece con cada repintado.');
+      }
+      if (sueltas < 1) fallos.push('No se encuentra ninguna URL de objeto: la comprobación mira otra cosa.');
+
+      // 2 · APROBAR NO REPINTA LA GALERÍA ENTERA. Veinticuatro lecturas del
+      // almacén por un botón que cambia una tarjeta es lo que lo tumbaba.
+      const i = main.indexOf('async function aprobarBiblioteca');
+      const cuerpo = i < 0 ? '' : main.slice(i, i + 900);
+      if (!cuerpo) fallos.push('No se encuentra el visto bueno.');
+      else {
+        if (/pintarBiblioteca\(\);/.test(cuerpo)) {
+          fallos.push('Aprobar una imagen repinta la galería entera: veinticuatro lecturas por un botón.');
+        }
+        if (!/refrescarFichaBiblioteca\(/.test(cuerpo)) {
+          fallos.push('Aprobar no refresca solo su ficha.');
+        }
+      }
+
+      // 3 · LA CONTRASEÑA SOBREVIVE A LA RECARGA. En `sessionStorage` muere cuando
+      // Safari descarga la pestaña, que es justo lo que pasaba.
+      if (/sessionStorage\.setItem\('clave'/.test(main)) {
+        fallos.push('La contraseña se guarda solo en la sesión: al recargar la pestaña te echa fuera.');
+      }
+      if (!/localStorage\.setItem\(CAJON_CLAVE/.test(main)) {
+        fallos.push('La contraseña no se recuerda en el navegador.');
+      }
+      // Y SE PUEDE BORRAR. Guardar una contraseña sin forma de olvidarla es una
+      // trampa, no una comodidad.
+      if (!/localStorage\.removeItem\(CAJON_CLAVE\)/.test(main) || !/id="b-salir"/.test(fuente(ctx, 'index.html'))) {
+        fallos.push('No hay forma de olvidar la contraseña en este teléfono.');
+      }
+      // Y escribir en el disco puede fallar —Safari en privado—: eso no puede
+      // impedir entrar.
+      if (!/} catch \{[\s\S]{0,200}?Safari en privado/.test(main)) {
+        fallos.push('Si el navegador no deja guardar, entrar revienta en vez de seguir.');
+      }
+
+      // 4 · Y ARRANCA de verdad con una biblioteca llena, sin quejas.
+      const p = proyectoYaEmpezado();
+      p.piezas.push({
+        id: 'biblioteca',
+        esBiblioteca: true,
+        titulo: 'x',
+        escenas: [{ n: 0, titulo: 'R' }, { n: 1, titulo: 'E' }],
+        tomas: [{ i: 0, clave: 'recurso:carretera-noche:v1', recurso: 'carretera-noche', variante: 'v1', imagen: 'ok', aprobada: false }],
+      });
+      const r = await humoDeLaPantalla({ parche, proyecto: p });
+      fallos.push(...r.fallos);
+      return fallos;
+    },
+    // Se rompe como estaba: aprobar repinta la galería entera.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace(
+          '  refrescarFichaBiblioteca(i);\n  pintarResumenBiblioteca();',
+          '  pintarBiblioteca();',
+        ),
+      ),
+  },
+
+  {
     nombre: 'tocar-el-archivo-mientras-genera-no-tira-lo-generado',
     dice: '«Dice que generó dos imágenes, pero es mentira, solo generó una.» `laBiblioteca()` SUSTITUÍA la pieza por una nueva, y se llama desde todo lo que toca el archivo: aprobar una imagen, rehacerla, pedirle un clip. Así que aprobar una imagen MIENTRAS corría la tanda dejaba a la tanda escribiendo en el objeto viejo, ya desligado del proyecto: la imagen se generaba, se pagaba, se subía al almacén, y la anotación se perdía en silencio. La cuenta seguía subiendo porque para la tanda había salido bien. Un objeto que se sustituye por debajo es una referencia colgada esperando su turno.',
     comprobar(ctx) {

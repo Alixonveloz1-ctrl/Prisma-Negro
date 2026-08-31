@@ -257,7 +257,7 @@ accion(
     }
 
     await llamar('proyecto.listar');
-    sessionStorage.setItem('clave', c);
+    recordarClave(c);
     $('acceso').classList.add('oculto');
     $('app').classList.remove('oculto');
     await arrancar();
@@ -1522,6 +1522,12 @@ function laBiblioteca() {
 }
 
 function pintarBiblioteca() {
+  pintarResumenBiblioteca();
+  pintarGaleriaBiblioteca();
+}
+
+/** Las cifras de arriba, que son HTML barato y se pueden repintar solas. */
+function pintarResumenBiblioteca() {
   const caja = $('resumen-biblioteca');
   if (!caja) return;
   const tomas = tomasParaPintar();
@@ -1548,7 +1554,6 @@ function pintarBiblioteca() {
           .join(' · ') +
         `</p>`
       : '');
-  pintarGaleriaBiblioteca();
 }
 
 // ── La galería de la biblioteca ───────────────────────────────────────────────
@@ -1625,6 +1630,56 @@ function pasaElFiltro(t, { estado = 'todas', grupo = '' } = {}) {
 
 let versionBiblioteca = 0;
 
+/**
+ * LAS URL DE OBJETO SE REUTILIZAN Y SE SUELTAN. Sin esto, Safari mata la pestaña.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Cada vez que le apruebo una foto, se reinicia el navegador. No sé si es que
+ *  está muy pesado, no soporta o qué.»
+ *
+ * Era exactamente eso, y la cuenta sale sola: aprobar una imagen repintaba la
+ * galería ENTERA, y cada tarjeta hacía `URL.createObjectURL(blob)` — veinticuatro
+ * URL nuevas por aprobación—. Una URL de objeto MANTIENE VIVO EL BLOB hasta que
+ * se revoca, y aquí no se revocaba ninguna: se creaban trece en toda la
+ * aplicación y se soltaban cuatro.
+ *
+ * Con imágenes de uno o dos megas, diez aprobaciones son doscientas y pico URL y
+ * varios cientos de megas retenidos. Safari en un iPhone no llega ahí: descarga la
+ * pestaña y la recarga. Y como la contraseña estaba en la sesión, la recarga te
+ * echaba fuera. Los dos síntomas eran el mismo fallo.
+ *
+ * Se guarda una URL por clave y se sueltan las que ya no se ven, así que la
+ * memoria queda acotada a lo que hay en pantalla en vez de crecer sin fin.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+const urlesDeMaterial = new Map();
+
+/**
+ * Qué nodo pinta cada toma, para poder refrescar UNA sin repintar las demás.
+ *
+ * Aprobar una imagen repintaba la galería entera: veinticuatro lecturas del
+ * almacén y veinticuatro tarjetas nuevas por un botón que solo cambia una. En un
+ * teléfono eso se nota, y con las URL sin soltar era lo que tumbaba la pestaña.
+ */
+const fichasDeBiblioteca = new Map();
+
+function urlDeMaterial(clave, blob) {
+  const ya = urlesDeMaterial.get(clave);
+  if (ya) return ya;
+  const url = URL.createObjectURL(blob);
+  urlesDeMaterial.set(clave, url);
+  return url;
+}
+
+/** Suelta todo lo que ya no está en pantalla. */
+function soltarUrles(enUso) {
+  for (const [clave, url] of urlesDeMaterial) {
+    if (enUso.has(clave)) continue;
+    URL.revokeObjectURL(url);
+    urlesDeMaterial.delete(clave);
+  }
+}
+
 function pintarGaleriaBiblioteca() {
   const g = $('galeria-biblioteca');
   if (!g) return;
@@ -1674,9 +1729,17 @@ function pintarGaleriaBiblioteca() {
     g.innerHTML = '<p class="nota">No hay nada aquí con ese filtro.</p>';
   }
 
+  fichasDeBiblioteca.clear();
   for (const x of visibles) {
-    g.appendChild(tarjetaDeBiblioteca(x, tomas, mia));
+    const ficha = tarjetaDeBiblioteca(x, tomas, mia);
+    fichasDeBiblioteca.set(x.i, ficha);
+    g.appendChild(ficha);
   }
+
+  // Y SE SUELTA LO QUE YA NO SE VE. Sin esto la memoria solo sube: ver
+  // `urlesDeMaterial`. Se calcula sobre lo que queda en pantalla, no sobre lo que
+  // se acaba de pintar, para que cambiar de filtro también libere.
+  soltarUrles(new Set(visibles.map((x) => claveFotograma(bibliotecaFase.ID_BIBLIOTECA, x, tomas))));
 
   const mas = $('b-biblioteca-mas');
   if (mas) {
@@ -1714,14 +1777,17 @@ function tarjetaDeBiblioteca(x, tomas, mia) {
   d.appendChild(cuerpo);
 
   if (hay) {
-    materialLocal(claveFotograma(bibliotecaFase.ID_BIBLIOTECA, x, tomas), 'image/png').then((blob) => {
+    const clave = claveFotograma(bibliotecaFase.ID_BIBLIOTECA, x, tomas);
+    materialLocal(clave, 'image/png').then((blob) => {
       if (mia !== versionBiblioteca) return;
       if (!blob) {
         visual.textContent = 'no se pudo cargar';
         return;
       }
       const img = document.createElement('img');
-      img.src = URL.createObjectURL(blob);
+      // Por el almacén de URL: repintar no puede crear una URL nueva de un blob
+      // que ya está en pantalla. Ver `urlesDeMaterial`.
+      img.src = urlDeMaterial(clave, blob);
       img.alt = '';
       img.loading = 'lazy';
       d.replaceChild(img, visual);
@@ -1832,6 +1898,25 @@ async function rehacerImagenBiblioteca(i) {
   avisar('biblioteca', 'Imagen rehecha. Míralas y dale «Está bien» si vale.', 'bueno');
 }
 
+/**
+ * Refresca UNA ficha, dejando las demás donde están.
+ *
+ * Repintar la galería entera por un botón que cambia una tarjeta es lo que hacía
+ * que aprobar fotos tumbara el navegador: veinticuatro lecturas del almacén y
+ * veinticuatro URL de objeto nuevas cada vez. La imagen ni se vuelve a leer — su
+ * URL ya está en `urlesDeMaterial`.
+ */
+function refrescarFichaBiblioteca(i) {
+  const vieja = fichasDeBiblioteca.get(i);
+  if (!vieja || !vieja.parentNode) return pintarGaleriaBiblioteca();
+  const tomas = tomasParaPintar();
+  const x = tomas.find((t) => t.i === i);
+  if (!x) return pintarGaleriaBiblioteca();
+  const nueva = tarjetaDeBiblioteca(x, tomas, versionBiblioteca);
+  vieja.parentNode.replaceChild(nueva, vieja);
+  fichasDeBiblioteca.set(i, nueva);
+}
+
 /** El visto bueno, o quitarlo. */
 async function aprobarBiblioteca(i, si) {
   const z = laBiblioteca();
@@ -1840,7 +1925,10 @@ async function aprobarBiblioteca(i, si) {
   if (si && z.tomas[k].imagen !== 'ok') throw new Error('No hay imagen que aprobar todavía.');
   z.tomas[k].aprobada = !!si;
   await guardar();
-  pintarBiblioteca();
+  // SOLO SU FICHA Y EL RESUMEN. Repintar las 141 por un visto bueno es lo que
+  // reiniciaba el navegador.
+  refrescarFichaBiblioteca(i);
+  pintarResumenBiblioteca();
 }
 
 // Se enseñan de veinticuatro en veinticuatro: ciento cuarenta y una miniaturas de
@@ -3676,6 +3764,16 @@ async function recordarRitmo() {
   await guardar();
 }
 
+// Guardar una contraseña sin forma de borrarla no es una opción, es una trampa.
+accion(
+  'b-salir',
+  async () => {
+    olvidarClave();
+    avisar('ajustes', 'Olvidada en este teléfono. La próxima vez habrá que escribirla.', 'bueno');
+  },
+  'ajustes',
+);
+
 $('por-minuto')?.addEventListener('change', async (e) => {
   P.config.ritmo.porMinuto = Math.max(0, Math.min(60, Math.round(Number(e.target.value) || 0)));
   e.target.value = P.config.ritmo.porMinuto;
@@ -3870,7 +3968,60 @@ function pintarLimitesDeVoz() {
     : '';
 }
 
-// Reentrada rápida: la contraseña vive en la sesión, no en el disco.
+/**
+ * LA CONTRASEÑA SE QUEDA EN ESTE NAVEGADOR, no solo en esta pestaña.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Se reinicia la página y me saca de la sesión y tengo que estar cada dos
+ *  minutos metiendo la contraseña. No tiene que guardarse local, pero por lo
+ *  menos en el navegador debería guardarse, porque la tengo abierta en mi
+ *  celular. Yo soy el único que utiliza mi celular.»
+ *
+ * Estaba en `sessionStorage`, que muere cuando el navegador descarga la pestaña —y
+ * Safari en un iPhone la descarga cuando le hace falta memoria, que es justo lo
+ * que pasaba al aprobar fotos—. Así que los dos síntomas eran uno: la pestaña se
+ * moría y volvía sin contraseña.
+ *
+ * Ahora va en `localStorage`, que sobrevive a la recarga y al cierre. Es SU
+ * teléfono y es su decisión, y hay que decir el precio con claridad: quien tenga
+ * el teléfono desbloqueado entra sin escribir nada. La credencial de Google NO
+ * está aquí —esa vive en Vercel y el navegador no la ve nunca—: lo que se guarda
+ * es la contraseña de la puerta.
+ *
+ * Y se puede deshacer: «Salir» en Ajustes la borra.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+const CAJON_CLAVE = 'prisma-negro:clave';
+
+function recordarClave(c) {
+  try {
+    localStorage.setItem(CAJON_CLAVE, c);
+  } catch {
+    // Safari en privado no deja escribir. No es motivo para no entrar: se
+    // trabaja igual, solo que habrá que escribirla otra vez.
+  }
+}
+
+function olvidarClave() {
+  try {
+    localStorage.removeItem(CAJON_CLAVE);
+    sessionStorage.removeItem('clave');
+  } catch {
+    /* nada que hacer */
+  }
+}
+
+function claveRecordada() {
+  try {
+    // `sessionStorage` sigue mirándose para no echar fuera a quien ya estaba
+    // dentro con la versión anterior.
+    return localStorage.getItem(CAJON_CLAVE) || sessionStorage.getItem('clave') || '';
+  } catch {
+    return '';
+  }
+}
+
+// Reentrada rápida: la contraseña vive en este navegador.
 // El modo cine: el visor fijo a toda pantalla, sin salir de la página — en el
 // teléfono el pantalla-completa nativo solo existe para <video>, y esto es un
 // lienzo con WebAudio. De paso, con el visor fijo la página no tiene ya nada
@@ -3881,7 +4032,7 @@ $('b-cine')?.addEventListener('click', () => {
   $('b-cine').textContent = dentro ? '✕' : '⛶';
 });
 
-const guardada = sessionStorage.getItem('clave');
+const guardada = claveRecordada();
 if (guardada) {
   $('clave').value = guardada;
   $('b-entrar').click();
