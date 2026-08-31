@@ -209,7 +209,7 @@ const CAMINOS = [
  * Con `parche` se prueba una versión AVERIADA de la puerta, que es como se
  * demuestra que esta prueba sirve para algo.
  */
-export async function humoDeLaPuerta({ parche = null } = {}) {
+export async function humoDeLaPuerta({ parche = null, suelo = 0 } = {}) {
   const antes = {
     fetch: globalThis.fetch,
     indexedDB: globalThis.indexedDB,
@@ -402,6 +402,34 @@ export async function humoDeLaPuerta({ parche = null } = {}) {
       }
       return api.ritmoActual();
     };
+
+    // ── EL SUELO DEL RITMO ────────────────────────────────────────────────────
+    //
+    // Con una cuota baja se le puede DECIR a la herramienta a qué ritmo va. Eso
+    // solo sirve si el freno no lo deshace: sin suelo, cinco aciertos lo devolvían
+    // a cero y se volvía a chocar por decisión propia.
+    if (suelo) {
+      api.ponerRitmoMinimo(suelo);
+      if (api.ritmoActual() < suelo) {
+        fallos.push(`Se pidió un ritmo mínimo de ${suelo} ms y la puerta se quedó en ${api.ritmoActual()}.`);
+      }
+      // CUARENTA llamadas buenas seguidas. Son las que hacen falta para que el
+      // freno baje del todo desde donde lo dejaron los caminos de cuota de arriba:
+      // con menos, sigue por encima del suelo por inercia y la prueba no
+      // distinguiría —salió CIEGA así la primera vez—. Con suelo, se posa en él y
+      // no baja más; sin suelo, lo atraviesa.
+      for (let n = 0; n < 40; n++) {
+        cola = [{ tipo: 'ok', cuerpo: { ok: true, texto: 'listo' } }];
+        await api.llamar('texto', { instruccion: 'x' }, { reintentos: 0, alEsperar: () => {} });
+      }
+      if (api.ritmoActual() < suelo) {
+        fallos.push(
+          `Tras cuarenta llamadas buenas el freno bajó a ${api.ritmoActual()} ms, por debajo del suelo de ${suelo}: ` +
+            'el ritmo que se pidió se deshace solo y se vuelve a chocar con la cuota.',
+        );
+      }
+      api.ponerRitmoMinimo(0);
+    }
 
     const trasChocar = await ritmo([
       { tipo: 'ok', estado: 429, cuerpo: { ok: false, error: 'Resource has been exhausted' } },

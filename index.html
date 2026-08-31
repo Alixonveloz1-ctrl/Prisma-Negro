@@ -899,6 +899,18 @@ nav.abajo button svg{width:22px;height:22px}
           eso no cuesta nada.</p>
           <label for="m-imagen">Generador de imagen</label>
           <select id="m-imagen"></select>
+
+          <!-- EL RITMO, A MANO. Cuando la cuota del proyecto es baja, esperar a
+               chocar para descubrirlo cuesta una imagen fallida cada vez y varios
+               minutos de espera. Diciéndolo aquí, la herramienta va por debajo del
+               límite desde la primera y no choca nunca. -->
+          <label for="por-minuto" style="margin-top:14px">Imágenes por minuto que aguanta tu cuota</label>
+          <input id="por-minuto" type="number" min="0" max="60" step="1" inputmode="numeric">
+          <p class="nota chica" style="margin-top:6px"><b>0 = automático</b>: la herramienta
+          baja el ritmo sola cuando choca con la cuota, y lo recuerda para la próxima
+          vez. Si ya sabes tu límite —lo dice Google Cloud → IAM y administración →
+          Cuotas, buscando tu modelo de imagen—, ponlo aquí y no se choca ni una vez.</p>
+          <div id="aviso-ajustes"></div>
           <div class="fila-btn" style="margin-top:13px">
             <button class="btn primario" id="b-probar-estilo">Probar cómo se ve · 1 imagen</button>
             <button class="btn fantasma chico" id="b-ver-prompt">Ver la instrucción</button>

@@ -191,6 +191,23 @@ export const PREDETERMINADA = {
     opacidad: 0.85,
   },
 
+  // ── EL RITMO CON EL QUE SE PIDEN LAS IMÁGENES ───────────────────────────────
+  //
+  // La cuota del generador de imágenes de un proyecto de Google Cloud puede ser
+  // muy baja, y el freno de `app/api.js` la aprende CHOCANDO: una llamada fallida
+  // y varios minutos de espera cada vez. Peor: lo aprendido vivía en una variable
+  // suelta y se perdía al recargar, así que cada sesión volvía a descubrirlo a
+  // golpes.
+  //
+  //   `porMinuto`  — lo que dice la persona. 0 = automático.
+  //   `aprendido`  — lo que el freno descubrió, en ms entre llamadas. Se guarda al
+  //                  terminar cada tanda y se aplica al cargar, así que la sesión
+  //                  siguiente empieza donde acabó la anterior.
+  ritmo: {
+    porMinuto: 0,
+    aprendido: 0,
+  },
+
   investigacion: {
     // §8.1: sin fichas no hay episodio. Sigue en pie con las construidas — de
     // hecho con más motivo, porque son lo ÚNICO que garantiza la coherencia.
@@ -351,6 +368,11 @@ export function normalizar(cruda) {
   if (!GENEROS.some((g) => g.id === c.genero)) c.genero = GENERO_POR_DEFECTO;
 
   c.guion.minutos = entero(c.guion.minutos, 3, 40, 30);
+
+  // El ritmo: 0 es automático, y por encima de sesenta por minuto ya no es la
+  // cuota lo que manda sino la propia herramienta.
+  c.ritmo.porMinuto = entero(c.ritmo.porMinuto, 0, 60, 0);
+  c.ritmo.aprendido = entero(c.ritmo.aprendido, 0, 60000, 0);
 
   // La política de movimiento. `clipsPorEpisodio` es una CUENTA, no una
   // proporción: ver la cabecera de arriba.

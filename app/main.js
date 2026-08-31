@@ -12,7 +12,7 @@
 // Los pasos que todavía no tocan salen apagados, para que no haya que adivinar cuál
 // es el siguiente.
 
-import { llamar, ponerClave, ponerModeloTexto, ponerModelos } from './api.js';
+import { llamar, ponerClave, ponerModeloTexto, ponerModelos, ponerRitmoMinimo, ritmoActual } from './api.js';
 import * as estado from './estado.js';
 import { Cola } from './cola.js';
 import {
@@ -2176,6 +2176,8 @@ async function emparejarAMano(iRecibe, numeroDueña) {
 
 function informar(r, que, donde = 'paso4') {
   pintarPasos();
+  // Lo que el freno descubrió en esta tanda se queda con el proyecto.
+  recordarRitmo();
   if (r.detenida) {
     return avisar(donde, `${que}: detenido en ${r.hechas} de ${r.total}. Lo hecho está guardado.`);
   }
@@ -3650,8 +3652,43 @@ function pintarAjustes() {
   $('estilo').value = P.config.narracion.estilo || '';
   $('marca-texto').value = P.config.marca.texto;
   $('vertical').value = P.config.formato.vertical ? '1' : '0';
+  $('por-minuto').value = P.config.ritmo.porMinuto;
+  aplicarRitmo();
 }
 
+/**
+ * El ritmo con el que se piden las imágenes, del proyecto a la puerta.
+ *
+ * Manda lo que diga la persona; si no dijo nada, lo que el freno aprendió en
+ * sesiones anteriores. Sin esto, cada recarga vuelve a descubrir la cuota
+ * chocando: una imagen fallida y varios minutos de espera, cada vez.
+ */
+function aplicarRitmo() {
+  const porMinuto = Number(P.config.ritmo.porMinuto) || 0;
+  ponerRitmoMinimo(porMinuto > 0 ? Math.round(60000 / porMinuto) : Number(P.config.ritmo.aprendido) || 0);
+}
+
+/** Lo que el freno acabó descubriendo se guarda: la próxima vez no se choca. */
+async function recordarRitmo() {
+  const ahora = ritmoActual();
+  if (ahora === P.config.ritmo.aprendido) return;
+  P.config.ritmo.aprendido = ahora;
+  await guardar();
+}
+
+$('por-minuto')?.addEventListener('change', async (e) => {
+  P.config.ritmo.porMinuto = Math.max(0, Math.min(60, Math.round(Number(e.target.value) || 0)));
+  e.target.value = P.config.ritmo.porMinuto;
+  aplicarRitmo();
+  await guardar();
+  avisar(
+    'ajustes',
+    P.config.ritmo.porMinuto
+      ? `A ${P.config.ritmo.porMinuto} imágenes por minuto: ${Math.round(60 / P.config.ritmo.porMinuto)} s entre cada una. No se choca con la cuota.`
+      : 'Automático: la herramienta baja el ritmo sola cuando choca, y lo recuerda.',
+    'bueno',
+  );
+});
 $('clips-episodio').addEventListener('input', (e) => ($('v-clips-episodio').textContent = e.target.value));
 $('objetivo').addEventListener('input', (e) => ($('v-objetivo').textContent = e.target.value));
 $('velocidad').addEventListener('input', (e) => ($('v-velocidad').textContent = (e.target.value / 100).toFixed(2)));

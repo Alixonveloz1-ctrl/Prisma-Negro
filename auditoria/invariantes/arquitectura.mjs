@@ -498,6 +498,68 @@ export const invariantes = [
   },
 
   {
+    nombre: 'el-ritmo-de-la-cuota-se-puede-fijar-y-no-se-reaprende-a-golpes',
+    dice: 'El diagnóstico dijo lo que había: «la cuota del generador de imágenes está agotada». Con una cuota baja, el freno que aprende chocando cuesta una llamada fallida y minutos de espera cada vez que descubre el límite — y lo aprendido vivía en una variable suelta, así que CADA RECARGA volvía a descubrirlo a golpes. Dos cosas lo arreglan: poder DECIR el límite, y que lo aprendido se guarde con el proyecto. Un freno que solo aprende chocando condena a chocar siempre.',
+    async comprobar(ctx) {
+      const { normalizar } = ctx.fn;
+      const fallos = [];
+
+      // 1 · EL AJUSTE EXISTE, SE GUARDA Y SE SANEA.
+      const c = normalizar({});
+      if (c.ritmo?.porMinuto !== 0 || c.ritmo?.aprendido !== 0) {
+        fallos.push('El ritmo no arranca en automático: hay que poder no decir nada y que funcione.');
+      }
+      if (normalizar({ ritmo: { porMinuto: 999 } }).ritmo.porMinuto !== 60) {
+        fallos.push('Un ritmo absurdo no se acota: sesenta por minuto ya no es la cuota lo que manda.');
+      }
+      if (normalizar({ ritmo: { porMinuto: 2 } }).ritmo.porMinuto !== 2) {
+        fallos.push('Un ritmo elegido a mano no sobrevive a normalizar.');
+      }
+      // Y lo aprendido se guarda EN EL PROYECTO. En una variable suelta se pierde
+      // al recargar, que es el fallo entero.
+      if (normalizar({ ritmo: { aprendido: 30000 } }).ritmo.aprendido !== 30000) {
+        fallos.push('Lo que el freno aprendió no se conserva: la sesión siguiente vuelve a chocar.');
+      }
+
+      // 2 · Y EL SUELO MANDA DE VERDAD. Se comprueba EJECUTANDO la puerta: que el
+      // freno no baje por debajo de lo que se le dijo, por muchos aciertos que
+      // encadene. Sin esto, `aflojar` lo devolvería a cero en cinco llamadas y se
+      // volvería a chocar por decisión propia.
+      const { humoDeLaPuerta } = await import('../api-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/api.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/api.js'), 'utf8');
+      const r = await humoDeLaPuerta({
+        parche: enContexto !== enDisco ? () => enContexto : null,
+        suelo: 12000,
+      });
+      fallos.push(...r.fallos.filter((f) => /suelo|ritmo/i.test(f)));
+
+      // 3 · Y LA PANTALLA lo aplica y lo recuerda: un ajuste que no llega a la
+      // puerta es un ajuste decorativo.
+      const main = ctx.fuentes.get('app/main.js') || '';
+      if (!/ponerRitmoMinimo\(/.test(main)) fallos.push('El ritmo elegido no llega a la puerta.');
+      if (!/60000 \/ porMinuto/.test(main)) fallos.push('«Imágenes por minuto» no se traduce a espera entre llamadas.');
+      if (!/P\.config\.ritmo\.aprendido = ahora/.test(main)) {
+        fallos.push('Lo que el freno descubre en una tanda no se guarda al terminar.');
+      }
+      if (!/id="por-minuto"/.test(ctx.fuentes.get('index.html') || '')) {
+        fallos.push('No hay dónde decir la cuota: solo queda descubrirla chocando.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: sin suelo, el freno se afloja hasta cero y se vuelve a
+    // chocar aunque se le haya dicho el límite.
+    romper: (ctx) =>
+      editando(ctx, 'app/api.js', (t) =>
+        t.replace('if (pausaEntreLlamadas <= sueloDelRitmo) return;', 'if (!pausaEntreLlamadas) return;')
+          .replace(
+            'pausaEntreLlamadas = Math.max(sueloDelRitmo, siguiente < PAUSA_MINIMA ? 0 : siguiente);',
+            'pausaEntreLlamadas = siguiente < PAUSA_MINIMA ? 0 : siguiente;',
+          ),
+      ),
+  },
+
+  {
     nombre: 'esperar-por-la-cuota-se-abandona-cuando-no-sirve-y-se-dice-por-que',
     dice: '«Lleva media hora ahí y no avanza. Ni genera nada.» Esperar por la cuota está bien para una ventana POR MINUTO —se abre a la primera espera— y es una trampa para cualquier otra: una cuota diaria, o un modelo que el proyecto no tiene habilitado y contesta «límite 0», no se abren nunca, y la herramienta daba vueltas horas sin generar nada ni decir por qué. La señal que las distingue no hay que adivinarla: si la ventana es por minuto, algo sale bien en cuanto pasa el minuto. Dos esperas seguidas sin generar NADA significan que no es eso, y entonces lo único útil es parar y enseñar lo que contestó el proveedor.',
     async comprobar(ctx) {

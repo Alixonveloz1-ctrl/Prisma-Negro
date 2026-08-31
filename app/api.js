@@ -63,7 +63,34 @@ const PAUSA_MINIMA = 1500;
 let pausaEntreLlamadas = 0;
 let aciertosSeguidos = 0;
 
-/** Cuánto se está esperando ahora entre llamadas. Para poder enseñarlo. */
+/**
+ * EL SUELO DEL RITMO, y lo que lo hace usable con una cuota baja.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * El freno de arriba aprende chocando, y aprender chocando cuesta: una llamada
+ * fallida y varios minutos de espera cada vez que descubre el límite. Y lo peor:
+ * lo aprendido se perdía al recargar la página, así que CADA SESIÓN volvía a
+ * descubrirlo a golpes.
+ *
+ * Dos cosas lo arreglan y las dos entran por aquí:
+ *
+ *   · Se puede DECIR el límite. Quien sabe que su proyecto aguanta dos imágenes
+ *     por minuto lo escribe en Ajustes y la herramienta va a treinta segundos por
+ *     imagen desde la primera. No choca ni una vez.
+ *   · Y lo aprendido SE GUARDA con el proyecto, así que la sesión siguiente
+ *     empieza donde acabó la anterior en vez de estrellarse otra vez.
+ *
+ * Es un suelo, no un valor fijo: si aun así se choca, el freno sube por encima.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+let sueloDelRitmo = 0;
+
+export function ponerRitmoMinimo(ms) {
+  sueloDelRitmo = Math.max(0, Math.min(PAUSA_MAX, Number(ms) || 0));
+  if (sueloDelRitmo > pausaEntreLlamadas) pausaEntreLlamadas = sueloDelRitmo;
+}
+
+/** Cuánto se está esperando ahora entre llamadas. Para poder enseñarlo y guardarlo. */
 export const ritmoActual = () => pausaEntreLlamadas;
 
 function frenar() {
@@ -72,7 +99,9 @@ function frenar() {
 }
 
 function aflojar() {
-  if (!pausaEntreLlamadas) return;
+  // Nunca por debajo del suelo: si la persona dijo que su cuota son dos por
+  // minuto, aflojar hasta cero es volver a chocar por decisión propia.
+  if (pausaEntreLlamadas <= sueloDelRitmo) return;
   // Hacen falta varios aciertos seguidos para aflojar: uno solo puede ser suerte,
   // y volver al ritmo alto en cuanto sale bien una es volver a chocar enseguida.
   if (++aciertosSeguidos < 5) return;
@@ -81,7 +110,7 @@ function aflojar() {
   // que hace que el ritmo se pose donde el proveedor aguanta en vez de saltar
   // entre el límite y nada.
   const siguiente = Math.round(pausaEntreLlamadas * 0.75);
-  pausaEntreLlamadas = siguiente < PAUSA_MINIMA ? 0 : siguiente;
+  pausaEntreLlamadas = Math.max(sueloDelRitmo, siguiente < PAUSA_MINIMA ? 0 : siguiente);
 }
 
 const dormir = (ms, senal) =>
