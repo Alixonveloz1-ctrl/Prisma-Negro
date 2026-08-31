@@ -23,7 +23,7 @@ import { claveToma, tomaDelFotograma, claveClip, claveFotograma } from '../../co
 // episodio y qué no puede repetirse en los dos siguientes.
 import { elegirVariante } from './biblioteca.js';
 import { reducirReferencias, deBase64 } from '../imagenes.js';
-import { ESTILO_DEL_CANAL, BARRERA_DOCUMENTAL, SIN_TEXTO_LEGIBLE } from '../../comun/estilos.mjs';
+import { ESTILO_DEL_CANAL, BARRERA_DOCUMENTAL, SIN_TEXTO_LEGIBLE, MUNDO_DEL_CANAL } from '../../comun/estilos.mjs';
 import * as local from '../local.js';
 import { material } from '../material.js';
 
@@ -392,6 +392,11 @@ export function componerInstruccion(toma, config, { conReferencias = false, trat
     // cambio de aspecto.
     SIN_TEXTO_LEGIBLE,
     BARRERA_DOCUMENTAL,
+    // EN QUÉ MUNDO PASA. Va con las otras dos y por la misma razón: no es una
+    // decisión de este plano ni de este caso, es del canal entero, y si dependiera
+    // de que alguien lo escriba en cada descripción se perdería en la primera que
+    // se olvide.
+    MUNDO_DEL_CANAL,
     'Decide tú la puesta en escena: la distancia exacta, la posición de los sujetos y hacia dónde miran.',
   ];
 

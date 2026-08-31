@@ -796,6 +796,78 @@ export const invariantes = [
   },
 
   {
+    nombre: 'nada-de-lo-que-se-ve-parece-de-otro-pais',
+    dice: '«Estás manejando del lado derecho de la carretera, bien, pero el volante del lado derecho. Sé que hay un par de países donde se maneja así, pero eso no es lo normal. Este canal es en español y es para Latinoamérica.» Salió un plano desde dentro de un coche con el volante a la derecha, y el fallo no era de esa descripción: era que NADIE le había dicho nunca al generador en qué mundo transcurre esto. Sin decirlo, cada imagen cae en el promedio de lo que el modelo vio más, y ese promedio no es el del público del canal. No es sobre dónde ocurre la historia —eso lo decide el guion—: es sobre que un volante en el lado que no toca saca al espectador de la pieza en medio segundo.',
+    comprobar(ctx) {
+      const { componerInstruccion, MUNDO_DEL_CANAL, huellaDePlano, RECURSOS, ELENCO, planoDeRecurso, planoDeVariante } = ctx.fn;
+      const fallos = [];
+      const toma = {
+        i: 0,
+        plano: { encuadre: 'plano general', lugar: 'una carretera', luz: 'faros', sujetos: [], descripcion: 'Un coche.' },
+      };
+
+      // 1 · LA REGLA DICE LO CONCRETO. «Ambientación latinoamericana» no le sirve a
+      // un generador; «el volante a la izquierda» sí.
+      for (const [qué, re] of [
+        ['que el volante va a la izquierda', /volante a la IZQUIERDA/i],
+        ['por qué carril se circula', /carril\s+DERECHO/i],
+        ['que el mundo es hispanohablante', /hispanohablante/i],
+        // Y la trampa del otro lado: pedir «Latinoamérica» a secas devuelve una
+        // postal de agencia de viajes, que es igual de falso y encima cursi.
+        ['que no es una postal turística', /no es una postal|folclore/i],
+      ]) {
+        if (!re.test(MUNDO_DEL_CANAL || '')) fallos.push(`La regla del mundo no dice ${qué}.`);
+      }
+
+      // 2 · Y SALE EN LA INSTRUCCIÓN, venga la configuración que venga. Si dependiera
+      // de que alguien lo escriba en cada descripción, se perdería en la primera que
+      // se olvide.
+      for (const config of [ctx.config, { ...ctx.config, imagen: {} }, {}]) {
+        if (!componerInstruccion(toma, config, { tratamiento: null }).includes(MUNDO_DEL_CANAL)) {
+          fallos.push('La regla del mundo no llega a la instrucción con alguna configuración.');
+          break;
+        }
+      }
+
+      // 3 · Y DONDE EL CATÁLOGO ENSEÑA UN VOLANTE, LO DICE. La regla general es la
+      // red de seguridad; el plano que enseña un salpicadero tiene que decirlo
+      // encima, que es donde el generador mira primero.
+      const planos = [
+        ...(RECURSOS || []).flatMap((r) => (r.variantes || []).map((v) => [`${r.id}:${v.id}`, planoDeRecurso(r, v)])),
+        ...(ELENCO || []).flatMap((a) => (a.variantes || []).map((v) => [`${a.id}:${v.id}`, planoDeVariante(a, v)])),
+      ];
+      for (const [quién, p] of planos) {
+        const t = `${p?.lugar} ${p?.descripcion}`;
+        if (/volante|salpicadero|al vol[aá]nte|conduciendo/i.test(t) && !/IZQUIERDA/.test(t)) {
+          fallos.push(`«${quién}» enseña el puesto de conducción y no dice de qué lado va el volante.`);
+        }
+      }
+
+      // 4 · Y LA HUELLA CUBRE EL ENCARGO ENTERO, no solo el plano.
+      //
+      // Aquí estaba el agujero de verdad: la regla del volante vive en el encargo
+      // del canal, no en la descripción de la carretera. Con una huella que solo
+      // mirase el plano, cambiar esta regla no habría marcado NADA, y las imágenes
+      // generadas con el volante al revés se habrían quedado aprobadas y listas
+      // para convertirse en clips caros.
+      const p = { encuadre: 'a', lugar: 'b', luz: 'c', descripcion: 'd' };
+      if (huellaDePlano(p, 'encargo viejo') === huellaDePlano(p, 'encargo nuevo')) {
+        fallos.push('Cambiar una regla del canal no cambia la huella: lo ya generado seguiría dándose por bueno.');
+      }
+      if (huellaDePlano(p, 'x') !== huellaDePlano({ ...p }, 'x')) {
+        fallos.push('La huella no es estable: marcaría todo como desfasado en cada carga.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: sin la regla del mundo en la instrucción, que es
+    // exactamente de donde salió el volante a la derecha.
+    romper: (ctx) =>
+      conFuncion(ctx, 'componerInstruccion', (t, c, o) =>
+        ctx.fn.componerInstruccion(t, c, o).replace(ctx.fn.MUNDO_DEL_CANAL, ''),
+      ),
+  },
+
+  {
     nombre: 'el-aspecto-es-del-canal-y-no-se-elige-por-proyecto',
     dice: 'Había seis estilos y se elegía uno por proyecto, con un muestrario para comparar. Con la biblioteca permanente eso deja de ser una preferencia y pasa a ser dinero: dos estilos son DOS bibliotecas de 141 imágenes, o una mezcla que no avisa —un perito en cine negro dentro de un episodio rodado en reconstrucción—. Y lo que se ganaba era un diez por ciento de la instrucción: el resto —el oficio cinematográfico, la prohibición de texto legible, la barrera documental y la paleta del director— era idéntico en los seis. Si alguien vuelve a meter un estilo por proyecto, la biblioteca se mezcla en silencio.',
     comprobar(ctx) {

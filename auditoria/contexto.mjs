@@ -171,6 +171,7 @@ async function funcionesPuras() {
     // El aspecto del canal. Entra por el contexto para que una invariante pueda
     // comprobar qué sale de verdad en la instrucción sin importarlo.
     ESTILO_DEL_CANAL: est2.ESTILO_DEL_CANAL,
+    MUNDO_DEL_CANAL: est2.MUNDO_DEL_CANAL,
     // Y el catálogo de géneros, por lo mismo y con más motivo: la tabla va a
     // crecer con géneros que todavía no existen, y lo que hay que comprobar es
     // que CADA UNO se sostiene, no que el primero está bien escrito.
@@ -201,6 +202,7 @@ async function funcionesPuras() {
     sincronizarBiblioteca: bib.sincronizarBiblioteca,
     resumenBiblioteca: bib.resumenBiblioteca,
     clipsPosibles: bib.clipsPosibles,
+    huellaDePlano: bib.huellaDePlano,
     ID_BIBLIOTECA: bib.ID_BIBLIOTECA,
     elegirVariante: bib.elegirVariante,
     claveDePersona: bib.claveDePersona,

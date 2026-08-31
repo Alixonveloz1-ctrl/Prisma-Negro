@@ -1669,9 +1669,10 @@ function tarjetaDeBiblioteca(x, tomas, mia) {
   cuerpo.className = 'cuerpo';
   cuerpo.innerHTML =
     `<p><b>${escapar(nombre)}</b> · ${escapar(variante)}<br>${escapar(detalle.slice(0, 90))}</p>` +
-    // El catálogo cambió debajo de esta imagen: sigue estando y sigue pagada, pero
-    // ya no es lo que se pide. Se dice, y se pierde el visto bueno.
-    (x.desfasada ? '<span class="pastilla p-falta">el plano cambió</span>' : '') +
+    // El encargo cambió debajo de esta imagen —el plano del catálogo o una regla
+    // del canal—: sigue estando y sigue pagada, pero ya no es lo que se pide. Se
+    // dice, y se pierde el visto bueno.
+    (x.desfasada ? '<span class="pastilla p-falta">hay que rehacerla</span>' : '') +
     (x.aprobada ? '<span class="pastilla p-ok">aprobada</span>' : hay ? '<span class="pastilla p-aviso">por revisar</span>' : '') +
     (x.video === 'ok'
       ? '<span class="pastilla p-ok">clip listo</span>'

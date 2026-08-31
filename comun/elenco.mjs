@@ -1162,7 +1162,7 @@ export const RECURSOS = [
         encuadre: 'plano detalle',
         lugar: 'una recta de la comarcal vista desde dentro de un coche',
         luz: 'el verde del salpicadero y los faros propios abriendo el asfalto',
-        descripcion: 'La carretera vista DESDE DENTRO del coche, a través del parabrisas con el limpiaparabrisas cruzando el cuadro y el salpicadero desenfocado ocupando el tercio inferior.',
+        descripcion: 'La carretera vista DESDE DENTRO del coche, desde el asiento del copiloto, a través del parabrisas con el limpiaparabrisas cruzando el cuadro; el salpicadero desenfocado ocupa el tercio inferior y el VOLANTE queda a la IZQUIERDA del cuadro.',
         matiz: 'ya de madrugada, con el cielo aclarando por un lado del parabrisas',
       },
     ],
@@ -1514,7 +1514,7 @@ export const RECURSOS = [
         encuadre: 'plano medio',
         lugar: 'el interior del coche, desde el asiento de atrás',
         luz: 'luz de día entrando por el parabrisas, el interior en sombra',
-        descripcion: 'El interior visto DESDE EL ASIENTO DE ATRÁS: los reposacabezas delanteros ocupan el primer término en sombra y el parabrisas se abre al fondo como una ventana de luz.',
+        descripcion: 'El interior visto DESDE EL ASIENTO DE ATRÁS: los reposacabezas delanteros ocupan el primer término en sombra y el parabrisas se abre al fondo como una ventana de luz, con el VOLANTE a la IZQUIERDA.',
         matiz: 'de día, con el salpicadero cubierto de polvo',
       },
       {

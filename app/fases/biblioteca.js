@@ -50,6 +50,12 @@ import {
   planoDeVariante,
   planoDeRecurso,
 } from '../../comun/elenco.mjs';
+import {
+  ESTILO_DEL_CANAL,
+  SIN_TEXTO_LEGIBLE,
+  BARRERA_DOCUMENTAL,
+  MUNDO_DEL_CANAL,
+} from '../../comun/estilos.mjs';
 
 /** La pieza de la biblioteca se llama así y no cambia nunca. */
 export const ID_BIBLIOTECA = 'biblioteca';
@@ -207,22 +213,32 @@ export function clipsPosibles(tomas, { bibliotecaConVideo = true } = {}) {
  * ─────────────────────────────────────────────────────────────────────────────
  */
 /**
- * La huella del plano de una toma: un resumen corto de lo que se le pidió al
- * generador.
+ * TODO lo que se le pide al generador para una toma de biblioteca: su plano, y el
+ * encargo que llevan TODAS las imágenes del canal.
  *
- * Sirve para una sola cosa, y es la que faltaba: SABER QUE EL CATÁLOGO CAMBIÓ
+ * Lo segundo estaba fuera y era un agujero. La regla de que el volante va a la
+ * izquierda vive en `MUNDO_DEL_CANAL`, no en la descripción de la carretera: si la
+ * huella solo mirara el plano, cambiar esa regla no habría marcado nada y las
+ * imágenes generadas con el volante al revés se habrían quedado ahí, aprobadas y
+ * listas para convertirse en clips. Lo que hay que vigilar es el ENCARGO ENTERO.
+ */
+const ENCARGO_DEL_CANAL = [ESTILO_DEL_CANAL, SIN_TEXTO_LEGIBLE, BARRERA_DOCUMENTAL, MUNDO_DEL_CANAL].join(' ');
+
+/**
+ * La huella de lo que se le pidió al generador: un resumen corto del encargo.
+ *
+ * Sirve para una sola cosa, y es la que faltaba: SABER QUE EL ENCARGO CAMBIÓ
  * DEBAJO DE UNA IMAGEN YA PAGADA. `sincronizarBiblioteca` vuelve a sacar el plano
  * del catálogo en cada carga y conserva lo generado, así que reescribir una
- * variante dejaba una imagen diciendo «carretera con niebla» donde el catálogo ya
- * pedía otra cosa —y con su visto bueno puesto, lista para convertirse en un clip
- * caro de algo que ya nadie pide—. Sin la huella eso no se ve: la toma sigue
- * marcada como `ok` y no hay con qué comparar.
+ * variante —o una regla del canal— dejaba una imagen que ya no es lo que se pide,
+ * con su visto bueno puesto y lista para convertirse en un clip caro. Sin la
+ * huella eso no se ve: la toma sigue marcada como `ok` y no hay con qué comparar.
  *
  * No es criptografía y no lo necesita: solo tiene que cambiar cuando cambia el
- * plano.
+ * encargo. `encargo` se pasa aparte para poder comprobar justo eso.
  */
-export function huellaDePlano(plano) {
-  const texto = [plano?.encuadre, plano?.lugar, plano?.luz, plano?.descripcion].join('|');
+export function huellaDePlano(plano, encargo = ENCARGO_DEL_CANAL) {
+  const texto = [plano?.encuadre, plano?.lugar, plano?.luz, plano?.descripcion, encargo].join('|');
   let h = 5381;
   for (let i = 0; i < texto.length; i++) h = ((h * 33) ^ texto.charCodeAt(i)) >>> 0;
   return h.toString(36);

@@ -113,6 +113,46 @@ export const BARRERA_DOCUMENTAL =
   'No imites material de archivo auténtico ni fotografía de prensa real.';
 
 /**
+ * DÓNDE PASA ESTO. Y es una regla del canal, no del guion.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Estás manejando del lado derecho de la carretera, bien, pero el volante del
+ *  lado derecho. Sé que hay un par de países donde se maneja así, pero eso no es
+ *  lo normal. Este canal es en español y es para Latinoamérica.»
+ *
+ * Salió un plano precioso desde dentro de un coche con el volante a la derecha.
+ * Y el fallo no era de esa descripción: era que NADIE LE HABÍA DICHO NUNCA al
+ * generador en qué mundo transcurre esto. Sin decirlo, cada imagen cae en el
+ * promedio de lo que el modelo vio más, y ese promedio no es el de quien va a
+ * mirar el canal.
+ *
+ * Esto no es sobre dónde ocurre la historia —puede ocurrir donde quiera y el guion
+ * manda—: es sobre que nada de lo que se ve saque al espectador de la pieza. Un
+ * volante en el lado que no toca lo saca en medio segundo, y ya no vuelve.
+ *
+ * Y hay una trampa que evitar en la dirección contraria: pedir «Latinoamérica» a
+ * un generador devuelve una postal —colores saturados, folclore, tópico de
+ * agencia de viajes—, que es igual de falso y encima cursi. Lo que se pide es un
+ * sitio CORRIENTE, que es lo que hace que alguien reconozca su barrio.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export const MUNDO_DEL_CANAL =
+  // DE QUÉ MUNDO SE TRATA
+  'EL MUNDO DE ESTE CANAL ES HISPANOHABLANTE. Los coches, las calles, los ' +
+  'edificios, la ropa, los uniformes y los objetos de casa son los de una ciudad o ' +
+  'un pueblo de habla hispana corriente. ' +
+  // LO CONCRETO, que es lo que canta cuando falla
+  'LOS VEHÍCULOS LLEVAN EL VOLANTE A LA IZQUIERDA y se circula por el carril ' +
+  'DERECHO. Si se ve un salpicadero, un interior de coche o alguien al volante, el ' +
+  'volante va a la IZQUIERDA. ' +
+  'Nada que delate otro país: ni volante a la derecha, ni circulación por la ' +
+  'izquierda, ni cabinas, buzones, autobuses escolares, señales, semáforos, ' +
+  'matrículas, enchufes o furgones policiales con forma de otro sitio. ' +
+  // Y LA TRAMPA DEL OTRO LADO
+  'Y NO ES UNA POSTAL: nada de folclore, ni color turístico, ni tópicos. Es un ' +
+  'sitio corriente y trabajado, de los que a cualquiera le suenan a su barrio.';
+
+/**
  * NADA DE LETRAS. Y no es una manía: es que no salen.
  *
  * ─────────────────────────────────────────────────────────────────────────────
