@@ -28,8 +28,38 @@ const PUERTA = '/api/ia';
 // llamadas, y cada tanda de aciertos la afloja. La primera vez que se topa con el
 // límite, la herramienta baja el ritmo y sigue —en vez de estrellarse sesenta
 // veces contra la misma pared—.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// LAS CIFRAS ESTABAN MAL, Y ESTABAN MAL EN LOS DOS SENTIDOS.
+//
+// «¿Cómo le vas a poner un tiempo de cuatro segundos de espera? Eso no es nada
+//  para Vercel ni para Google Cloud.»
+//
+// El primer frenazo eran CUATRO SEGUNDOS, o sea quince llamadas por minuto. Si la
+// cuota del proyecto son diez imágenes por minuto —que es lo normal en un proyecto
+// nuevo—, cuatro segundos no evitan nada: se vuelve a chocar a la tercera. Frenar
+// tiene que llevar el ritmo POR DEBAJO del límite, no rozarlo.
+//
+// Y peor era el otro lado: al aflojar, `<= 4000 → 0` bajaba de cuatro segundos a
+// CERO de un salto, así que a las cinco imágenes buenas el freno desaparecía
+// entero y se volvía derecho a la pared. Subir multiplicando y bajar de golpe es
+// un oscilador, no un regulador: el ritmo se pasaba la tanda entre el límite y
+// nada, chocando cada pocas imágenes.
+//
+// Ahora sube fuerte y baja poco a poco —el freno busca el ritmo que el proveedor
+// aguanta y se queda ahí—, que es como se regula cualquier cosa que no conoce su
+// propio límite.
+// ─────────────────────────────────────────────────────────────────────────────
 
-const PAUSA_MAX = 30000;
+// Un minuto de pausa entre llamadas es una imagen por minuto: por debajo de eso ya
+// no es la cuota lo que estorba, es otra cosa, y seguir frenando no arregla nada.
+const PAUSA_MAX = 60000;
+// El primer frenazo. Ocho segundos son siete llamadas por minuto, que cabe en la
+// cuota más apretada que reparte Vertex a un proyecto nuevo.
+const PAUSA_INICIAL = 8000;
+// Por debajo de esto el freno ya no sirve de nada y se quita del todo.
+const PAUSA_MINIMA = 1500;
+
 let pausaEntreLlamadas = 0;
 let aciertosSeguidos = 0;
 
@@ -38,17 +68,20 @@ export const ritmoActual = () => pausaEntreLlamadas;
 
 function frenar() {
   aciertosSeguidos = 0;
-  pausaEntreLlamadas = Math.min(PAUSA_MAX, pausaEntreLlamadas ? pausaEntreLlamadas * 2 : 4000);
+  pausaEntreLlamadas = Math.min(PAUSA_MAX, pausaEntreLlamadas ? pausaEntreLlamadas * 2 : PAUSA_INICIAL);
 }
 
 function aflojar() {
   if (!pausaEntreLlamadas) return;
   // Hacen falta varios aciertos seguidos para aflojar: uno solo puede ser suerte,
   // y volver al ritmo alto en cuanto sale bien una es volver a chocar enseguida.
-  if (++aciertosSeguidos >= 5) {
-    aciertosSeguidos = 0;
-    pausaEntreLlamadas = pausaEntreLlamadas <= 4000 ? 0 : Math.round(pausaEntreLlamadas / 2);
-  }
+  if (++aciertosSeguidos < 5) return;
+  aciertosSeguidos = 0;
+  // Y SE AFLOJA UN CUARTO, no a la mitad ni de golpe a cero. Bajar despacio es lo
+  // que hace que el ritmo se pose donde el proveedor aguanta en vez de saltar
+  // entre el límite y nada.
+  const siguiente = Math.round(pausaEntreLlamadas * 0.75);
+  pausaEntreLlamadas = siguiente < PAUSA_MINIMA ? 0 : siguiente;
 }
 
 const dormir = (ms, senal) =>
@@ -79,11 +112,23 @@ const dormir = (ms, senal) =>
  * el reintento de siempre la vuelve a lanzar. Que es lo que ya hacía con los
  * cortes de red que SÍ dan error.
  *
- * Dos minutos: la función de la plataforma no puede durar más de uno, y el resto
- * es margen para subir la carga por una red móvil lenta.
+ * Y EL NÚMERO NO ES ARBITRARIO: sale de `maxDuration` en `vercel.json`, que es lo
+ * que aguanta la función antes de que la plataforma la mate. Está en 60 s, que es
+ * el techo del plan gratuito de Vercel. Cualquier petición que pase de ahí con
+ * mucho margen es una petición colgada, no una petición lenta: la plataforma ya la
+ * habría cortado con un 504.
+ *
+ * El margen es para lo que NO cuenta como duración de la función: subir la carga
+ * —una imagen de referencia por una red móvil lenta— y bajar la respuesta. Se pone
+ * el doble, que sobra.
+ *
+ * Si algún día `maxDuration` sube —el plan de pago llega a 300 s—, este número
+ * tiene que subir con él o se cortarían llamadas buenas. Hay una invariante que
+ * comprueba justo eso, para que no se quede atrás en silencio.
  * ─────────────────────────────────────────────────────────────────────────────
  */
-const TOPE_DE_PETICION = 120000;
+const MAX_DURACION_FUNCION = 60000;
+const TOPE_DE_PETICION = MAX_DURACION_FUNCION * 2;
 
 function conTope(senal, ms) {
   const control = new AbortController();
@@ -392,10 +437,24 @@ export async function llamar(modo, datos = {}, { reintentos = 2, senal, alEspera
   throw ultimo || new ErrorPuerta('Falló sin decir por qué.');
 }
 
-// Las esperas de cuota, en milisegundos. Suman unos ocho minutos: una ventana de
-// cuota por minuto se abre mucho antes, y una diaria no se abre nunca —por eso hay
-// un final, en vez de esperar para siempre—.
-const ESPERAS = [5000, 15000, 30000, 60000, 90000, 120000, 180000];
+// Las esperas de cuota de UNA LLAMADA, en milisegundos.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// LA PRIMERA ERAN CINCO SEGUNDOS, y es el mismo error que los cuatro de arriba.
+//
+// La cuota de Vertex se mide POR MINUTO: cuando se agota, la ventana no se abre
+// hasta que pasa el minuto. Esperar cinco segundos y volver a preguntar es tirar
+// un intento —la ventana sigue cerrada seguro—, y quince y treinta son otros dos.
+// Se gastaban tres de siete intentos antes de esperar lo único que podía servir.
+//
+// Ahora empieza en medio minuto y da dos oportunidades completas a la ventana. Y
+// ya no hacen falta ocho minutos aquí: si tras tres minutos sigue cerrada, no es
+// la ventana del minuto, es una cuota mayor — y de esa se encarga la cola, que
+// para la tanda entera y espera en escala de minutos sin perder la unidad
+// (`ESPERAS_DE_TANDA`, en `app/cola.js`). Dos capas, cada una con su trabajo, en
+// vez de las dos haciendo lo mismo.
+// ─────────────────────────────────────────────────────────────────────────────
+const ESPERAS = [30000, 60000, 90000];
 const REINTENTOS_DE_ESPERA = ESPERAS.length;
 
 /**

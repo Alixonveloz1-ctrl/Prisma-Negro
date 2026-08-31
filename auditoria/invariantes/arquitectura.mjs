@@ -616,18 +616,46 @@ export const invariantes = [
       if (!/RESOURCE_EXHAUSTED|has been exhausted/.test(api)) {
         fallos.push('No se reconoce el texto con el que el proveedor dice que la cuota se agotó.');
       }
-      // Y con paciencia de ventana de cuota, no de tres segundos.
+      // ── Y CON PACIENCIA DE VENTANA DE CUOTA, NO DE CUATRO SEGUNDOS ──────────
+      //
+      // «¿Cómo le vas a poner un tiempo de cuatro segundos de espera? Eso no es
+      //  nada para Vercel ni para Google Cloud.»
+      //
+      // La cuota de Vertex se mide POR MINUTO: cuando se agota, la ventana no se
+      // abre hasta que pasa el minuto. Una primera espera de cinco segundos tira un
+      // intento seguro —la ventana sigue cerrada— y las dos siguientes, otros dos.
       const esperas = /const ESPERAS = \[([^\]]+)\]/.exec(api);
       if (!esperas) fallos.push('No hay una escala de esperas para la cuota.');
       else {
-        const total = esperas[1].split(',').reduce((s, x) => s + Number(x.trim()), 0);
+        const lista = esperas[1].split(',').map((x) => Number(x.trim()));
+        const total = lista.reduce((s, x) => s + x, 0);
         if (total < 120000) {
           fallos.push(`Esperando ${Math.round(total / 1000)} s en total no se sale de una ventana de cuota.`);
+        }
+        if (lista[0] < 20000) {
+          fallos.push(
+            `La primera espera de cuota son ${lista[0] / 1000} s. La ventana se mide en minutos: ` +
+              'preguntar antes es tirar un intento con la respuesta ya sabida.',
+          );
         }
       }
       // El freno que se ajusta solo: sin él, las 59 siguientes chocan igual.
       if (!/pausaEntreLlamadas/.test(api)) fallos.push('No baja el ritmo tras chocar con la cuota.');
       if (!/function aflojar/.test(api)) fallos.push('Baja el ritmo y no lo vuelve a subir nunca.');
+
+      // Y EL PRIMER FRENAZO TIENE QUE BAJAR DEL LÍMITE, NO ROZARLO. Cuatro
+      // segundos son quince llamadas por minuto: con una cuota de diez imágenes por
+      // minuto —lo normal en un proyecto nuevo— se vuelve a chocar a la tercera.
+      const inicial = Number(/const PAUSA_INICIAL = (\d+)/.exec(api)?.[1] || 0);
+      if (!(inicial >= 6000)) {
+        fallos.push(`El primer frenazo son ${inicial / 1000} s entre llamadas: no baja de ninguna cuota por minuto.`);
+      }
+      // Y SE AFLOJA POCO A POCO. Bajar de golpe a cero tras cinco aciertos es
+      // volver derecho a la pared: el ritmo oscila entre el límite y nada en vez de
+      // posarse donde el proveedor aguanta.
+      if (/pausaEntreLlamadas <= \d+ \? 0 :/.test(api)) {
+        fallos.push('El freno se quita de un salto tras unos aciertos: eso no regula, oscila.');
+      }
       // Y se dice en pantalla: una espera larga y muda parece que se colgó.
       // La cola le pasa a cada unidad un cuarto argumento con el que avisar, y
       // distingue la espera por cuota del freno de ritmo. Se mira eso, no el
@@ -726,13 +754,28 @@ export const invariantes = [
       const r = await humoDeLaPuerta({ parche });
       fallos.push(...r.fallos.filter((f) => /cuelga|colgad/i.test(f)));
 
-      // Y el tope tiene que ser razonable: la función de la plataforma no dura más
-      // de un minuto, así que menos de eso cortaría llamadas buenas, y mucho más
-      // deja media hora de espera antes de darse cuenta.
+      // ── Y EL TOPE SALE DE LO QUE AGUANTA LA PLATAFORMA, no de un número suelto.
+      //
+      // `maxDuration` en `vercel.json` es lo que la función puede durar antes de
+      // que Vercel la mate — 60 s es el techo del plan gratuito; el de pago llega a
+      // 300. El tope del navegador tiene que ir POR ENCIMA de eso con margen: por
+      // debajo cortaría llamadas buenas que la plataforma todavía está sirviendo, y
+      // si `maxDuration` sube y este número se queda atrás, se cortarían en
+      // silencio justo las generaciones más largas.
       const api = ctx.fuentes.get('app/api.js') || '';
-      const tope = Number(/const TOPE_DE_PETICION = (\d+)/.exec(api)?.[1] || 0);
-      if (!(tope >= 60000 && tope <= 300000)) {
-        fallos.push(`El tope de una petición es ${tope} ms: fuera del rango que tiene sentido (60 s a 5 min).`);
+      const declarado = Number(/const MAX_DURACION_FUNCION = (\d+)/.exec(api)?.[1] || 0);
+      const conf = JSON.parse(ctx.fuentes.get('vercel.json') || '{}');
+      const real = Number(conf?.functions?.['api/ia.js']?.maxDuration || 0) * 1000;
+      if (!real) fallos.push('`vercel.json` no declara cuánto puede durar la función: la plataforma la mataría a los diez segundos.');
+      else if (declarado !== real) {
+        fallos.push(
+          `La puerta cree que la función dura ${declarado / 1000} s y \`vercel.json\` dice ${real / 1000} s. ` +
+            'Con el número desfasado se cortan llamadas buenas o se espera de más.',
+        );
+      }
+      const tope = Number(/const TOPE_DE_PETICION = MAX_DURACION_FUNCION \* (\d+)/.exec(api)?.[1] || 0) * declarado;
+      if (!(tope > real)) {
+        fallos.push(`El tope de una petición (${tope} ms) no supera lo que dura la función (${real} ms): se cortarían llamadas buenas.`);
       }
       // El reloj se suelta SIEMPRE. Sin esto, una tanda de 141 imágenes deja 141
       // temporizadores vivos esperando para abortar peticiones que ya terminaron.

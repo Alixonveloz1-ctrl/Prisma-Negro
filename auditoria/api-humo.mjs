@@ -346,6 +346,47 @@ export async function humoDeLaPuerta({ parche = null } = {}) {
         );
       }
     }
+
+    // ── EL FRENO, EJECUTÁNDOLO ────────────────────────────────────────────────
+    //
+    // «¿Cómo le vas a poner un tiempo de cuatro segundos de espera?»
+    //
+    // El freno subía multiplicando y bajaba DE GOLPE A CERO: a las cinco imágenes
+    // buenas desaparecía entero y se volvía derecho a la pared. Eso no se ve
+    // leyendo el número; se ve corriendo la secuencia —chocar, acertar cinco
+    // veces— y mirando en qué ritmo se queda.
+    const ritmo = async (respuestas) => {
+      cola = [...respuestas];
+      try {
+        await api.llamar('texto', { instruccion: 'x' }, { reintentos: 2, alEsperar: () => {} });
+      } catch {
+        /* da igual cómo acabe: lo que se mira es el ritmo */
+      }
+      return api.ritmoActual();
+    };
+
+    const trasChocar = await ritmo([
+      { tipo: 'ok', estado: 429, cuerpo: { ok: false, error: 'Resource has been exhausted' } },
+      { tipo: 'ok', cuerpo: { ok: true, texto: 'listo' } },
+    ]);
+    if (!(trasChocar >= 5000)) {
+      fallos.push(
+        `Tras chocar con la cuota, el freno queda en ${trasChocar} ms. Con menos de cinco segundos ` +
+          'entre llamadas se vuelve a chocar a las pocas imágenes: frenar tiene que bajar del límite, no rozarlo.',
+      );
+    }
+
+    let ahora = trasChocar;
+    for (let n = 0; n < 5; n++) ahora = await ritmo([{ tipo: 'ok', cuerpo: { ok: true, texto: 'listo' } }]);
+    if (ahora >= trasChocar) {
+      fallos.push(`El freno no se afloja nunca: sigue en ${ahora} ms tras cinco llamadas buenas.`);
+    }
+    if (ahora === 0) {
+      fallos.push(
+        `El freno pasa de ${trasChocar} ms a CERO de un salto tras cinco aciertos: eso es volver ` +
+          'derecho a la pared. Se sube multiplicando y se baja poco a poco, o el ritmo oscila entre el límite y nada.',
+      );
+    }
   } catch (e) {
     fallos.push(`no se pudo ni cargar la puerta: ${e.message}`);
   } finally {
