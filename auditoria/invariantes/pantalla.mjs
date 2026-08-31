@@ -695,6 +695,88 @@ export const invariantes = [
   },
 
   {
+    nombre: 'cualquier-imagen-del-archivo-puede-pasar-a-clip-y-se-ve-donde-se-genera',
+    dice: '«Todas las imágenes deben tener su botón para generar el video, todas. Mientras más videos logres generar, mucho mejor para que se vea el documental; yo decidiré cuáles utilizar, y lo que no lleve video usará la imagen.» El botón salía solo donde el catálogo proponía movimiento —el reparto—, así que para animar un archivador o una carretera no había ninguna manera: era una decisión mía disfrazada de dato. Y encima el progreso de la tanda se pintaba siempre en «El episodio», así que generando el archivo no se veía ni la barra ni la cuenta atrás de la cuota: «dice que se está generando y no se genera nada».',
+    async comprobar(ctx) {
+      const { humoDeLaPantalla, proyectoYaEmpezado } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+      const fallos = [];
+
+      // Un archivo con un SITIO —que el catálogo no propone animar— ya generado y
+      // aprobado. Antes esa ficha no tenía botón de clip por ninguna parte.
+      const p = proyectoYaEmpezado();
+      p.piezas.push({
+        id: 'biblioteca',
+        titulo: 'Biblioteca del canal',
+        esBiblioteca: true,
+        escenas: [{ n: 0, titulo: 'Recursos' }, { n: 1, titulo: 'Reparto' }],
+        tomas: [
+          { i: 0, clave: 'recurso:carretera-noche:v1', recurso: 'carretera-noche', variante: 'v1', imagen: 'ok', aprobada: true },
+          { i: 1, clave: 'personaje:perito:v1', personaje: 'perito', variante: 'v1', imagen: 'ok', aprobada: true },
+        ],
+      });
+      const r = await humoDeLaPantalla({ parche, proyecto: p });
+      fallos.push(...r.fallos);
+
+      const botones = r.botonesDe('galeria-biblioteca');
+      const puedenClip = botones.filter((b) => /Generar su clip/.test(b.texto) && !b.deshabilitado).length;
+      if (puedenClip < 2) {
+        fallos.push(
+          `Solo ${puedenClip} fichas aprobadas ofrecen su clip: un sitio o un objeto no se puede animar ` +
+            'aunque su imagen esté lista y aprobada.',
+        );
+      }
+
+      // Y LA MARCA SE CONSERVA. `sincronizarBiblioteca` vuelve a sacar `movimiento`
+      // del catálogo en cada carga: sin conservar lo pedido a mano, un archivador
+      // animado volvería a «sin movimiento» y el montaje pondría la foto fija
+      // teniendo el clip pagado al lado.
+      const { sincronizarBiblioteca } = ctx.fn;
+      const z = sincronizarBiblioteca({
+        tomas: [{ i: 0, clave: 'recurso:carretera-noche:v1', imagen: 'ok', video: 'ok', movimiento: true }],
+      });
+      const guardada = z.tomas.find((t) => t.clave === 'recurso:carretera-noche:v1');
+      if (!guardada?.movimiento) {
+        fallos.push('El movimiento pedido a mano se pierde al recargar: el clip pagado quedaría sin usarse.');
+      }
+
+      // ── Y LA TANDA SE VE DONDE SE GENERA ──────────────────────────────────
+      const html = fuente(ctx, 'index.html');
+      const main = fuente(ctx, 'app/main.js');
+      const desde = html.indexOf('id="v-biblioteca"');
+      const seccion = desde < 0 ? '' : html.slice(desde, html.indexOf('<section ', desde + 1));
+      for (const [qué, id] of [
+        ['barra de progreso', 'barra-biblioteca'],
+        ['línea de estado', 'progreso-biblioteca'],
+        ['botón de detener', 'b-detener-biblioteca'],
+      ]) {
+        if (!seccion.includes(`id="${id}"`)) {
+          fallos.push(`El Archivo no tiene ${qué} propia: la tanda avisa en otra pantalla.`);
+        }
+      }
+      // Las dos tandas de la biblioteca tienen que DECIR dónde pintan.
+      const tandas = [...main.matchAll(/donde: 'biblioteca'/g)].length;
+      if (tandas < 2) {
+        fallos.push(`${tandas} de las 2 tandas del archivo dicen dónde pintar: la otra avisa en «El episodio».`);
+      }
+      if (!/\$\(`barra-\$\{donde\}`\)/.test(main) || !/\$\(`progreso-\$\{donde\}`\)/.test(main)) {
+        fallos.push('El progreso no busca la barra de su sección: se pinta siempre en la misma.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: el clip solo donde el catálogo lo proponía.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace(
+          "if (x.video !== 'ok' && P.config.movimiento.politica.bibliotecaConVideo) {",
+          "if (x.movimiento && x.video !== 'ok' && P.config.movimiento.politica.bibliotecaConVideo) {",
+        ),
+      ),
+  },
+
+  {
     nombre: 'la-pantalla-nunca-promete-un-caso-real',
     dice: '«¿Por qué está buscando en Internet los casos? Se supone que estamos hablando de casos inventados.» El motor pasó a construir casos y la pantalla se quedó entera hablando de lo de antes: «Busca en internet casos reales», «Seis búsquedas: cronología, fuentes oficiales, prensa», «De un caso real a un video terminado». Y a un caso INVENTADO le pintaba una pastilla ámbar de «poco documentado», que es al revés de lo que es. Un texto que describe lo que la herramienta hacía ANTES no es un texto viejo: es una mentira sobre lo que va a pasar cuando pulses. Y no puede depender de nada guardado: un proyecto de cuando existían dos modos sigue abierto ahí.',
     async comprobar(ctx) {

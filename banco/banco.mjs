@@ -300,6 +300,53 @@ if (!hayFfmpeg()) {
     if (Number(cuenta) === hoja.tomas.length) bien(`${cuenta} segmentos, uno por toma, codificados una vez`);
     else mal(`${cuenta} segmentos para ${hoja.tomas.length} tomas`);
   }
+
+  // ── El estirado del clip, con el shell de verdad ───────────────────────────
+  //
+  // «El director decidió que una escena tiene once segundos, pero Veo genera
+  //  máximo ocho. No quiero que se repita el video, eso daña la continuidad: hay
+  //  que ajustar la velocidad, no importa que esté un poco más lento.»
+  //
+  // El factor lo calcula `awk` DENTRO del guion, con la duración que mide
+  // `ffprobe` sobre el archivo real. Eso no se puede comprobar leyendo el texto:
+  // hay que ejecutarlo. Se saca la línea tal cual del guion generado y se corre
+  // contra clips de verdad de distinta duración.
+  const lineaL = guion.split('\n').find((l) => l.trim().startsWith('L=$('));
+  if (!lineaL) {
+    mal('el guion no calcula el factor de estirado del clip');
+  } else {
+    const factorCon = (segundosClip, segundosToma) => {
+      const clip = join(TALLER, `prueba_${segundosClip}s.mp4`);
+      execSync(
+        `ffmpeg -y -v error -f lavfi -i testsrc=size=320x180:rate=30 -t ${segundosClip} ` +
+          `-pix_fmt yuv420p ${JSON.stringify(clip)}`,
+      );
+      const linea = lineaL
+        .replace(/-v t=[\d.]+/, `-v t=${segundosToma.toFixed(3)}`)
+        .replace(/^\s*L=/, 'L=');
+      const salida = execFileSync('sh', [
+        '-c',
+        `D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 ${JSON.stringify(clip)}); ` +
+          `${linea}; printf '%s' "$L"`,
+      ]).toString().trim();
+      return Number(salida);
+    };
+
+    // Su caso, el de la pregunta: once segundos de toma y ocho de clip.
+    const f = factorCon(8, 11);
+    if (Math.abs(f - 11 / 8) < 0.02) bien(`un clip de 8 s en una toma de 11 s se estira ×${f.toFixed(3)}, no se repite`);
+    else mal(`un clip de 8 s en una toma de 11 s da factor ${f} y debería ser ${(11 / 8).toFixed(3)}`);
+
+    // Un clip que ya llega no se toca: estirar de menos es cámara rápida.
+    const g = factorCon(8, 7);
+    if (g === 1) bien('un clip que ya cubre la toma no se estira');
+    else mal(`un clip de 8 s en una toma de 7 s se estira ×${g}: sobra clip, no falta`);
+
+    // Y uno demasiado corto NO se convierte en cámara lenta: manda el bucle.
+    const h = factorCon(2, 11);
+    if (h === 1) bien('un clip demasiado corto no se estira a cámara lenta: se queda el bucle');
+    else mal(`un clip de 2 s en una toma de 11 s se estira ×${h}: eso es cámara lenta evidente`);
+  }
 }
 
 console.log(

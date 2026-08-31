@@ -145,10 +145,11 @@ export const PREDETERMINADA = {
     //   motivos     — los planos que vuelven, y el relleno. Imagen fija con
     //                 recorrido de cámara. Cuesta cero.
     //
-    // Y lo que lo hace viable ya está resuelto en el montaje: la entrada va con
-    // `-stream_loop -1`, así que un clip de seis segundos cubre una toma de
-    // veinticinco repitiéndose. Un plano del perito declarando sirve para todos
-    // sus testimonios sin generar nada más.
+    // Y lo que lo hace viable ya está resuelto en el montaje: el clip se ESTIRA
+    // con `setpts` hasta cubrir la toma —repetirlo se veía, «daña la
+    // continuidad»—, así que uno de ocho segundos cubre una toma de dieciséis. Un
+    // plano del perito declarando sirve para todos sus testimonios sin generar
+    // nada más.
     // ─────────────────────────────────────────────────────────────────────────
     politica: {
       // Las escenas fuertes del episodio. Diez a quince es el rango del canal.

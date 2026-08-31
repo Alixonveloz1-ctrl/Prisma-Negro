@@ -230,6 +230,19 @@ export function componerManifiesto(hoja, aRutaGs) {
 const sh = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 
 /**
+ * Hasta cuánto se puede estirar un clip para que llene la toma.
+ *
+ * Dos y medio: un plano documental a un 40 % de velocidad todavía se lee como una
+ * decisión de montaje —los documentales lo hacen a propósito continuamente—. Más
+ * allá, una persona hablando se convierte en cámara lenta evidente, y eso se ve
+ * peor que la repetición que veníamos a evitar. Por encima del tope manda el bucle.
+ *
+ * El sitio de verdad para no llegar aquí es pedir los clips largos: un clip de ocho
+ * segundos cubre una toma de veinte estirando 2,5, y uno de cuatro no.
+ */
+const TOPE_LENTO = 2.5;
+
+/**
  * Compone el guion de montaje.
  *
  * El orden de las operaciones NO es negociable; cada paso está donde está por un
@@ -278,27 +291,52 @@ export function guionFfmpeg(hoja) {
 
     if (t.movimiento) {
       // §6: los generadores de video tienen listas CERRADAS de duración, así que el
-      // clip casi nunca dura lo que dura la locución. Si la toma pide doce segundos
-      // y el clip trae ocho, hay que cubrir cuatro.
+      // clip casi nunca dura lo que dura la locución. Si la toma pide once segundos
+      // y el clip trae ocho, hay que cubrir tres.
       //
       // ─────────────────────────────────────────────────────────────────────────
-      // ANTES SE CONGELABA EL ÚLTIMO FOTOGRAMA. «Se queda tieso hasta que termina
-      // el audio y pasa a la siguiente toma. Eso se ve horrible.»
+      // PRIMERO SE CONGELABA EL ÚLTIMO FOTOGRAMA: «se queda tieso hasta que termina
+      // el audio. Eso se ve horrible». Cuatro segundos de imagen muerta en medio de
+      // un plano que se estaba moviendo se leen como un fallo de reproducción.
       //
-      // Y tiene razón: cuatro segundos de imagen muerta en medio de un plano que
-      // se estaba moviendo se leen como un fallo de reproducción, no como una
-      // decisión. El clip se REPITE, que es lo que hace la previa y lo que se
-      // eligió al verlo.
+      // DESPUÉS SE REPETÍA EL CLIP. Y también estaba mal, por otro sitio: «no
+      // quiero que se repita el video, porque eso va a dañar la continuidad». Es
+      // verdad — a los ocho segundos la persona vuelve a hacer el mismo gesto y se
+      // ve que es un bucle.
       //
-      // El bucle va en la ENTRADA (`-stream_loop -1`), no en el filtro: el filtro
-      // `loop` guarda los fotogramas en memoria y un clip de ocho segundos en
-      // 1080p son setecientos megas. Repitiendo la entrada, ffmpeg vuelve a leer
-      // el archivo y `-frames:v` corta donde toca — que es lo que fija la
-      // duración exacta, igual que antes.
+      // AHORA SE ESTIRA EL TIEMPO. «Lo que tienes que ajustar es la velocidad del
+      // video; no importa que esté un poco más lento para que alcance a llenar esos
+      // once segundos.» Un plano documental al 70 % de velocidad se lee como una
+      // decisión de montaje; un bucle se lee como un error.
+      //
+      // Y LA DURACIÓN SE MIDE, NO SE SUPONE. El factor sale de `ffprobe` sobre el
+      // archivo de verdad, no de lo que creemos que pedimos: el generador entrega
+      // lo que quiere dentro de su lista cerrada, un clip heredado de la biblioteca
+      // dura lo suyo y no lo de esta toma, y una duración supuesta que no cuadra
+      // deja el segmento corto sin avisar.
+      //
+      // EL BUCLE SE QUEDA, de red de seguridad. `setpts` estira hasta `TOPE_LENTO`;
+      // más allá de ahí, cámara lenta de verdad —una persona hablando a un tercio
+      // de velocidad— se ve peor que un bucle, así que el factor se queda en 1 y
+      // manda el bucle. Va en la ENTRADA (`-stream_loop -1`) y no en el filtro:
+      // el filtro `loop` guarda los fotogramas en memoria y un clip de ocho
+      // segundos en 1080p son setecientos megas.
+      //
+      // `setpts` va ANTES de `fps`: estira los tiempos y luego el remuestreo a
+      // fotogramas fijos rellena repitiendo, que es lo que lo deja parejo.
       // ─────────────────────────────────────────────────────────────────────────
+      p(
+        `D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 ` +
+          `${sh(nombreLocal(t.archivo))} 2>/dev/null || true)`,
+      );
+      p(
+        `L=$(LC_ALL=C awk -v d="$D" -v t=${t.duracion.toFixed(3)} -v m=${TOPE_LENTO} ` +
+          `'BEGIN{ if (d+0 <= 0.1) { print "1"; exit } f = t / (d+0); ` +
+          `if (f <= 1.02 || f > m) { print "1" } else { printf "%.5f", f } }')`,
+      );
       cadenas.push(
         `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,` +
-          `crop=${W}:${H},fps=${fps},setsar=1[v]`,
+          `crop=${W}:${H},setpts=\${L}*PTS,fps=${fps},setsar=1[v]`,
       );
     } else {
       // §4.7: se amplía la imagen ANTES de recorrerla para que no pixele.
@@ -323,11 +361,17 @@ export function guionFfmpeg(hoja) {
     }
 
     // La imagen fija se repite sola para durar lo que pida la toma; el clip se
-    // repite entero cuando se queda corto. `-frames:v` es lo que corta los dos.
+    // estira y, si no llega, se repite. `-frames:v` es lo que corta los dos.
     const bucle = t.movimiento ? '-stream_loop -1 ' : '-loop 1 ';
+    // El filtro del clip lleva DENTRO `${L}`, el factor que calculó `awk` arriba, y
+    // por eso va entre comillas dobles: entre comillas simples el shell lo pasaría
+    // literal y ffmpeg se encontraría un `${L}` donde espera un número. El resto de
+    // las tomas sigue con comillas simples porque `zoompan` lleva `$` de ffmpeg que
+    // NO se puede expandir.
+    const filtro = t.movimiento ? `"${cadenas.join(';')}"` : sh(cadenas.join(';'));
     p(
       `ffmpeg -y -v error ${bucle}${entradas} ` +
-        `-filter_complex ${sh(cadenas.join(';'))} ` +
+        `-filter_complex ${filtro} ` +
         `-map ${sh(mapa)} -frames:v ${frames} -an ` +
         `-c:v libx264 -preset medium -crf ${a.crf} -pix_fmt yuv420p -r ${fps} ` +
         `-video_track_timescale ${fps * 1000} ${seg}`,

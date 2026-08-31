@@ -530,7 +530,13 @@ nav.abajo button svg{width:22px;height:22px}
           <div class="fila-btn" style="margin-top:10px">
             <button class="btn primario" id="b-biblioteca-imagenes">Generar imágenes que faltan</button>
             <button class="btn fantasma" id="b-biblioteca-clips">Generar clips de lo aprobado</button>
+            <button class="btn peligro chico" id="b-detener-biblioteca">Detener</button>
           </div>
+          <!-- LA BARRA, AQUÍ. Estaba solo en «El episodio», así que generando el
+               archivo no se veía ni el progreso ni la cuenta atrás de la cuota:
+               «dice que se está generando y no se genera nada». -->
+          <div class="barra"><i id="barra-biblioteca"></i></div>
+          <p class="nota chica" id="progreso-biblioteca" style="margin-top:8px"></p>
           <div id="aviso-biblioteca"></div>
 
           <!-- LA GALERÍA. «Solamente puedo darle al botón de generar todo, y genera

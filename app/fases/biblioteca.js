@@ -24,8 +24,9 @@
 //              testigo: los veinte. Declarando, mudos: la voz es siempre la del
 //              narrador, así que en pantalla se ve a alguien hablando y se oye al
 //              narrador — que es como funciona la referencia.
-//   RECURSOS — cada VERSIÓN de cada plano transversal: la carretera de noche con
-//              llovizna, con niebla y de madrugada. Tres de cada uno.
+//   RECURSOS — cada VERSIÓN de cada plano transversal: la carretera de noche
+//              desde el arcén, en picado desde el talud de una curva y desde
+//              dentro del coche. Tres de cada uno, y tres PLANOS distintos.
 //
 // ─────────────────────────────────────────────────────────────────────────────
 // POR QUÉ VARIAS VERSIONES, Y NO UNA
@@ -57,6 +58,25 @@ import {
   MUNDO_DEL_CANAL,
 } from '../../comun/estilos.mjs';
 
+/**
+ * Cuánto se le pide a un clip del archivo. LO MÁS LARGO QUE DA EL GENERADOR.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Estaba en seis y era una cifra puesta sin pensar. Un clip del archivo no cubre
+ * UNA toma: cubre todas las tomas de ese papel en TODOS los episodios que vengan,
+ * y las tomas duran hasta dieciséis segundos. Con seis segundos, el montaje tiene
+ * que estirar el clip ×2,7 —cámara lenta evidente— o repetirlo, que es lo que él
+ * no quiere: «no quiero que se repita el video, porque eso va a dañar la
+ * continuidad».
+ *
+ * Ocho es el máximo de los Veo. Cuesta un tercio más POR CLIP y se paga UNA VEZ
+ * para siempre; a cambio, un clip de ocho cubre una toma de veinte estirando
+ * dentro del tope y sin repetir nada. `duracionMasCercana` lo baja solo si el
+ * generador elegido no llega.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export const SEGUNDOS_DE_CLIP = 8;
+
 /** La pieza de la biblioteca se llama así y no cambia nunca. */
 export const ID_BIBLIOTECA = 'biblioteca';
 
@@ -81,7 +101,7 @@ export function tomasDeBiblioteca({ elenco = ELENCO, recursos = RECURSOS } = {})
         i: salida.length,
         escena: 0,
         texto: '',
-        segundos: 6,
+        segundos: SEGUNDOS_DE_CLIP,
         medida: false,
         clave: claveDeRecurso(r.id, v.id),
         recurso: r.id,
@@ -90,8 +110,12 @@ export function tomasDeBiblioteca({ elenco = ELENCO, recursos = RECURSOS } = {})
         plano: planoDeRecurso(r, v),
         tipoImagen: 'reconstruccion',
         claseVisual: 'recurso',
-        // LOS RECURSOS NO LLEVAN CLIP. Son fondos y objetos: un archivador quieto
-        // con un recorrido de cámara se ve igual de bien y cuesta cero.
+        // LOS RECURSOS NO LLEVAN CLIP POR DEFECTO: son fondos y objetos, y un
+        // archivador quieto con un recorrido de cámara se ve bien y cuesta cero.
+        // Eso es una PROPUESTA de gasto, no una prohibición: desde su ficha se le
+        // puede pedir el clip a cualquiera —«todas las imágenes deben tener su
+        // botón para generar el video»— y entonces esta marca se pone a mano y
+        // `sincronizarBiblioteca` la conserva.
         movimiento: false,
         reusa: null,
         audio: null,
@@ -110,7 +134,7 @@ export function tomasDeBiblioteca({ elenco = ELENCO, recursos = RECURSOS } = {})
         i: salida.length,
         escena: 1,
         texto: '',
-        segundos: 6,
+        segundos: SEGUNDOS_DE_CLIP,
         medida: false,
         clave: claveDePersona(a.id, v.id),
         recurso: '',
@@ -125,8 +149,8 @@ export function tomasDeBiblioteca({ elenco = ELENCO, recursos = RECURSOS } = {})
         // EL REPARTO SÍ LLEVA CLIP, y es la inversión que da sentido a todo esto:
         // un plano de alguien declarando tiene que MOVERSE o se nota que es una
         // foto. Se paga una vez y sirve para todos sus testimonios de todos los
-        // episodios — el montaje repite la entrada con `-stream_loop -1`, así que
-        // un clip de seis segundos cubre una toma de veinticinco.
+        // episodios — el montaje estira el clip con `setpts` hasta cubrir la toma,
+        // así que uno de ocho segundos cubre una de dieciséis sin repetirse.
         movimiento: true,
         reusa: null,
         audio: null,
@@ -263,6 +287,13 @@ export function sincronizarBiblioteca(pieza) {
       ...nueva,
       i: vieja.i,
       huella,
+      // EL MOVIMIENTO QUE SE PIDIÓ A MANO NO SE PIERDE. El catálogo dice dónde
+      // gastar POR DEFECTO —el reparto sí, los sitios no—, pero cualquier imagen
+      // puede pasar a clip desde su ficha, y eso marca la toma. Si aquí se
+      // recompusiera desde el catálogo, un archivador animado a mano volvería a
+      // «sin movimiento» en la siguiente carga y el montaje pondría la foto fija
+      // teniendo el clip pagado al lado.
+      movimiento: vieja.movimiento === true || nueva.movimiento,
       imagen: vieja.imagen || null,
       video: vieja.video || null,
       heredado: vieja.heredado || null,

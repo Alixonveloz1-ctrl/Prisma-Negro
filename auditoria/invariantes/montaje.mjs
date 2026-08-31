@@ -721,7 +721,72 @@ export const invariantes = [
       ...ctx,
       guion: ctx.guion
         .replace(/-stream_loop -1 -i ('[^']*_vid\.mp4')/g, '-i $1')
-        .replace(/(crop=\d+:\d+,fps=\d+),setsar=1/g, '$1,tpad=stop_mode=clone:stop_duration=9,setsar=1'),
+        .replace(/(crop=\d+:\d+),(setpts)/g, '$1,tpad=stop_mode=clone:stop_duration=9,$2'),
+    }),
+  },
+
+  {
+    nombre: 'un-clip-corto-se-estira-en-vez-de-repetirse',
+    dice: '«El director decidió que una escena tiene once segundos, pero hay que recordar que Veo solo genera videos de máximo ocho. No quiero que se repita el video, porque eso va a dañar la continuidad: lo que hay que ajustar es la velocidad, no importa que esté un poco más lento para que alcance a llenar esos once segundos.» Y tiene razón: a los ocho segundos la persona vuelve a hacer el mismo gesto y se ve que es un bucle. Un plano documental al 70 % de velocidad se lee como una decisión de montaje; un bucle se lee como un error. Y la duración del clip SE MIDE sobre el archivo, no se supone: el generador entrega lo que quiere dentro de su lista cerrada y un clip heredado de la biblioteca dura lo suyo, no lo de esta toma.',
+    comprobar(ctx) {
+      const g = ctx.guion;
+      const conMovimiento = ctx.hoja.tomas.filter((t) => t.movimiento);
+      const fallos = [];
+      if (!conMovimiento.length) return ['El proyecto de prueba no trae ninguna toma con clip.'];
+
+      // 1 · SE MIDE EL ARCHIVO. Una duración supuesta deja el segmento corto sin
+      // avisar el día que el generador entregue otra cosa.
+      const sondas = [...g.matchAll(/D=\$\(ffprobe [^\n]*format=duration[^\n]*\)/g)].length;
+      if (sondas !== conMovimiento.length) {
+        fallos.push(`${sondas} clips se miden con ffprobe, para ${conMovimiento.length} con movimiento.`);
+      }
+
+      // 2 · Y SE ESTIRA EL TIEMPO con lo medido.
+      const factores = [...g.matchAll(/L=\$\(LC_ALL=C awk [^\n]*\)/g)];
+      if (factores.length !== conMovimiento.length) {
+        fallos.push(`${factores.length} clips calculan su factor, para ${conMovimiento.length} con movimiento.`);
+      }
+      for (const [linea] of factores) {
+        // El factor es toma ÷ clip. Al revés sería cámara rápida.
+        if (!/f\s*=\s*t\s*\/\s*\(?d/.test(linea)) fallos.push('El factor no se calcula como duración de la toma entre la del clip.');
+        // Y hay un tope: más allá, cámara lenta evidente. Sin tope, un clip de dos
+        // segundos en una toma de veinte saldría a un décimo de velocidad.
+        const tope = Number(/-v m=([\d.]+)/.exec(linea)?.[1] || 0);
+        if (!(tope >= 1.5 && tope <= 3)) {
+          fallos.push(`El tope de estirado es ${tope}: por encima de tres es cámara lenta evidente y por debajo de 1,5 no cubre nada.`);
+        }
+        // El punto muerto: un clip que ya llega no se toca.
+        if (!/f <= 1\.0\d/.test(linea)) fallos.push('Un clip que ya cubre la toma se estiraría igual.');
+        break;
+      }
+
+      // 3 · `setpts` VA ANTES DE `fps`. Después, el remuestreo a fotogramas fijos ya
+      // habría fijado los tiempos y estirarlos luego descuadra la duración.
+      for (const linea of g.split('\n')) {
+        if (!/setpts=\$\{L\}\*PTS/.test(linea)) continue;
+        const a = linea.indexOf('setpts=${L}*PTS');
+        const b = linea.indexOf(`fps=`, a);
+        if (b < 0) fallos.push('El clip estirado no se remuestrea a fotogramas fijos: la duración quedaría a la deriva.');
+        // Y el filtro tiene que ir entre comillas DOBLES o el shell no expande el
+        // factor y ffmpeg se encuentra un `${L}` donde espera un número.
+        if (!/-filter_complex "/.test(linea)) {
+          fallos.push('El filtro del clip va entre comillas simples: el factor llegaría literal a ffmpeg.');
+        }
+      }
+
+      // 4 · Y EL BUCLE SE QUEDA de red de seguridad, para lo que no cabe en el tope.
+      if (!/-stream_loop -1 -i '[^']*_vid\.mp4'/.test(g)) {
+        fallos.push('Se quitó el bucle: un clip demasiado corto para estirarlo dejaría el segmento sin cubrir.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: sin estirar, solo con el bucle.
+    romper: (ctx) => ({
+      ...ctx,
+      guion: ctx.guion
+        .replace(/^\s*D=\$\(ffprobe[^\n]*\n/gm, '')
+        .replace(/^\s*L=\$\(LC_ALL=C awk[^\n]*\n/gm, '')
+        .replace(/,setpts=\$\{L\}\*PTS/g, ''),
     }),
   },
 ];

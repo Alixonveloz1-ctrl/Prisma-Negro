@@ -498,6 +498,108 @@ export const invariantes = [
   },
 
   {
+    nombre: 'la-cuota-agotada-para-la-tanda-pero-no-pierde-la-unidad',
+    dice: '«Llega el momento en que el mensaje dice que se está generando pero no se genera nada. Media hora y no se generó nada. Debería ponerse en cola para que cuando ya se quite el límite continúe la generación; si no, de nada me sirve dar el botón de generar todo.» La llamada esperaba sus ocho minutos a que se abriera la ventana de cuota y, si seguía cerrada, lanzaba. La cola daba esa unidad POR PERDIDA y pasaba a la siguiente, que se estrellaba contra la misma pared, esperaba otros ocho minutos y también se perdía. Ciento cuarenta veces. La cuota no es un fallo: es un «ahora no», y lo que tiene que parar es la TANDA, no la unidad.',
+    async comprobar(ctx) {
+      const { Cola } = ctx.fn;
+      const fallos = [];
+
+      // Una tanda de tres en la que la primera unidad choca dos veces con la cuota
+      // antes de salir. Se sustituye la espera —son minutos— por nada: lo que se
+      // comprueba es QUÉ HACE con la unidad, no cuánto duerme.
+      const cola = new Cola();
+      let esperas = 0;
+      cola.esperarConCuenta = async () => {
+        esperas++;
+      };
+
+      const intentos = new Map();
+      const escritas = [];
+      const r = await cola.ejecutar(
+        'prueba',
+        [0, 1, 2],
+        async (u) => {
+          const n = (intentos.get(u) || 0) + 1;
+          intentos.set(u, n);
+          if (u === 0 && n <= 2) {
+            const e = new Error('Resource has been exhausted');
+            e.estado = 429;
+            throw e;
+          }
+          return `hecha ${u}`;
+        },
+        { alTerminarUno: (res) => escritas.push(res) },
+      );
+
+      if (!esperas) fallos.push('La cuota agotada no para la tanda: se pasa a la siguiente y choca igual.');
+      if (r.fallos.length) {
+        fallos.push(`La unidad que topó con la cuota se dio por perdida: ${r.fallos[0].error}`);
+      }
+      if (escritas.length !== 3) {
+        fallos.push(`Se guardaron ${escritas.length} de 3: la unidad que esperó no llegó a generarse.`);
+      }
+      if (intentos.get(0) !== 3) {
+        fallos.push(`La unidad de la cuota se intentó ${intentos.get(0)} veces: no se reintenta la MISMA.`);
+      }
+      if (r.hechas !== 3) fallos.push(`La cuenta dice ${r.hechas} de 3: las esperas se cuentan como avance.`);
+
+      // Y un fallo que NO es cuota sigue sin parar la tanda: cuarenta tomas buenas
+      // no se tiran porque la treinta y uno diera error.
+      const cola2 = new Cola();
+      cola2.esperarConCuenta = async () => {};
+      const r2 = await cola2.ejecutar(
+        'prueba',
+        [0, 1],
+        async (u) => {
+          if (u === 0) throw Object.assign(new Error('descripción inaceptable'), { estado: 400 });
+          return 'ok';
+        },
+        { alTerminarUno: () => {} },
+      );
+      if (r2.fallos.length !== 1 || r2.hechas !== 2) {
+        fallos.push('Un fallo que no es de cuota ya no se anota y se sigue: o tumba la tanda o se traga el error.');
+      }
+
+      // Y hay un final: una cuota DIARIA no se abre hoy, y esperar para siempre con
+      // la pantalla encendida no ayuda a nadie.
+      const texto = ctx.fuentes.get('app/cola.js') || '';
+      if (!/TOPE_DE_ESPERA_TOTAL/.test(texto)) {
+        fallos.push('No hay tope de espera total: con una cuota diaria esperaría para siempre.');
+      }
+      // La cuenta atrás a la vista. Sin ella, media hora esperando se ve EXACTAMENTE
+      // igual que la aplicación colgada, que es de lo que se quejaba.
+      if (!/esperarConCuenta/.test(texto) || !/min /.test(texto)) {
+        fallos.push('La espera no lleva cuenta atrás: una espera larga y muda parece que se colgó.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: la cuota se traga la unidad y la tanda pasa a la
+    // siguiente.
+    romper: (ctx) => {
+      const Original = ctx.fn.Cola;
+      class ColaVieja extends Original {
+        async ejecutar(nombre, unidades, hacerUno, opciones = {}) {
+          // El comportamiento de antes: cada unidad que topa con la cuota se anota
+          // como fallo y se sigue.
+          const fallos = [];
+          let hechas = 0;
+          for (let i = 0; i < unidades.length; i++) {
+            try {
+              const res = await hacerUno(unidades[i], i, undefined, () => {});
+              await opciones.alTerminarUno?.(res, unidades[i], i);
+            } catch (e) {
+              fallos.push({ i, unidad: unidades[i], error: String(e.message || e) });
+            }
+            hechas++;
+          }
+          return { hechas, total: unidades.length, fallos, detenida: false };
+        }
+      }
+      return conFuncion(ctx, 'Cola', ColaVieja);
+    },
+  },
+
+  {
     nombre: 'la-cuota-agotada-se-espera-no-se-descarta',
     dice: 'Vertex limita POR MINUTO, y cuando se pasa contesta 429 «Resource has been exhausted». Eso es un «espera», no un «no». Tratarlo como 4xx definitivo dejó 33 de 59 imágenes sin generar tras una hora, con un mensaje que ni siquiera dice que sea cuestión de esperar.',
     comprobar(ctx) {
@@ -604,6 +706,50 @@ export const invariantes = [
     romper: (ctx) =>
       editando(ctx, 'app/api.js', (t) =>
         t.replace(/^const esperar = .*$/m, '// (quitada a propósito)'),
+      ),
+  },
+
+  {
+    nombre: 'una-peticion-que-no-vuelve-se-corta-en-vez-de-colgar-la-tanda',
+    dice: '«De repente el mensaje dice como que se está generando, pero no se genera nada. Pasa media hora y no se generó nada.» `fetch` NO TIENE TIEMPO DE ESPERA. Si la petición sale y la respuesta no vuelve nunca —red móvil que cambia de celda, una conexión a medias, un socket que nadie cierra—, el `await` se queda ahí para siempre: no lanza, no reintenta, no avisa. La cola se para en esa unidad y el cartel dice «generando» hasta que alguien recarga la página. Con un tope, eso es un tropiezo de red más y el reintento de siempre lo arregla.',
+    async comprobar(ctx) {
+      const { humoDeLaPuerta } = await import('../api-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/api.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/api.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+      const fallos = [];
+
+      // El arnés recorre dos caminos con una petición QUE NO VUELVE NUNCA: uno que
+      // luego sí contesta —tiene que salir bien, reintentando— y otro que no
+      // contesta jamás —tiene que rendirse con una frase—. Sin tope, los dos se
+      // quedan colgados y el arnés lo dice.
+      const r = await humoDeLaPuerta({ parche });
+      fallos.push(...r.fallos.filter((f) => /cuelga|colgad/i.test(f)));
+
+      // Y el tope tiene que ser razonable: la función de la plataforma no dura más
+      // de un minuto, así que menos de eso cortaría llamadas buenas, y mucho más
+      // deja media hora de espera antes de darse cuenta.
+      const api = ctx.fuentes.get('app/api.js') || '';
+      const tope = Number(/const TOPE_DE_PETICION = (\d+)/.exec(api)?.[1] || 0);
+      if (!(tope >= 60000 && tope <= 300000)) {
+        fallos.push(`El tope de una petición es ${tope} ms: fuera del rango que tiene sentido (60 s a 5 min).`);
+      }
+      // El reloj se suelta SIEMPRE. Sin esto, una tanda de 141 imágenes deja 141
+      // temporizadores vivos esperando para abortar peticiones que ya terminaron.
+      if (!/finally \{\s*reloj\.soltar\(\);/.test(api)) {
+        fallos.push('El temporizador del tope no se suelta al terminar la petición: se acumulan uno por llamada.');
+      }
+      // Y detenerse a mano tiene que seguir distinguiéndose de agotarse el tiempo:
+      // los dos abortan, pero uno es una decisión y el otro una avería.
+      if (!/if \(senal\?\.aborted\) throw new ErrorPuerta\('Detenido\.'\)/.test(api)) {
+        fallos.push('Un tiempo agotado se confundiría con haber pulsado Detener.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: sin tope, la señal de fuera y punto.
+    romper: (ctx) =>
+      editando(ctx, 'app/api.js', (t) =>
+        t.replace('const reloj = conTope(senal, tope);', 'const reloj = { signal: senal, soltar: () => {} };'),
       ),
   },
 

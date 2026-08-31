@@ -94,7 +94,7 @@ const VISTAS = [
 
 let P = null;
 let casos = [];
-const cola = new Cola({ alProgresar: pintarProgreso, alAviso: (m) => avisar('paso4', m) });
+const cola = new Cola({ alProgresar: pintarProgreso, alAviso: (m, donde) => avisar(donde || 'paso4', m) });
 // Una cola aparte para la investigación: su progreso va en el paso 2 y puede
 // solaparse con una generación en marcha sin pisarle la barra.
 const colaInvestiga = new Cola({
@@ -124,11 +124,28 @@ function registro(donde, lineas) {
   caja.appendChild(d);
 }
 
-function pintarProgreso({ fase, hechas, total, estado: e, fallos }) {
-  $('barra').style.width = total ? `${Math.round((hechas / total) * 100)}%` : '0';
-  const cierre = e === 'detenida' ? ' · detenido' : e === 'termina' ? ' · listo' : '';
-  $('progreso').textContent = `${fase}: ${hechas} de ${total}${fallos ? ` · ${fallos} con fallo` : ''}${cierre}`;
-  $('b-detener').disabled = e === 'termina' || e === 'detenida';
+/**
+ * El progreso, EN LA SECCIÓN DONDE SE ESTÁ TRABAJANDO.
+ *
+ * «Dice como que se está generando, pero no se genera nada.» Parte de eso era
+ * literal: la barra y los avisos se pintaban SIEMPRE en `paso4`, que desde que hay
+ * secciones vive en «El episodio». Generando el archivo del canal desde Archivo, el
+ * progreso, la cuenta atrás de la cuota y los errores salían en una pantalla que no
+ * estaba mirando. La tanda dice dónde va, y si esa sección no tiene barra propia,
+ * cae en la de siempre.
+ */
+function pintarProgreso({ fase, hechas, total, estado: e, fallos, donde = 'paso4' }) {
+  const barra = $(`barra-${donde}`) || $('barra');
+  const texto = $(`progreso-${donde}`) || $('progreso');
+  if (barra) barra.style.width = total ? `${Math.round((hechas / total) * 100)}%` : '0';
+  const cierre =
+    e === 'detenida' ? ' · detenido' : e === 'termina' ? ' · listo' : e === 'espera' ? ' · esperando cuota' : '';
+  if (texto) texto.textContent = `${fase}: ${hechas} de ${total}${fallos ? ` · ${fallos} con fallo` : ''}${cierre}`;
+  const parado = e === 'termina' || e === 'detenida';
+  for (const b of ['b-detener', 'b-detener-biblioteca']) {
+    const el = $(b);
+    if (el) el.disabled = parado;
+  }
 }
 
 function accion(boton, hacer, donde = 'paso4') {
@@ -1347,10 +1364,16 @@ accion(
 
 // ── Paso 3: las fases que gastan ──────────────────────────────────────────────
 
-$('b-detener').addEventListener('click', () => {
-  cola.detener();
-  colaInvestiga.detener();
-});
+// Detener vive donde se está generando. El de Inicio para la producción entera; el
+// del Archivo para la tanda de la biblioteca — y son la MISMA cola, así que da
+// igual cuál se pulse: lo que no puede pasar es tener que cambiar de pantalla para
+// parar algo que está corriendo delante.
+for (const id of ['b-detener', 'b-detener-biblioteca']) {
+  $(id)?.addEventListener('click', () => {
+    cola.detener();
+    colaInvestiga.detener();
+  });
+}
 
 /** Dirige si hace falta: sin ficha de plano no hay ni imagen ni clip. */
 async function asegurarDireccion() {
@@ -1733,9 +1756,21 @@ function tarjetaDeBiblioteca(x, tomas, mia) {
     cuerpo.appendChild(v);
   }
 
-  // 3 · EL CLIP, y SOLO sobre lo aprobado. Ver `clipsPosibles`: sale de la imagen
-  // y es la fase más cara, así que primero se mira la imagen.
-  if (x.movimiento && x.video !== 'ok' && P.config.movimiento.politica.bibliotecaConVideo) {
+  // 3 · EL CLIP, EN TODAS, y solo sobre lo aprobado.
+  //
+  // «Todas las imágenes deben tener su botón para generar el video, todas. Mientras
+  //  más videos logres generar, mucho mejor para que se vea el documental. Yo
+  //  decidiré cuáles utilizar; lo que no lleve video usará la imagen.»
+  //
+  // El botón salía solo donde el catálogo proponía movimiento —el reparto— y los
+  // sitios y objetos no lo tenían: para animar un archivador no había ninguna
+  // manera. Y era una decisión mía disfrazada de dato: el catálogo propone dónde
+  // GASTAR POR DEFECTO, no dónde se PUEDE. Ahora se puede en todas y lo decide
+  // quien paga, que es como está el resto de la herramienta.
+  //
+  // Lo que no se toca: sigue haciendo falta la imagen y su visto bueno. El clip
+  // sale de la imagen y es la fase más cara.
+  if (x.video !== 'ok' && P.config.movimiento.politica.bibliotecaConVideo) {
     const c = document.createElement('button');
     c.className = 'btn chico fantasma';
     const enFila = estadoEnFilaBiblioteca(x.i);
@@ -1837,6 +1872,9 @@ accion(
           alEsperar,
         }),
       {
+        // EN SU SECCIÓN. Sin esto, el progreso y la cuenta atrás de la cuota se
+        // pintan en «El episodio», que es otra pantalla.
+        donde: 'biblioteca',
         alTerminarUno: async (nueva) => {
           const k = z.tomas.findIndex((t) => t.i === nueva.i);
           if (k >= 0) z.tomas[k] = nueva;
@@ -1900,6 +1938,9 @@ accion(
           aviso: (m) => ($('progreso').textContent = m),
         }),
       {
+        // EN SU SECCIÓN. Sin esto, el progreso y la cuenta atrás de la cuota se
+        // pintan en «El episodio», que es otra pantalla.
+        donde: 'biblioteca',
         alTerminarUno: async (nueva) => {
           const k = z.tomas.findIndex((t) => t.i === nueva.i);
           if (k >= 0) z.tomas[k] = nueva;
@@ -2749,6 +2790,12 @@ async function clipDeBiblioteca(i, decir = () => {}) {
   ) {
     return;
   }
+  // Se marca ANTES de generar y se guarda, igual que en el episodio: si el clip
+  // tarda diez minutos y se cierra la pestaña, al volver la toma ya sabe que lleva
+  // movimiento y solo le falta el clip. Y es lo que hace que un sitio que el
+  // catálogo NO proponía animar se quede animado — `sincronizarBiblioteca` conserva
+  // la marca en vez de volver a ponerla a lo que dice el catálogo.
+  z.tomas[k].movimiento = true;
   await guardar();
   filaClips.push({ zid: bibliotecaFase.ID_BIBLIOTECA, i, decir });
   decir(estadoEnFilaBiblioteca(i) || 'En cola');

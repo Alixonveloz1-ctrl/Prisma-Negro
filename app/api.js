@@ -62,6 +62,49 @@ const dormir = (ms, senal) =>
   });
 
 /**
+ * EL TOPE DE TIEMPO DE UNA PETICIÓN. Sin esto, una llamada colgada cuelga TODO.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «De repente el mensaje dice como que se está generando, pero no se genera nada.
+ *  Pasa media hora y no se generó nada.»
+ *
+ * `fetch` NO TIENE TIEMPO DE ESPERA. Si la petición sale y la respuesta no vuelve
+ * nunca —red móvil que cambia de celda, una conexión que se queda a medias, la
+ * plataforma que no cierra el socket—, el `await` se queda ahí para siempre. No
+ * lanza, no reintenta, no avisa: la cola se para en esa unidad y el cartel se
+ * queda diciendo «generando» hasta que alguien recarga la página. Media hora, o
+ * las que sean.
+ *
+ * Con un tope, una petición que no vuelve se corta, se cuenta como fallo de red y
+ * el reintento de siempre la vuelve a lanzar. Que es lo que ya hacía con los
+ * cortes de red que SÍ dan error.
+ *
+ * Dos minutos: la función de la plataforma no puede durar más de uno, y el resto
+ * es margen para subir la carga por una red móvil lenta.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+const TOPE_DE_PETICION = 120000;
+
+function conTope(senal, ms) {
+  const control = new AbortController();
+  const t = setTimeout(() => control.abort(), ms);
+  const propagar = () => {
+    clearTimeout(t);
+    control.abort();
+  };
+  senal?.addEventListener('abort', propagar, { once: true });
+  return {
+    signal: control.signal,
+    // Se llama SIEMPRE al terminar la petición: si no, cada llamada deja un
+    // temporizador vivo y en una tanda de 141 imágenes eso son 141 relojes.
+    soltar: () => {
+      clearTimeout(t);
+      senal?.removeEventListener('abort', propagar);
+    },
+  };
+}
+
+/**
  * La espera entre reintentos: crece con cada intento y no pasa de ocho segundos.
  *
  * ─────────────────────────────────────────────────────────────────────────────
@@ -201,7 +244,7 @@ export class ErrorPuerta extends Error {
  * saturación del proveedor. Un 4xx no se reintenta —volver a pedir lo mismo da lo
  * mismo— y un 413 menos todavía: eso es tamaño, y el tamaño no cambia por insistir.
  */
-export async function llamar(modo, datos = {}, { reintentos = 2, senal, alEsperar } = {}) {
+export async function llamar(modo, datos = {}, { reintentos = 2, senal, alEsperar, tope = TOPE_DE_PETICION } = {}) {
   let ultimo = null;
   // Los «espera» tienen su propia cuenta y su propia paciencia: una ventana de
   // cuota se mide en minutos, no en los tres segundos que daban los reintentos
@@ -219,6 +262,10 @@ export async function llamar(modo, datos = {}, { reintentos = 2, senal, alEspera
     }
 
     let r;
+    // `tope` se puede bajar desde fuera. Existe para poder COMPROBAR que una
+    // petición colgada se corta: con dos minutos fijos, la comprobación tardaría
+    // dos minutos y nadie la ejecutaría nunca.
+    const reloj = conTope(senal, tope);
     try {
       r = await fetch(PUERTA, {
         method: 'POST',
@@ -237,13 +284,24 @@ export async function llamar(modo, datos = {}, { reintentos = 2, senal, alEspera
           // Va la ÚLTIMA a propósito: ningún campo de carga útil puede pisarla.
           acceso: claveAcceso,
         }),
-        signal: senal,
+        signal: reloj.signal,
       });
     } catch (e) {
+      // Detenerse a mano y agotarse el tiempo abortan igual, así que hay que
+      // distinguirlos por QUIÉN abortó: si la señal de fuera está abortada, lo
+      // pidió la persona. Si no, la petición se colgó y hay que reintentarla.
       if (senal?.aborted) throw new ErrorPuerta('Detenido.');
-      ultimo = new ErrorPuerta('No se pudo hablar con el servidor. ¿Hay conexión?');
+      ultimo =
+        e?.name === 'AbortError'
+          ? new ErrorPuerta(
+              'La petición se quedó colgada sin respuesta y se cortó a los dos minutos. Se reintenta sola.',
+              { estado: 408, motivo: 'colgada' },
+            )
+          : new ErrorPuerta('No se pudo hablar con el servidor. ¿Hay conexión?');
       await esperar(intento, senal);
       continue;
+    } finally {
+      reloj.soltar();
     }
 
     let cuerpo;

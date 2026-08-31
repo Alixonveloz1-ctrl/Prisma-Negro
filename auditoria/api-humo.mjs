@@ -153,6 +153,26 @@ const CAMINOS = [
     sinRepetir: true,
   },
   {
+    // EL CUELGUE. «De repente dice que se está generando, pero no se genera nada.
+    // Pasa media hora y no se generó nada.»
+    //
+    // `fetch` NO TIENE TIEMPO DE ESPERA: si la petición sale y la respuesta no
+    // vuelve nunca —red móvil que cambia de celda, un socket que nadie cierra—, el
+    // `await` se queda ahí para siempre. No lanza, no reintenta, no avisa: la cola
+    // se para en esa unidad y el cartel dice «generando» hasta que alguien recarga.
+    nombre: 'la petición se cuelga y luego vuelve',
+    respuestas: [{ tipo: 'cuelga' }, { tipo: 'ok', cuerpo: { ok: true, texto: 'listo' } }],
+    tope: 20,
+    esperado: 'vale',
+  },
+  {
+    nombre: 'la petición se cuelga siempre y se rinde con una frase',
+    respuestas: [{ tipo: 'cuelga' }],
+    tope: 20,
+    esperado: 'falla',
+    dice: /colgada/i,
+  },
+  {
     nombre: 'se pulsa detener',
     respuestas: [{ tipo: 'revienta' }],
     abortar: true,
@@ -213,6 +233,21 @@ export async function humoDeLaPuerta({ parche = null } = {}) {
     generaciones++;
     const paso = cola.length > 1 ? cola.shift() : cola[0];
     if (paso.tipo === 'revienta') throw new TypeError('Failed to fetch');
+    // UNA PETICIÓN QUE NO VUELVE. Solo se resuelve si alguien aborta la señal, que
+    // es exactamente lo que tiene que hacer el tope de tiempo. Sin ese tope, esta
+    // promesa no se cumple nunca y la llamada se queda colgada — que es el fallo
+    // que este camino viene a cazar.
+    if (paso.tipo === 'cuelga') {
+      return new Promise((_res, rej) => {
+        const s = opciones.signal;
+        if (s?.aborted) return rej(Object.assign(new Error('abortada'), { name: 'AbortError' }));
+        s?.addEventListener(
+          'abort',
+          () => rej(Object.assign(new Error('abortada'), { name: 'AbortError' })),
+          { once: true },
+        );
+      });
+    }
     if (paso.tipo === 'crudo') {
       return new Response(paso.texto, { status: paso.estado, headers: { 'Content-Type': 'text/html' } });
     }
@@ -254,12 +289,25 @@ export async function humoDeLaPuerta({ parche = null } = {}) {
 
       let salida = null;
       let error = null;
+      const COLGADA = Symbol('colgada');
       try {
-        salida = await api.llamar('texto', c.datos || { instruccion: 'x' }, {
-          reintentos: 2,
-          senal: c.abortar ? control.signal : undefined,
-          alEsperar: () => {},
-        });
+        // El salvavidas va con el reloj DE VERDAD —`antes.setTimeout`—, porque el de
+        // este arnés dispara al instante. Si la llamada no vuelve en un segundo y
+        // medio, es que se colgó: se dice, en vez de colgar la auditoría entera.
+        const salvavidas = new Promise((res) => antes.setTimeout(() => res(COLGADA), 1500));
+        salida = await Promise.race([
+          api.llamar('texto', c.datos || { instruccion: 'x' }, {
+            reintentos: 2,
+            senal: c.abortar ? control.signal : undefined,
+            alEsperar: () => {},
+            ...(c.tope ? { tope: c.tope } : {}),
+          }),
+          salvavidas,
+        ]);
+        if (salida === COLGADA) {
+          fallos.push(`«${c.nombre}»: la llamada NO VUELVE. Sin tope de tiempo, la cola se para aquí para siempre.`);
+          continue;
+        }
       } catch (e) {
         error = e;
       }
