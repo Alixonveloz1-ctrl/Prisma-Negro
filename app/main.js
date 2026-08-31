@@ -134,13 +134,18 @@ function registro(donde, lineas) {
  * estaba mirando. La tanda dice dónde va, y si esa sección no tiene barra propia,
  * cae en la de siempre.
  */
-function pintarProgreso({ fase, hechas, total, estado: e, fallos, donde = 'paso4' }) {
+function pintarProgreso({ fase, hechas, generadas, total, estado: e, fallos, donde = 'paso4' }) {
   const barra = $(`barra-${donde}`) || $('barra');
   const texto = $(`progreso-${donde}`) || $('progreso');
   if (barra) barra.style.width = total ? `${Math.round((hechas / total) * 100)}%` : '0';
   const cierre =
     e === 'detenida' ? ' · detenido' : e === 'termina' ? ' · listo' : e === 'espera' ? ' · esperando cuota' : '';
-  if (texto) texto.textContent = `${fase}: ${hechas} de ${total}${fallos ? ` · ${fallos} con fallo` : ''}${cierre}`;
+  // LA CIFRA QUE SE ENSEÑA ES LA DE LO GENERADO Y ANOTADO, no la de vueltas del
+  // bucle: «dice que generó dos imágenes, pero es mentira, solo generó una». La
+  // barra sí avanza con las despachadas —si no, se quedaría quieta con los
+  // fallos— y por eso son dos cosas distintas.
+  const n = generadas ?? hechas;
+  if (texto) texto.textContent = `${fase}: ${n} de ${total}${fallos ? ` · ${fallos} con fallo` : ''}${cierre}`;
   const parado = e === 'termina' || e === 'detenida';
   for (const b of ['b-detener', 'b-detener-biblioteca']) {
     const el = $(b);
@@ -1504,12 +1509,16 @@ accion('b-movimiento', async () => {
 // monta nunca.
 
 /** La pieza de biblioteca, creada o puesta al día desde el catálogo. */
+/**
+ * La pieza de biblioteca, creada o puesta al día.
+ *
+ * La regla que importa —NADIE cambia el objeto de la pieza— vive en
+ * `sincronizarEnSitio`, junto al sincronizador. Está ahí y no aquí porque es una
+ * regla del modelo de datos, y porque en la pantalla no se podía comprobar: la
+ * invariante que la vigila necesita ejecutarla.
+ */
 function laBiblioteca() {
-  const previa = estado.bibliotecaDe(P);
-  const z = bibliotecaFase.sincronizarBiblioteca(previa);
-  if (previa) P.piezas[P.piezas.indexOf(previa)] = z;
-  else P.piezas.push(z);
-  return z;
+  return bibliotecaFase.sincronizarEnSitio(P.piezas);
 }
 
 function pintarBiblioteca() {
@@ -1876,8 +1885,21 @@ accion(
         // pintan en «El episodio», que es otra pantalla.
         donde: 'biblioteca',
         alTerminarUno: async (nueva) => {
-          const k = z.tomas.findIndex((t) => t.i === nueva.i);
-          if (k >= 0) z.tomas[k] = nueva;
+          // LA PIEZA SE BUSCA FRESCA, y si la toma no está SE GRITA.
+          //
+          // Aquí había un `if (k >= 0)` que se tragaba el caso de no encontrarla:
+          // la imagen se había generado, se había pagado y se había subido, y la
+          // anotación se tiraba sin una palabra. Un `if` que descarta en silencio
+          // el resultado de la fase más cara no es una guarda, es un agujero.
+          const actual = estado.bibliotecaDe(P);
+          const k = actual ? actual.tomas.findIndex((t) => t.i === nueva.i) : -1;
+          if (k < 0) {
+            throw new Error(
+              `La imagen ${nueva.i} se generó y se pagó, pero su ficha ya no está en el archivo. ` +
+                'No se ha perdido: está en el almacén y al volver a darle se recupera sin pagarla otra vez.',
+            );
+          }
+          actual.tomas[k] = nueva;
           await guardar();
           pintarBiblioteca();
         },
@@ -1942,8 +1964,21 @@ accion(
         // pintan en «El episodio», que es otra pantalla.
         donde: 'biblioteca',
         alTerminarUno: async (nueva) => {
-          const k = z.tomas.findIndex((t) => t.i === nueva.i);
-          if (k >= 0) z.tomas[k] = nueva;
+          // LA PIEZA SE BUSCA FRESCA, y si la toma no está SE GRITA.
+          //
+          // Aquí había un `if (k >= 0)` que se tragaba el caso de no encontrarla:
+          // la imagen se había generado, se había pagado y se había subido, y la
+          // anotación se tiraba sin una palabra. Un `if` que descarta en silencio
+          // el resultado de la fase más cara no es una guarda, es un agujero.
+          const actual = estado.bibliotecaDe(P);
+          const k = actual ? actual.tomas.findIndex((t) => t.i === nueva.i) : -1;
+          if (k < 0) {
+            throw new Error(
+              `La imagen ${nueva.i} se generó y se pagó, pero su ficha ya no está en el archivo. ` +
+                'No se ha perdido: está en el almacén y al volver a darle se recupera sin pagarla otra vez.',
+            );
+          }
+          actual.tomas[k] = nueva;
           await guardar();
           pintarBiblioteca();
         },
@@ -2161,10 +2196,15 @@ function informar(r, que, donde = 'paso4') {
     ]);
   }
   if (r.fallos.length) {
-    avisar(donde, `${que}: ${r.fallos.length} de ${r.total} fallaron. Vuelve a darle: solo repite lo que falta.`, 'malo');
+    avisar(
+      donde,
+      `${que}: ${r.generadas ?? r.hechas} generadas y ${r.fallos.length} con fallo, de ${r.total}. ` +
+        'Vuelve a darle: solo repite lo que falta.',
+      'malo',
+    );
     return registro(donde, r.fallos.map((f) => `· ${f.error}`));
   }
-  avisar(donde, `${que}: ${r.hechas} de ${r.total}, sin fallos.`, 'bueno');
+  avisar(donde, `${que}: ${r.generadas ?? r.hechas} de ${r.total}, sin fallos.`, 'bueno');
 }
 
 // ── Vista previa ──────────────────────────────────────────────────────────────

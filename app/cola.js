@@ -123,6 +123,20 @@ export class Cola {
     const total = unidades.length;
     const fallos = [];
     let hechas = 0;
+    // ─────────────────────────────────────────────────────────────────────────
+    // DOS CIFRAS, Y NO UNA. «Dice que generó dos imágenes, pero es mentira.»
+    //
+    // Había una sola cuenta, `hechas`, que subía tanto al generar como al fallar,
+    // y la pantalla la enseñaba como si fueran las generadas. Así que «2 de 126»
+    // podía ser una imagen y un fallo, o dos imágenes, o —como pasó— una imagen y
+    // otra que se generó pero cuya anotación se perdió. Una cifra que a veces
+    // miente es peor que no tenerla: se decide con ella.
+    //
+    // `hechas` es cuántas unidades se han despachado —lo que mueve la barra— y
+    // `generadas` es cuántas salieron Y SE ANOTARON. La pantalla enseña la
+    // segunda, que es la que él está contando con los ojos.
+    // ─────────────────────────────────────────────────────────────────────────
+    let generadas = 0;
     // Cuántas veces seguidas ha tocado esperar por la cuota, y cuánto se lleva
     // esperado en total. Lo primero decide cuánto se espera la próxima; lo segundo
     // es lo que impide esperar para siempre por una cuota diaria.
@@ -130,7 +144,7 @@ export class Cola {
     let esperadoTotal = 0;
 
     const decir = (m) => this.alAviso(m, donde);
-    this.alProgresar({ fase: nombre, hechas: 0, total, estado: 'empieza', donde });
+    this.alProgresar({ fase: nombre, hechas: 0, generadas: 0, total, estado: 'empieza', donde });
 
     try {
       for (let i = 0; i < total; i++) {
@@ -171,11 +185,11 @@ export class Cola {
           const ms = ESPERAS_DE_TANDA[Math.min(esperasSeguidas, ESPERAS_DE_TANDA.length - 1)] * 1000;
           esperasSeguidas++;
           esperadoTotal += ms;
-          this.alProgresar({ fase: nombre, hechas, total, estado: 'espera', fallos: fallos.length, donde });
+          this.alProgresar({ fase: nombre, hechas, generadas, total, estado: 'espera', fallos: fallos.length, donde });
           await this.esperarConCuenta(ms, (queda) =>
             decir(
               `Cuota del proveedor agotada. Esperando ${queda} y sigo por la ${i + 1} de ${total}. ` +
-                `Llevas ${hechas} guardadas: no se pierde nada. Puedes dejarlo o darle a Detener.`,
+                `Llevas ${generadas} guardadas: no se pierde nada. Puedes dejarlo o darle a Detener.`,
             ),
           );
           i--; // LA MISMA UNIDAD otra vez. No cuenta como hecha ni como fallida.
@@ -194,7 +208,7 @@ export class Cola {
           decir(
             `Se para: tras esperar ${Math.round(esperadoTotal / 60000)} minutos no se generó nada. ` +
               'Esto no es la cuota por minuto —esa se abre sola—. Lo que contestó el proveedor está abajo. ' +
-              `Lo generado (${hechas}) está guardado y al volver a darle solo se repite lo que falta.`,
+              `Lo generado (${generadas}) está guardado y al volver a darle solo se repite lo que falta.`,
           );
           break;
         }
@@ -205,15 +219,26 @@ export class Cola {
         } else {
           // Una unidad buena reinicia la paciencia: la ventana se abrió.
           esperasSeguidas = 0;
-          if (alTerminarUno) {
-            // Se escribe ANTES de pasar a la siguiente. Esto es lo que hace que
-            // detener a mitad no pierda nada.
-            await alTerminarUno(resultado, unidades[i], i);
+          try {
+            if (alTerminarUno) {
+              // Se escribe ANTES de pasar a la siguiente. Esto es lo que hace que
+              // detener a mitad no pierda nada.
+              await alTerminarUno(resultado, unidades[i], i);
+            }
+            // GENERADA de verdad: se hizo Y se anotó. Ver abajo por qué son dos
+            // cifras y no una.
+            generadas++;
+          } catch (e) {
+            // ESCRIBIR TAMBIÉN PUEDE FALLAR, y fallaba en silencio. Un fallo al
+            // anotar no puede tumbar la tanda —lo generado sigue en el almacén—
+            // pero tampoco puede contarse como hecho.
+            fallos.push({ i, unidad: unidades[i], error: String(e?.message || e) });
+            decir(`Unidad ${i + 1} de ${total}: ${e?.message || e}`);
           }
         }
 
         hechas++;
-        this.alProgresar({ fase: nombre, hechas, total, estado: 'avanza', fallos: fallos.length, donde });
+        this.alProgresar({ fase: nombre, hechas, generadas, total, estado: 'avanza', fallos: fallos.length, donde });
       }
     } catch (e) {
       if (e?.name !== 'Detenida') throw e;
@@ -225,6 +250,7 @@ export class Cola {
     this.alProgresar({
       fase: nombre,
       hechas,
+      generadas,
       total,
       estado: detenida ? 'detenida' : 'termina',
       fallos: fallos.length,
@@ -236,7 +262,7 @@ export class Cola {
     // hay que tocar en Google Cloud.
     const sinCuota = this.sinCuota || null;
     this.sinCuota = null;
-    return { hechas, total, fallos, detenida, esperadoTotal, sinCuota };
+    return { hechas, generadas, total, fallos, detenida, esperadoTotal, sinCuota };
   }
 }
 

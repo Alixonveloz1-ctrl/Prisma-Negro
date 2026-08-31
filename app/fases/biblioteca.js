@@ -268,6 +268,48 @@ export function huellaDePlano(plano, encargo = ENCARGO_DEL_CANAL) {
   return h.toString(36);
 }
 
+/**
+ * Deja la biblioteca al día DENTRO de la lista de piezas, SIN CAMBIAR DE OBJETO.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Dice que generó dos imágenes, pero es mentira, solo generó una.»
+ *
+ * Esto vivía en la pantalla y hacía `piezas[k] = z`: SUSTITUÍA la pieza por una
+ * nueva. Y se llama desde todo lo que toca el archivo —aprobar una imagen,
+ * rehacerla, pedirle un clip—. Así que aprobar una imagen MIENTRAS corría la
+ * tanda de generación dejaba a la tanda escribiendo en el objeto viejo, ya
+ * desligado del proyecto:
+ *
+ *   · la imagen se generaba,
+ *   · se pagaba,
+ *   · se subía al almacén,
+ *   · y la anotación se perdía. En silencio.
+ *
+ * La tanda seguía contando —«2 de 126»— porque para ella habían salido bien las
+ * dos, y en la pantalla aparecía una, porque solo una había llegado al proyecto.
+ *
+ * Se arregla por donde tiene que arreglarse: NADIE cambia el objeto. Se vuelcan
+ * los campos DENTRO del que ya está —`tomas` incluido, en su sitio— así que
+ * cualquier referencia cogida antes sigue apuntando a la pieza de verdad. Y vive
+ * AQUÍ, junto a `sincronizarBiblioteca`, porque es una regla del modelo de datos
+ * y no de la pantalla: en la pantalla no se podía ni comprobar.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export function sincronizarEnSitio(piezas) {
+  const previa = (piezas || []).find((z) => z.esBiblioteca) || null;
+  const z = sincronizarBiblioteca(previa);
+  if (!previa) {
+    piezas.push(z);
+    return z;
+  }
+  for (const [k, v] of Object.entries(z)) {
+    if (k !== 'tomas') previa[k] = v;
+  }
+  previa.tomas.length = 0;
+  previa.tomas.push(...z.tomas);
+  return previa;
+}
+
 export function sincronizarBiblioteca(pieza) {
   const previas = new Map((pieza?.tomas || []).filter((t) => t.clave).map((t) => [t.clave, t]));
   let siguiente = Math.max(-1, ...[...previas.values()].map((t) => Number(t.i) || 0)) + 1;

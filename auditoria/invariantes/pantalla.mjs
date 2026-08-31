@@ -695,6 +695,74 @@ export const invariantes = [
   },
 
   {
+    nombre: 'tocar-el-archivo-mientras-genera-no-tira-lo-generado',
+    dice: '«Dice que generó dos imágenes, pero es mentira, solo generó una.» `laBiblioteca()` SUSTITUÍA la pieza por una nueva, y se llama desde todo lo que toca el archivo: aprobar una imagen, rehacerla, pedirle un clip. Así que aprobar una imagen MIENTRAS corría la tanda dejaba a la tanda escribiendo en el objeto viejo, ya desligado del proyecto: la imagen se generaba, se pagaba, se subía al almacén, y la anotación se perdía en silencio. La cuenta seguía subiendo porque para la tanda había salido bien. Un objeto que se sustituye por debajo es una referencia colgada esperando su turno.',
+    comprobar(ctx) {
+      const { sanear, bibliotecaDe } = ctx.fn;
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      // ── 1 · LA IDENTIDAD DE LA PIEZA NO CAMBIA ────────────────────────────
+      // Se reproduce el caso: alguien coge la pieza —como hace una tanda al
+      // empezar—, y otro camino la vuelve a sincronizar. Tienen que seguir siendo
+      // el mismo objeto, o lo que escriba el primero no llega al proyecto.
+      const P = sanear({
+        piezas: [
+          { id: 'p01' },
+          {
+            id: 'biblioteca',
+            esBiblioteca: true,
+            tomas: [{ i: 0, clave: 'recurso:carretera-noche:v1', imagen: 'ok', aprobada: false }],
+          },
+        ],
+      });
+      // Se ejecuta LA FUNCIÓN DE VERDAD. Antes esta comprobación llevaba una copia
+      // del cuerpo escrita aquí dentro, y por eso salió CIEGA: se comprobaba a sí
+      // misma. La regla vive ahora en `sincronizarEnSitio`, donde se puede llamar.
+      const laDeLaTanda = ctx.fn.sincronizarEnSitio(P.piezas); // la coge la tanda
+      ctx.fn.sincronizarEnSitio(P.piezas); // y alguien aprueba una imagen a mitad
+      if (laDeLaTanda !== bibliotecaDe(P)) {
+        fallos.push('Sincronizar el archivo cambia el objeto: una tanda a medias escribiría en una pieza huérfana.');
+      }
+      // Y lo que la tanda escriba DESPUÉS tiene que llegar al proyecto.
+      const k = laDeLaTanda.tomas.findIndex((t) => t.clave === 'recurso:carretera-noche:v1');
+      laDeLaTanda.tomas[k] = { ...laDeLaTanda.tomas[k], imagen: 'ok', bytesImagen: 999 };
+      if (bibliotecaDe(P).tomas.find((t) => t.clave === 'recurso:carretera-noche:v1')?.bytesImagen !== 999) {
+        fallos.push('Lo que anota la tanda no llega al proyecto: la imagen se paga y no se apunta en ninguna parte.');
+      }
+
+      // ── 2 · Y EN EL CÓDIGO, NADIE SUSTITUYE LA PIEZA ──────────────────────
+      if (/P\.piezas\[P\.piezas\.indexOf\(previa\)\] = z;/.test(main)) {
+        fallos.push('`laBiblioteca` vuelve a sustituir la pieza: el fallo entero era esto.');
+      }
+      // Ni se traga una anotación que no encuentra sitio. Un `if` que descarta en
+      // silencio el resultado de la fase más cara no es una guarda, es un agujero.
+      if (/if \(k >= 0\) z\.tomas\[k\] = nueva;/.test(main)) {
+        fallos.push('Una anotación que no encuentra su toma se descarta sin decir nada: la imagen se paga y se pierde.');
+      }
+      if (!/La imagen \$\{nueva\.i\} se generó y se pagó/.test(main)) {
+        fallos.push('Perder una anotación no da un error visible.');
+      }
+      // Y se busca la pieza FRESCA en cada anotación, no una referencia cogida al
+      // empezar: es el cinturón que sobrevive aunque alguien vuelva a sustituirla.
+      if (!/const actual = estado\.bibliotecaDe\(P\);/.test(main)) {
+        fallos.push('La anotación usa una referencia cogida al empezar la tanda en vez de buscar la pieza al día.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: sustituyendo la pieza por una nueva, que es lo que
+    // dejaba a la tanda escribiendo en el objeto viejo.
+    romper: (ctx) =>
+      conFuncion(ctx, 'sincronizarEnSitio', (piezas) => {
+        const previa = (piezas || []).find((z) => z.esBiblioteca) || null;
+        const z = ctx.fn.sincronizarBiblioteca(previa);
+        if (previa) piezas[piezas.indexOf(previa)] = z;
+        else piezas.push(z);
+        return z;
+      }),
+  },
+
+  {
     nombre: 'cualquier-imagen-del-archivo-puede-pasar-a-clip-y-se-ve-donde-se-genera',
     dice: '«Todas las imágenes deben tener su botón para generar el video, todas. Mientras más videos logres generar, mucho mejor para que se vea el documental; yo decidiré cuáles utilizar, y lo que no lleve video usará la imagen.» El botón salía solo donde el catálogo proponía movimiento —el reparto—, así que para animar un archivador o una carretera no había ninguna manera: era una decisión mía disfrazada de dato. Y encima el progreso de la tanda se pintaba siempre en «El episodio», así que generando el archivo no se veía ni la barra ni la cuenta atrás de la cuota: «dice que se está generando y no se genera nada».',
     async comprobar(ctx) {
