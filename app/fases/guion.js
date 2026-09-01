@@ -441,11 +441,23 @@ export function actosDe(tratamiento, minutos, genero = null) {
   const suya = (tratamiento?.estructura || []).filter((a) => a && a.titulo);
   if (suya.length) {
     const total = suya.reduce((s, a) => s + (Number(a.minutos) || 0), 0) || minutos;
-    // Los minutos del director se reescalan a los minutos pedidos: si él repartió
-    // 12 y se piden 8, cada acto encoge en proporción en vez de sobrar cuatro.
-    return suya.map((a) => ({
+    // ── LA FUNCIÓN DE CADA ACTO ES DEL GÉNERO, NO DEL TRATAMIENTO ──────────
+    //
+    // El director COPIA los bloques del género a su estructura —se le piden
+    // «EXACTAMENTE estos actos, en este orden»— y desde ese momento el guion lee
+    // la copia y no el original. Así que arreglar el catálogo no arreglaba nada:
+    // un episodio ya dirigido seguía escribiéndose con la versión vieja, y para
+    // que le llegara había que volver a dirigir. Nadie lo sabía, y costó cuatro
+    // regeneraciones enteras del guion.
+    //
+    // Ahora la FUNCIÓN —el trabajo del bloque, que es del canal— se vuelve a leer
+    // del género en cada escritura. Lo que sí es del director y se respeta: el
+    // título, el CONTENIDO de este episodio concreto y los minutos.
+    const delGenero = (a, n) =>
+      (genero?.bloques || []).find((b) => b.nombre === a.titulo) || (genero?.bloques || [])[n] || null;
+    return suya.map((a, n) => ({
       titulo: a.titulo,
-      funcion: a.funcion || 'avanzar el relato',
+      funcion: delGenero(a, n)?.funcion || a.funcion || 'avanzar el relato',
       contenido: a.contenido || '',
       minutos: Math.max(1, +((Number(a.minutos) || total / suya.length) * (minutos / total)).toFixed(1)),
     }));

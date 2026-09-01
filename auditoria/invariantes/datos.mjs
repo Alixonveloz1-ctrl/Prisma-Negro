@@ -3875,6 +3875,35 @@ export const invariantes = [
         }
       }
 
+      // Y EL ARREGLO DEL CATÁLOGO TIENE QUE LLEGAR A LO YA DIRIGIDO.
+      //
+      // Aquí estaba el fallo que costó cuatro regeneraciones: el director COPIA los
+      // bloques del género a su estructura, y desde ahí el guion lee la copia. Así
+      // que arreglar el catálogo no arreglaba nada — un episodio ya dirigido seguía
+      // escribiéndose con la versión vieja y nadie podía saberlo. La función es del
+      // canal y se relee del género; el contenido y los minutos son del director.
+      const viejo = {
+        estructura: (frio?.bloques || []).map((b, i) => ({
+          acto: i + 1,
+          titulo: b.nombre,
+          funcion: 'LA VIEJA, con los dos bloques haciendo lo mismo',
+          contenido: `contenido del episodio ${i}`,
+          minutos: 4,
+        })),
+      };
+      const actos = ctx.fn.actosDe(viejo, 30, frio);
+      if (actos.some((a) => /LA VIEJA/.test(a.funcion))) {
+        fallos.push('Un episodio ya dirigido sigue con la función vieja: arreglar el catálogo no le llega.');
+      }
+      if (!actos.some((a) => /EMPIEZA la búsqueda de identidad/.test(a.funcion))) {
+        fallos.push('La función del género no llega al guion de un episodio ya dirigido.');
+      }
+      // Pero lo que SÍ es del director se respeta: es su episodio, no el molde.
+      if (actos[2]?.contenido !== 'contenido del episodio 2') {
+        fallos.push('Se pierde el contenido que el director escribió para este episodio.');
+      }
+      if (actos[2]?.titulo !== frio.bloques[2].nombre) fallos.push('Se pierde el título del acto.');
+
       // ── 5 · Y SE AVISA, SIN REESCRIBIR ────────────────────────────────────
       // Distinguir lo que repite de lo que enlaza es un juicio de guion.
       // Reescribir por error una transición buena empeoraría la pieza y la
