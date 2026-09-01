@@ -3991,4 +3991,73 @@ export const invariantes = [
     // Se rompe como estaba: la duración más cercana a la toma.
     romper: (ctx) => conFuncion(ctx, 'duracionQueSePide', () => 4),
   },
+
+  {
+    nombre: 'el-gancho-no-adelanta-la-fecha-el-sitio-ni-el-nombre',
+    dice: '«La forma en la que se narra al principio no abre como el archivo que te compartí.» Y la regla llevaba escrita desde el principio, en el propio encargo del guion: «termina exactamente en el instante del hallazgo y corta; no expliques todavía qué es, ni de qué año, ni dónde». Lo que faltaba era que alguien la comprobara. De cuatro guiones seguidos, TRES abrieron con «Eres Liam MacTiernan, y el 12 de octubre de 2024, en Port MacLeod…»: la fecha, el sitio y el nombre del protagonista en la primera frase, que es exactamente la ficha que el gancho existe para no dar. El gancho es una acción —lo que se toca, lo que se oye, lo que pesa—, no una ficha.',
+    comprobar(ctx) {
+      const { loQueAdelantaElGancho } = ctx.fn;
+      const gui = fuente(ctx, 'app/fases/guion.js');
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+      const caso = { ciudad: 'Port MacLeod', pais: 'Canadá' };
+      const con = (t) => loQueAdelantaElGancho(`## Gancho\n${t}`, caso);
+
+      // ── 1 · CAZA LAS TRES, una por una ────────────────────────────────────
+      for (const [que, texto] of [
+        ['la fecha', 'Es el 12 de octubre de 2024 y el viento te azota la cara.'],
+        ['la fecha', 'Corría el año 2024 cuando apoyaste la sonda contra el bloque.'],
+        ['el sitio', 'El aire de Port MacLeod te azota el rostro mientras caminas.'],
+        ['el nombre', 'Eres Liam MacTiernan y el viento te azota la cara.'],
+      ]) {
+        if (!con(texto).some((x) => x.que === que)) {
+          fallos.push(`Un gancho que adelanta ${que} pasa sin más: «${texto.slice(0, 50)}…»`);
+        }
+      }
+      // Las tres juntas, que es como salieron de verdad.
+      const suyo = con('Eres Liam MacTiernan, y el 12 de octubre de 2024, el viento del Atlántico te azota la cara. Son las tres y diecisiete en Port MacLeod.');
+      if (suyo.length !== 3) fallos.push(`El gancho real adelantaba tres cosas y se detectan ${suyo.length}.`);
+
+      // ── 2 · Y NO MARCA EL QUE ESTÁ BIEN ───────────────────────────────────
+      // La mitad del valor: una medida que marca los ganchos buenos enseña a
+      // estropearlos. Este es el cuarto, el único que cumplía.
+      const bueno = 'Escuchas el pitido rítmico, monótono, de tu equipo de sónar. Es el pulso constante de tu jornada, un sonido que te ha acompañado durante los últimos doscientos bloques de hormigón.';
+      if (con(bueno).length) {
+        fallos.push(`Un gancho correcto se marca igual: ${JSON.stringify(con(bueno))}`);
+      }
+      // Ni la hora sola, que SÍ va: «son las tres y diecisiete» es acción, no ficha.
+      if (con('Son las tres y diecisiete y el metal está helado.').length) {
+        fallos.push('Se marca la hora del día, que es justo lo concreto que el gancho necesita.');
+      }
+      // Y sin caso no se inventa un sitio que nadie dijo.
+      if (loQueAdelantaElGancho('## Gancho\nEl aire de Port MacLeod te azota.', null).some((x) => x.que === 'el sitio')) {
+        fallos.push('Sin caso se marca un sitio: no hay con qué saber cómo se llama.');
+      }
+
+      // ── 3 · SOLO EL PRIMER ACTO ───────────────────────────────────────────
+      // La fecha y el sitio SÍ van en el acto siguiente. Marcarlos ahí sería
+      // pedirle al documental que no diga nunca cuándo ni dónde pasó.
+      const dos = loQueAdelantaElGancho(
+        '## Gancho\nEscuchas el pitido de la sonda.\n\n## Reconstrucción\nEl 12 de octubre de 2024, en Port MacLeod, Liam MacTiernan apoyó la sonda.',
+        caso,
+      );
+      if (dos.length) fallos.push('Se mira más allá del gancho: el acto 2 tiene que poder dar la fecha y el sitio.');
+
+      // ── 4 · Y ESTÁ ESCRITO EN EL ENCARGO, no solo comprobado ──────────────
+      for (const [qué, re] of [
+        ['que no va la fecha', /LA FECHA\. Ni el año/],
+        ['que no va el sitio por su nombre', /EL SITIO por su nombre/],
+        ['que no va el nombre de quien hace', /EL NOMBRE de quien hace/],
+      ]) {
+        if (!re.test(gui)) fallos.push(`El encargo del gancho no dice ${qué}.`);
+      }
+      // Y avisa en pantalla, por el mismo sitio que lo demás.
+      if (!/loQueAdelantaElGancho\(texto/.test(main)) {
+        fallos.push('La pantalla no mira si el gancho adelanta nada: el aviso no llega nunca.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: nadie mira el gancho.
+    romper: (ctx) => conFuncion(ctx, 'loQueAdelantaElGancho', () => []),
+  },
 ];

@@ -154,16 +154,22 @@ function repartirConservando(z, r) {
 function avisoDeGuion(donde, texto, extra = '') {
   const n = guionFase.contarPalabras(texto);
   const repiten = guionFase.solapesDelGuion(texto);
+  // Lo que el gancho adelanta y no debería. Ver `loQueAdelantaElGancho`.
+  const adelanta = guionFase.loQueAdelantaElGancho(texto, pieza()?.caso);
   avisar(
     donde,
     `Guion listo: ${n} palabras (~${Math.round(n / 145)} min).${extra} ` +
       'Léelo antes de seguir: es el insumo del que sale todo.' +
+      (adelanta.length
+        ? `\n\nEl gancho adelanta ${adelanta.map((x) => `${x.que} («${x.dice}»)`).join(', ')}. ` +
+          'Eso va después de la cabecera: el gancho es una acción, no una ficha.'
+        : '') +
       (repiten.length
         ? `\n\nMíralo antes de generar nada: ${repiten
             .map((x) => `el acto ${x.n} («${x.titulo}») abre repitiendo el final del anterior`)
             .join('; ')}. Se arregla borrando su primer párrafo, o volviendo a escribir el guion.`
         : ''),
-    repiten.length ? 'atencion' : 'bueno',
+    repiten.length || adelanta.length ? 'atencion' : 'bueno',
   );
 }
 

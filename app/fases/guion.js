@@ -125,8 +125,18 @@ EL GANCHO — solo el primer acto, y son cuarenta segundos
 Empieza EN SEGUNDA PERSONA y dentro de la acción, antes de contextualizar nada.
 «Imagina esta escena. Te han contratado para talar unos robles viejos… retiras
 la madera podrida con las manos.» El espectador hace, no mira.
-Termina EXACTAMENTE en el instante del hallazgo y corta. No expliques todavía
-qué es, ni de qué año, ni dónde. Eso viene después de la cabecera.
+Termina EXACTAMENTE en el instante del hallazgo y corta.
+
+Y ESTAS TRES COSAS NO APARECEN EN EL GANCHO. Ninguna. Van después de la
+cabecera, en el acto siguiente:
+  · LA FECHA. Ni el año, ni el día, ni el mes. Nada de «el 12 de octubre de
+    2024»: quien mira no sabe todavía que esto pasó en una fecha concreta.
+  · EL SITIO por su nombre. Nada de «en Port MacLeod». Estás EN un rompeolas,
+    no en un rompeolas que se llama de alguna manera.
+  · EL NOMBRE de quien hace. Nada de «Eres Liam MacTiernan». Eres el que está
+    ahí, y punto. El nombre llega cuando ya importe quién es.
+Lo que SÍ va: lo que se toca, lo que se oye, lo que pesa, lo que huele. El
+gancho es una acción, no una ficha.
 
 LOS TESTIMONIOS
 Cada dos o tres minutos entra alguien: quien encontró el cuerpo, el perito, el
@@ -344,6 +354,47 @@ export async function escribirGuion({
 }
 
 export const contarPalabras = (t) => (String(t).trim().match(/\S+/g) || []).length;
+
+/**
+ * QUÉ ADELANTA EL GANCHO QUE NO DEBERÍA.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «La forma en la que se narra al principio no abre como el archivo que te
+ *  compartí.»
+ *
+ * Y la regla estaba escrita desde el principio: «no expliques todavía qué es, ni
+ * de qué año, ni dónde». Lo que faltaba era que alguien la comprobara. De cuatro
+ * guiones seguidos, tres abrieron dando la fecha, el sitio y el nombre del
+ * protagonista en la primera frase — «Eres Liam MacTiernan, y el 12 de octubre de
+ * 2024, en Port MacLeod…»— que es exactamente la ficha que el gancho existe para
+ * NO dar.
+ *
+ * Una regla en el encargo es una petición, no una garantía. Esto la mide.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export function loQueAdelantaElGancho(guion, caso = null) {
+  const primero = String(guion || '').split(/^## /m).filter((x) => x.trim())[0] || '';
+  const texto = primero.split('\n').slice(1).join(' ');
+  const salida = [];
+
+  // La fecha: un año de cuatro cifras o un «12 de octubre».
+  const fecha = texto.match(/\b(?:1[5-9]|20)\d{2}\b|\b\d{1,2} de [a-záéíóúñ]+\b/i);
+  if (fecha) salida.push({ que: 'la fecha', dice: fecha[0] });
+
+  // El sitio por su nombre, con los del caso: es lo único que sabe cómo se llama.
+  for (const sitio of [caso?.ciudad, caso?.pais].filter(Boolean)) {
+    if (new RegExp(`\\b${sitio.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(texto)) {
+      salida.push({ que: 'el sitio', dice: sitio });
+      break;
+    }
+  }
+
+  // Y el nombre de quien hace: «Eres Fulano Mengano».
+  const nombre = texto.match(/\bEres\s+([A-ZÁÉÍÓÚÑ][\wáéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][\wáéíóúñ]+)+)/);
+  if (nombre) salida.push({ que: 'el nombre', dice: nombre[1] });
+
+  return salida;
+}
 
 /**
  * QUÉ ACTOS ABREN REPITIENDO EL FINAL DEL ANTERIOR.

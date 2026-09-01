@@ -206,6 +206,7 @@ async function funcionesPuras() {
     escribirGuion: gui.escribirGuion,
     solapeDeApertura: gui.solapeDeApertura,
     solapesDelGuion: gui.solapesDelGuion,
+    loQueAdelantaElGancho: gui.loQueAdelantaElGancho,
     sistemaDelGuion: gui.sistemaDelGuion,
     dirigir: dir.dirigir,
     abiertoDe: (await import('../app/fases/director.js')).abiertoDe,
