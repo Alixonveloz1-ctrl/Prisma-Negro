@@ -3441,4 +3441,109 @@ export const invariantes = [
         };
       }),
   },
+
+  {
+    nombre: 'un-caso-no-se-resuelve-en-el-futuro-ni-se-llama-a-si-mismo-inventado',
+    dice: 'Salieron cuatro premisas seguidas así: «2022, resuelto en 2051», «2021, resuelto en 2048», «2023, resuelto en 2054», «2024, resuelto en 2060». Estamos en 2026: un documental sobre un caso que se resuelve en 2060 es ciencia ficción y se cae en la primera frase. No fue un despiste del generador, fueron DOS REGLAS QUE NUNCA SE MIRARON —el expediente pedía «un lapso de entre veinte y cien años» y la época decía «los hechos arrancan de 2021 en adelante, cuenta el lapso desde ahí»—: la suma al futuro estaba escrita en el propio encargo, y faltaba lo único que las ata, que el documental SE HACE HOY. Y en la misma pantalla, «una balsa de riego en EL MUNICIPIO INVENTADO de Valdelobos»: el encargo dice que lo pequeño se inventa y el generador copió la etiqueta dentro del caso. Un expediente que se llama a sí mismo inventado deja de sonar a expediente.',
+    comprobar(ctx) {
+      const { enderezarFechas, sinDecirQueEsInventado } = ctx.fn;
+      const inv = fuente(ctx, 'app/fases/investigacion.js');
+      const fallos = [];
+      const HOY = 2026;
+
+      // ── 1 · LA RESOLUCIÓN CAE EN EL PASADO ────────────────────────────────
+      // Los cuatro casos de la pantalla, tal como salieron.
+      for (const [cuando, lapso] of [
+        ['2022, resuelto en 2051', 29],
+        ['2021, resuelto en 2048', 27],
+        ['2023, resuelto en 2054', 31],
+        ['2024, resuelto en 2060', 36],
+      ]) {
+        const r = enderezarFechas({ cuando }, HOY);
+        if (r.anioResuelto > HOY) {
+          fallos.push(`«${cuando}» sigue resolviéndose en ${r.anioResuelto}: eso no se puede documentar.`);
+        }
+        // Y EL LAPSO SE CONSERVA: es lo que menciona la sinopsis —«casi treinta
+        // años»— y lo que hace que el caso sea un caso frío. Recortarlo en vez de
+        // deslizar el par entero arreglaría la fecha rompiendo la historia.
+        if (r.anioResuelto - r.anioHechos !== lapso) {
+          fallos.push(`«${cuando}» pierde el lapso: de ${lapso} años pasa a ${r.anioResuelto - r.anioHechos}.`);
+        }
+        // La frase se recompone: si se dejara la que vino, la tarjeta seguiría
+        // diciendo «resuelto en 2051» con el caso ya corregido por debajo.
+        if (/205[0-9]|204[0-9]|206[0-9]/.test(r.cuando)) {
+          fallos.push(`La frase de «${cuando}» sigue enseñando el año del futuro: ${r.cuando}`);
+        }
+      }
+      // Un caso que ya estaba bien NO SE TOCA.
+      const bueno = enderezarFechas({ cuando: '1981, resuelto en 2022' }, HOY);
+      if (bueno.anioHechos !== 1981 || bueno.anioResuelto !== 2022) {
+        fallos.push(`Un caso con fechas correctas se altera: ${bueno.cuando}`);
+      }
+      // Ni se inventan fechas donde no las hay.
+      if (enderezarFechas({ cuando: '' }, HOY).cuando) {
+        fallos.push('Un caso sin fechas sale con fechas inventadas.');
+      }
+      // Y los números mandan sobre la frase: es lo que hace que esto se pueda
+      // comprobar en vez de adivinarse leyendo texto libre.
+      const porNumeros = enderezarFechas({ anioHechos: 2024, anioResuelto: 2060 }, HOY);
+      if (porNumeros.anioResuelto !== HOY || porNumeros.anioHechos !== 1990) {
+        fallos.push(`Con los años como números tampoco se endereza: ${porNumeros.cuando}`);
+      }
+
+      // ── 2 · Y SE LE DICE EN QUÉ AÑO ESTAMOS ───────────────────────────────
+      // Un modelo no lo sabe. Sin esta línea la suma se le va al futuro y nada
+      // chirría: la regla del pasado no se puede cumplir sin saber cuál es el hoy.
+      if (!/HOY ESTAMOS EN \$\{new Date\(\)\.getFullYear\(\)\}/.test(inv)) {
+        fallos.push('No se le dice al generador en qué año estamos: no puede saber qué es futuro.');
+      }
+      // Sin la segunda mitad de la frase: el encargo se arma concatenando cadenas
+      // y el corte de línea cae justo en medio. Un sabotaje escrito contra la
+      // frase entera se quedaría ciego en cuanto alguien reformatee.
+      if (!/La aritm[eé]tica manda/.test(inv)) {
+        fallos.push('La época sigue mandando sobre la aritmética: vuelve la suma que se va al futuro.');
+      }
+
+      // ── 3 · EL CASO NO SE DELATA A SÍ MISMO ───────────────────────────────
+      for (const [antes, despues] of [
+        ['Una balsa de riego agrícola en el municipio inventado de Valdelobos.', 'el municipio de Valdelobos'],
+        ['El pueblo ficticio de Santa Rosa', 'El pueblo de Santa Rosa'],
+        ['la comisaría hipotética de Bell', 'la comisaría de Bell'],
+      ]) {
+        const r = sinDecirQueEsInventado(antes);
+        if (!r.includes(despues)) fallos.push(`No se limpia la etiqueta de ficción: «${r}»`);
+        if (/inventad|ficticio|hipot[eé]tic/i.test(r)) {
+          fallos.push(`Sigue diciendo que es inventado: «${r}»`);
+        }
+      }
+      // Pero NO se toca lo que no es una etiqueta: «inventó una coartada» es la
+      // historia, no una confesión de ficción.
+      const legitimo = 'El sospechoso se inventó una coartada y la fábrica era ficticia solo en los papeles.';
+      if (sinDecirQueEsInventado(legitimo) !== legitimo) {
+        fallos.push('La limpieza se come texto legítimo del caso.');
+      }
+
+      // ── 4 · Y LAS DOS REPARACIONES SE APLICAN DE VERDAD ───────────────────
+      // Una función pura que nadie llama no arregla nada. Este fallo ya pasó con
+      // `pais` y `ciudad`: estaban en el esquema, el generador los devolvía y la
+      // lista de salida no los copiaba, así que se perdían en silencio.
+      const i = inv.indexOf('const casos = (r.json?.casos');
+      const salida = i < 0 ? '' : inv.slice(i, inv.indexOf('\n  });', i));
+      if (!salida) fallos.push('No se encuentra dónde se arma la lista de casos propuestos.');
+      else {
+        if (!/enderezarFechas\(/.test(salida)) fallos.push('Las fechas no se enderezan al armar las propuestas.');
+        if (!/sinDecirQueEsInventado|limpiar\(/.test(salida)) {
+          fallos.push('La etiqueta de ficción no se limpia al armar las propuestas.');
+        }
+        for (const campo of ['pais', 'ciudad', 'anioHechos', 'anioResuelto']) {
+          if (!new RegExp(`\\b${campo}:`).test(salida)) {
+            fallos.push(`«${campo}» no se copia a la propuesta: el campo existe en el esquema y se pierde aquí.`);
+          }
+        }
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: las fechas se copian tal cual, futuro incluido.
+    romper: (ctx) => conFuncion(ctx, 'enderezarFechas', (caso) => ({ ...caso })),
+  },
 ];

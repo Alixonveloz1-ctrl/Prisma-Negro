@@ -37,6 +37,11 @@ const ESQUEMA_CASOS = {
           gancho: { type: 'string' },
           sinopsis: { type: 'string' },
           cuando: { type: 'string' },
+          // LOS DOS AÑOS, COMO NÚMEROS Y APARTE. Dentro de la frase de `cuando` no
+          // se pueden comprobar, y había que comprobarlos: salían resoluciones en
+          // 2048, 2051 y 2060. Ver `enderezarFechas`.
+          anioHechos: { type: 'integer' },
+          anioResuelto: { type: 'integer' },
           // EL PAÍS Y LA CIUDAD VAN APARTE, y son reales. No es un adorno del
           // texto: de aquí sale el mundo de TODAS las imágenes del episodio —por
           // qué lado va el volante, cómo son las matrículas, los uniformes y la
@@ -49,7 +54,7 @@ const ESQUEMA_CASOS = {
           imagenSugerida: { type: 'string' },
           documentado: { type: 'boolean' },
         },
-        required: ['titulo', 'gancho', 'sinopsis', 'cuando', 'pais', 'ciudad', 'donde', 'porQueFunciona', 'imagenSugerida', 'documentado'],
+        required: ['titulo', 'gancho', 'sinopsis', 'cuando', 'anioHechos', 'anioResuelto', 'pais', 'ciudad', 'donde', 'porQueFunciona', 'imagenSugerida', 'documentado'],
       },
     },
   },
@@ -97,7 +102,9 @@ LO QUE TIENE QUE HABER, SIEMPRE:
 - Una víctima con nombre, edad, oficio y una razón por la que nadie la buscó.
 - Un contenedor imposible: dónde estuvo el cuerpo y por qué nadie lo encontró.
   Un árbol, una pared, un pozo, un cilindro, un ascensor, un tanque.
-- Un lapso largo y concreto. Entre veinte y cien años, con las dos fechas.
+- Un lapso largo y concreto, con las dos fechas. Entre veinte y cien años SI CABE
+  antes de hoy: la resolución va en el pasado, nunca en un año que no ha llegado.
+  Si entre los hechos y hoy no caben las décadas, el lapso es el que quepa.
 - Quien lo encuentra: nombre, edad, qué estaba haciendo esa mañana.
 - Un objeto que guarda el secreto y que en su momento NO SE PUDO LEER: un papel
   apelmazado, una ficha corroída, un diente. Es lo que resolverá el caso al final.
@@ -115,6 +122,9 @@ REGLAS
   el kilómetro de carretera, la comisaría, el juzgado, el laboratorio, la empresa.
 - Ni una persona real ni una empresa real. La comisaría, el forense y el juzgado
   CONCRETOS del caso son inventados: ahí es donde habría alguien real señalado.
+- NUNCA escribas dentro del expediente que algo es inventado, ficticio,
+  hipotético o imaginario. El pueblo se llama Valdelobos, no «el municipio
+  inventado de Valdelobos». La ficción se declara fuera, no dentro.
 - Coherencia absoluta: un nombre, una fecha o una edad se escriben una vez y no
   cambian. Antes de cerrar, relee y comprueba que nada se contradice.
 - Concreción de expediente. «Un objeto metálico» no vale; «una ficha de latón de
@@ -126,6 +136,86 @@ EL ROL de cada ficha dice qué papel juega: victima, sospechoso, testigo, objeto
 lugar, fecha, pistafalsa (lo que señala al inocente), revelacion (lo que resuelve).
 La cita, cuando la pongas, es lo que alguien DIJO —una frase de persona, no de
 informe—: de ahí salen los testimonios del episodio.`;
+
+/**
+ * LA RESOLUCIÓN DE UN CASO NO PUEDE ESTAR EN EL FUTURO.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Salieron cuatro propuestas seguidas así:
+ *
+ *   «2022, resuelto en 2051»   «2021, resuelto en 2048»
+ *   «2023, resuelto en 2054»   «2024, resuelto en 2060»
+ *
+ * Estamos en 2026. Un documental sobre un caso que se resuelve en 2060 no es un
+ * documental: es ciencia ficción, y se cae en la primera frase de la narración.
+ *
+ * No fue un despiste del generador. Fueron DOS REGLAS QUE NUNCA SE MIRARON:
+ *
+ *   · el expediente pide «un lapso largo, entre veinte y cien años»,
+ *   · y la época decía «los hechos arrancan DE 2021 EN ADELANTE; cuenta ese
+ *     lapso desde ahí».
+ *
+ * 2021 + 20 son 2041. La suma estaba escrita en el propio encargo. Faltaba lo
+ * único que las ata: que el documental SE HACE HOY, así que la resolución cae
+ * antes de hoy — y decirle en qué año estamos, porque un modelo no lo sabe.
+ *
+ * Se pide bien, y además se comprueba: una regla en el encargo es una petición,
+ * no una garantía. Lo que llega con la resolución en el futuro se DESLIZA entero
+ * hacia atrás, conservando el lapso —que es lo que menciona la sinopsis, «casi
+ * treinta años»— hasta que la resolución cae en el presente. Descartarlo sería
+ * tirar una propuesta pagada por una resta.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+const AÑOS_EN_TEXTO = /\b(?:1[5-9]\d{2}|2[01]\d{2})\b/g;
+
+export function enderezarFechas(caso, ahora = new Date().getFullYear()) {
+  const enTexto = (String(caso?.cuando || '').match(AÑOS_EN_TEXTO) || []).map(Number);
+  let hechos = Number(caso?.anioHechos) || enTexto[0] || 0;
+  let resuelto = Number(caso?.anioResuelto) || enTexto[enTexto.length - 1] || 0;
+
+  // Sin ninguna fecha no hay nada que enderezar: se deja como está en vez de
+  // inventarse dos años que nadie escribió.
+  if (!hechos && !resuelto) return { ...caso };
+  if (!resuelto) resuelto = hechos;
+  if (!hechos) hechos = resuelto;
+  if (hechos > resuelto) [hechos, resuelto] = [resuelto, hechos];
+
+  // EL DESLIZAMIENTO. El lapso se conserva; lo que se mueve es el par entero.
+  if (resuelto > ahora) {
+    const sobra = resuelto - ahora;
+    resuelto -= sobra;
+    hechos -= sobra;
+  }
+
+  return {
+    ...caso,
+    anioHechos: hechos,
+    anioResuelto: resuelto,
+    // Y la frase se recompone desde los números, no al revés: si se dejara la que
+    // vino, la tarjeta seguiría diciendo «resuelto en 2051» con el caso ya
+    // corregido por debajo.
+    cuando: hechos === resuelto ? `${hechos}` : `${hechos}, resuelto en ${resuelto}`,
+  };
+}
+
+/**
+ * QUE NO SE DELATE A SÍ MISMO.
+ *
+ * Salió, tal cual, en pantalla: «Una balsa de riego agrícola en EL MUNICIPIO
+ * INVENTADO de Valdelobos». El encargo dice que lo pequeño se inventa y el
+ * generador lo copió literalmente al texto del caso, como una etiqueta.
+ *
+ * El canal declara su ficción en el título, en la descripción y en la pastilla de
+ * la tarjeta — ahí es donde toca y ahí está. Dentro del caso, no: un expediente
+ * que se llama a sí mismo inventado deja de sonar a expediente. El pueblo se
+ * llama Valdelobos, y ya está.
+ */
+const SITIOS = 'municipio|pueblo|condado|distrito|barrio|caser[ií]o|vereda|comuna|parroquia|localidad|ciudad|aldea|paraje|corregimiento|partido|provincia|empresa|comisar[ií]a|juzgado|laboratorio';
+const SE_DELATA = new RegExp(`\\b(${SITIOS})\\s+(?:inventad[oa]s?|ficticci?[oa]s?|ficti[cs]i[oa]s?|hipot[ée]tic[oa]s?|imaginari[oa]s?)\\b`, 'gi');
+
+export function sinDecirQueEsInventado(texto) {
+  return String(texto || '').replace(SE_DELATA, '$1');
+}
 
 /**
  * Propone casos INVENTADOS entre los que elegir.
@@ -171,6 +261,11 @@ export async function proponerCasos({ genero = null, tema = null, epoca = null, 
         'inventados: ahí es donde habría una persona real señalada.\n' +
         '- Que no se parezca a un caso real conocido: si suena a uno que existe, ' +
         'cámbialo. Se inventa, no se disfraza.\n' +
+        // Y QUE NO SE DELATE. Salió «el municipio INVENTADO de Valdelobos».
+        '- NUNCA escribas dentro del caso que algo es inventado, ficticio, ' +
+        'hipotético o imaginario. El pueblo se llama Valdelobos, no «el municipio ' +
+        'inventado de Valdelobos». La ficción se declara en la ficha del canal, no ' +
+        'dentro del expediente.\n' +
         '- Lo que engancha es que pudo pasar. Nada de sobrenatural salvo que el ' +
         'género lo pida.\n' +
         '- Concreción de expediente ya desde la sinopsis: el sitio imposible, el ' +
@@ -188,9 +283,18 @@ export async function proponerCasos({ genero = null, tema = null, epoca = null, 
         // TRANSCURRE el caso que se inventa, y en un crimen frío eso es medio
         // género — el lapso entre los hechos y la reapertura es lo que hace que la
         // historia funcione. Sin decirlo, todos los casos salen ambientados ahora.
+        // ESTAMOS EN ESTE AÑO, y hay que decirlo: un modelo no lo sabe, y sin
+        // saberlo la suma «hechos + lapso» se le va al futuro sin que nada chirríe.
+        `HOY ESTAMOS EN ${new Date().getFullYear()}. El documental se hace AHORA.\n` +
+        `LA RESOLUCIÓN DE CADA CASO ESTÁ EN EL PASADO: el año en que se resuelve es ` +
+        `${new Date().getFullYear()} o antes, NUNCA después. Un caso que se resuelve ` +
+        `dentro de veinte años no se puede documentar.\n\n` +
         (epoca?.desde?.()
-          ? `ÉPOCA: los hechos arrancan DE ${epoca.desde()} EN ADELANTE. Si el género ` +
-            `pide un lapso largo hasta la resolución, cuenta ese lapso desde ahí.\n\n`
+          ? `ÉPOCA: los hechos arrancan DE ${epoca.desde()} EN ADELANTE. El lapso ` +
+            `hasta la resolución es EL QUE QUEPA entre esa fecha y hoy: si desde ` +
+            `${epoca.desde()} hasta ${new Date().getFullYear()} no caben las décadas ` +
+            `que pediría el género, el lapso es más corto. La aritmética manda sobre ` +
+            `el género, nunca al revés.\n\n`
           : '') +
         `Inventa ${cuantos} casos.\n\n` +
         'Para cada uno:\n' +
@@ -198,6 +302,8 @@ export async function proponerCasos({ genero = null, tema = null, epoca = null, 
         '- gancho: una frase de lo que engancha, sin exagerar ni prometer de más.\n' +
         '- sinopsis: 2 o 3 frases de qué pasó, ya con el detalle concreto.\n' +
         '- cuando: los años, con el lapso. «1981, resuelto en 2022».\n' +
+        '- anioHechos: el año de los hechos, solo el número.\n' +
+        `- anioResuelto: el año en que se resuelve, solo el número. ${new Date().getFullYear()} o ANTES.\n` +
         '- pais: el país REAL, escrito como se escribe. «Estados Unidos», «Rusia».\n' +
         '- ciudad: la ciudad REAL más cercana, la que existe y se puede buscar.\n' +
         '- donde: el sitio del caso en una línea, con lo inventado dentro. «El ' +
@@ -217,22 +323,40 @@ export async function proponerCasos({ genero = null, tema = null, epoca = null, 
     { senal, reintentos: 1 },
   );
 
-  const casos = (r.json?.casos || []).slice(0, cuantos).map((c, i) => ({
-    id: `c${Date.now().toString(36)}${i}`,
-    titulo: c.titulo || 'Sin título',
-    gancho: c.gancho || '',
-    sinopsis: c.sinopsis || '',
-    cuando: c.cuando || '',
-    donde: c.donde || '',
-    porQueFunciona: c.porQueFunciona || '',
-    imagenSugerida: c.imagenSugerida || '',
-    // Un caso construido NO se marca como documentado, pase lo que pase: esa
-    // pastilla verde en pantalla significa «hay fuentes públicas sólidas» y aquí
-    // no las hay. Es ficción, y se dice.
-    documentado: false,
-    construido: true,
-    fuentes: [],
-  }));
+  // LAS DOS REPARACIONES, ANTES DE QUE NADIE VEA NADA. Pedirlo en el encargo es
+  // una petición; esto es la garantía. Ver `enderezarFechas` y
+  // `sinDecirQueEsInventado`.
+  const limpiar = (t) => sinDecirQueEsInventado(t || '');
+  const casos = (r.json?.casos || []).slice(0, cuantos).map((crudo, i) => {
+    const c = enderezarFechas(crudo);
+    return {
+      id: `c${Date.now().toString(36)}${i}`,
+      titulo: limpiar(c.titulo) || 'Sin título',
+      gancho: limpiar(c.gancho),
+      sinopsis: limpiar(c.sinopsis),
+      cuando: c.cuando || '',
+      anioHechos: c.anioHechos || 0,
+      anioResuelto: c.anioResuelto || 0,
+      // EL PAÍS Y LA CIUDAD, QUE SE ESTABAN CAYENDO AQUÍ. Los añadí al esquema y
+      // al encargo, el generador los devolvía —por eso salían «prefectura de
+      // Hokkaido» y «departamento de Luján de Cuyo», cada uno con la palabra de
+      // su país— y esta lista no los copiaba: se perdían en la línea siguiente.
+      // Con ellos perdidos, las imágenes del episodio caían al mundo neutro y
+      // todo el arreglo del volante no hacía nada. Un campo que no se copia es un
+      // campo que no existe.
+      pais: String(c.pais || '').trim(),
+      ciudad: String(c.ciudad || '').trim(),
+      donde: limpiar(c.donde),
+      porQueFunciona: limpiar(c.porQueFunciona),
+      imagenSugerida: limpiar(c.imagenSugerida),
+      // Un caso construido NO se marca como documentado, pase lo que pase: esa
+      // pastilla verde en pantalla significa «hay fuentes públicas sólidas» y aquí
+      // no las hay. Es ficción, y se dice.
+      documentado: false,
+      construido: true,
+      fuentes: [],
+    };
+  });
 
   if (!casos.length) throw new Error('No salió ninguna premisa. Vuelve a darle.');
   return { casos, descartados: 0 };
@@ -251,6 +375,11 @@ export async function construirCaso({ caso = null, genero = null, tema = null, c
     {
       sistema: SISTEMA_CONSTRUIR,
       instruccion:
+        // EN QUÉ AÑO ESTAMOS. El expediente lleva fechas en casi todas sus fichas
+        // —«la tecnología que lo resuelve décadas después»— y sin esta línea las
+        // ponía en el futuro, igual que las premisas.
+        `HOY ESTAMOS EN ${new Date().getFullYear()}. Ninguna fecha del expediente ` +
+        `es posterior a ${new Date().getFullYear()}.\n\n` +
         (genero
           ? `GÉNERO: ${genero.nombre}. ${genero.resumen}\n` +
             `La estructura del episodio será esta, y el expediente tiene que dar ` +

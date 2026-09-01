@@ -222,6 +222,8 @@ async function funcionesPuras() {
     planificarImagenes: img.planificar,
     planificarClips: mov.planificar,
     proponerCasos: inv.proponerCasos,
+    enderezarFechas: inv.enderezarFechas,
+    sinDecirQueEsInventado: inv.sinDecirQueEsInventado,
     construirCaso: inv.construirCaso,
     comoLista: inv.comoLista,
     ordenarFichas: inv.ordenarFichas,
