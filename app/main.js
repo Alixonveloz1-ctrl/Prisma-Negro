@@ -108,6 +108,36 @@ const colaInvestiga = new Cola({
 
 // ── Pantalla ──────────────────────────────────────────────────────────────────
 
+/**
+ * El aviso de «guion listo», con lo que haya que mirar antes de seguir.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Nunca ha salido ningún aviso ámbar.»
+ *
+ * Y no iba a salir: HAY DOS BOTONES que escriben el guion —el paso del Inicio y
+ * el de la sección Guion— y el aviso estaba puesto solo en el primero. Él usa el
+ * segundo. Una comprobación que vive en uno de los dos caminos no comprueba nada
+ * para quien va por el otro.
+ *
+ * Ahora lo compone esta función y la llaman los dos. Ver `solapesDelGuion`.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+function avisoDeGuion(donde, texto, extra = '') {
+  const n = guionFase.contarPalabras(texto);
+  const repiten = guionFase.solapesDelGuion(texto);
+  avisar(
+    donde,
+    `Guion listo: ${n} palabras (~${Math.round(n / 145)} min).${extra} ` +
+      'Léelo antes de seguir: es el insumo del que sale todo.' +
+      (repiten.length
+        ? `\n\nMíralo antes de generar nada: ${repiten
+            .map((x) => `el acto ${x.n} («${x.titulo}») abre repitiendo el final del anterior`)
+            .join('; ')}. Se arregla borrando su primer párrafo, o volviendo a escribir el guion.`
+        : ''),
+    repiten.length ? 'atencion' : 'bueno',
+  );
+}
+
 function avisar(donde, mensaje, clase = '') {
   const caja = $(`aviso-${donde}`);
   if (!caja) return;
@@ -1245,24 +1275,7 @@ accion(
     // Iba a la caja del paso 2 mientras el progreso escribía en la del 3, así que
     // arriba ponía «terminado» y abajo seguía poniendo «escribiendo el acto 4 de
     // 4…» para siempre. Un aviso que no se limpia solo es un aviso que miente.
-    // LOS ACTOS QUE ABREN REPITIENDO. Se AVISA, no se reescribe: distinguir «El 20
-    // de octubre, el informe de ADN llegó…» —que repite— de «Con la identidad ya
-    // establecida, faltaba el sospechoso» —que enlaza— es un juicio de guion, y
-    // reescribir el segundo por error empeoraría la pieza y la cobraría. Ver
-    // `solapesDelGuion`.
-    const repiten = guionFase.solapesDelGuion(texto);
-    avisar(
-      'paso3',
-      `Guion listo: ${guionFase.contarPalabras(texto)} palabras (~${Math.round(guionFase.contarPalabras(texto) / 145)} min), ` +
-        `${r.tomas.length} tomas y ${r.escenas.length} escenas. ` +
-        `Léelo en Guion antes de generar: es el insumo del que sale todo.` +
-        (repiten.length
-          ? `\n\nMíralos antes de seguir: ${repiten
-              .map((x) => `el acto ${x.n} («${x.titulo}») abre repitiendo el final del anterior`)
-              .join('; ')}. Se arregla borrando el primer párrafo, o pidiendo el guion otra vez.`
-          : ''),
-      repiten.length ? 'atencion' : 'bueno',
-    );
+    avisoDeGuion('paso3', texto, ` ${r.tomas.length} tomas y ${r.escenas.length} escenas.`);
   },
   'paso3',
 );
@@ -1301,12 +1314,7 @@ accion(
     await guardar();
     // Con números: «escrito» a secas fue justo lo que dijo la pantalla cuando el
     // guion venía con una escena y una toma.
-    avisar(
-      'guion',
-      `Guion escrito: ${guionFase.contarPalabras(texto)} palabras, ` +
-        `~${Math.round(guionFase.contarPalabras(texto) / 145)} min. Léelo antes de seguir.`,
-      'bueno',
-    );
+    avisoDeGuion('guion', texto);
   },
   'guion',
 );

@@ -3879,6 +3879,18 @@ export const invariantes = [
       // Distinguir lo que repite de lo que enlaza es un juicio de guion.
       // Reescribir por error una transición buena empeoraría la pieza y la
       // cobraría, así que la herramienta enseña y decide quien escribe.
+      // SE CUENTAN LOS CAMINOS. «Hay al menos una llamada» no bastaba y costó dos
+      // regeneraciones enteras: hay DOS botones que escriben el guion —el paso del
+      // Inicio y el de la sección Guion— y el aviso estaba puesto solo en el
+      // primero. Él usaba el segundo, así que el aviso no salió NUNCA. Una
+      // comprobación que vive en uno de los dos caminos no comprueba nada para
+      // quien va por el otro.
+      const escriben = (main.match(/guionFase\.escribirGuion\(\{/g) || []).length;
+      const avisan = (main.match(/avisoDeGuion\(/g) || []).length - 1; // menos su definición
+      if (!escriben) fallos.push('No se encuentra dónde escribe el guion la pantalla.');
+      else if (avisan < escriben) {
+        fallos.push(`${escriben} botones escriben el guion y solo ${avisan} avisan: por el otro camino no sale nada.`);
+      }
       if (!/solapesDelGuion\(texto\)/.test(main)) {
         fallos.push('La pantalla no mira si algún acto abre repitiendo: el aviso no llega nunca.');
       }
