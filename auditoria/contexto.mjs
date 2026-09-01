@@ -203,6 +203,8 @@ async function funcionesPuras() {
     actosDe: gui.actosDe,
     huellaDeActos: gui.huellaDeActos,
     escribirGuion: gui.escribirGuion,
+    solapeDeApertura: gui.solapeDeApertura,
+    solapesDelGuion: gui.solapesDelGuion,
     sistemaDelGuion: gui.sistemaDelGuion,
     dirigir: dir.dirigir,
     abiertoDe: (await import('../app/fases/director.js')).abiertoDe,

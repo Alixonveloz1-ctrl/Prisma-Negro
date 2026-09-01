@@ -1245,12 +1245,23 @@ accion(
     // Iba a la caja del paso 2 mientras el progreso escribía en la del 3, así que
     // arriba ponía «terminado» y abajo seguía poniendo «escribiendo el acto 4 de
     // 4…» para siempre. Un aviso que no se limpia solo es un aviso que miente.
+    // LOS ACTOS QUE ABREN REPITIENDO. Se AVISA, no se reescribe: distinguir «El 20
+    // de octubre, el informe de ADN llegó…» —que repite— de «Con la identidad ya
+    // establecida, faltaba el sospechoso» —que enlaza— es un juicio de guion, y
+    // reescribir el segundo por error empeoraría la pieza y la cobraría. Ver
+    // `solapesDelGuion`.
+    const repiten = guionFase.solapesDelGuion(texto);
     avisar(
       'paso3',
       `Guion listo: ${guionFase.contarPalabras(texto)} palabras (~${Math.round(guionFase.contarPalabras(texto) / 145)} min), ` +
         `${r.tomas.length} tomas y ${r.escenas.length} escenas. ` +
-        `Léelo en Guion antes de generar: es el insumo del que sale todo.`,
-      'bueno',
+        `Léelo en Guion antes de generar: es el insumo del que sale todo.` +
+        (repiten.length
+          ? `\n\nMíralos antes de seguir: ${repiten
+              .map((x) => `el acto ${x.n} («${x.titulo}») abre repitiendo el final del anterior`)
+              .join('; ')}. Se arregla borrando el primer párrafo, o pidiendo el guion otra vez.`
+          : ''),
+      repiten.length ? 'atencion' : 'bueno',
     );
   },
   'paso3',

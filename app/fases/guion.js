@@ -280,7 +280,34 @@ export async function escribirGuion({
               `vuelvas a contar estos hechos, ni a presentar a quien ya presentaste, ` +
               `ni a explicar lo ya explicado. Este acto CONTINÚA desde aquí:\n\n` +
               partes.map((p, k) => `── acto ${k + 1} ──\n${p}`).join('\n\n') +
-              `\n\n`
+              `\n\n` +
+              // ─────────────────────────────────────────────────────────────
+              // Y EN CONCRETO: NO ABRAS CON EL FINAL DEL ACTO ANTERIOR.
+              //
+              // Con los actos anteriores completos delante, el guion seguía
+              // haciendo esto en las costuras: el acto anterior cerraba con el
+              // resultado del ADN y el siguiente ABRÍA con el resultado del ADN.
+              // El espectador lo acababa de oír hace veinte segundos.
+              //
+              // No era falta de contexto: lo tenía todo. Es el reflejo de
+              // «situar al espectador» al empezar una sección, y hay que
+              // prohibirlo por su nombre, porque «no repitas lo ya contado» no
+              // lo cubre — quien lo escribe no cree estar repitiendo, cree estar
+              // enlazando.
+              //
+              // Y se dice DÓNDE está la línea, porque enlazar sí hace falta: una
+              // oración subordinada que se apoya en lo anterior y sigue —«con la
+              // identidad ya establecida, faltaba el sospechoso»— es buena
+              // escritura. Un párrafo que vuelve a contarlo, no.
+              // ─────────────────────────────────────────────────────────────
+              `NO EMPIECES ESTE ACTO CONTANDO OTRA VEZ CÓMO TERMINÓ EL ANTERIOR. ` +
+              `Empieza DESPUÉS de eso. Si el acto anterior acabó con un resultado, ` +
+              `una fecha o un hallazgo, ese resultado YA SE CONTÓ: no lo repitas ` +
+              `para «situar», ni con otras palabras.\n` +
+              `Enlazar sí: media frase que se apoya en lo anterior y sigue hacia ` +
+              `delante —«con la identidad ya establecida, faltaba el sospechoso»— ` +
+              `está bien. Lo que no vale es dedicar el primer párrafo a volver a ` +
+              `contar lo que el espectador acaba de oír.\n\n`
             : '') +
           `FICHAS DISPONIBLES:\n${listaFichas}\n\n` +
           `Escribe SOLO este acto, en texto plano, empezando por «## ${acto.titulo}». ` +
@@ -317,6 +344,79 @@ export async function escribirGuion({
 }
 
 export const contarPalabras = (t) => (String(t).trim().match(/\S+/g) || []).length;
+
+/**
+ * QUÉ ACTOS ABREN REPITIENDO EL FINAL DEL ANTERIOR.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «El hecho de que abra con el cierre del acto anterior, ¿está bien o está mal?»
+ *
+ * Mal, salvo en una costura. Lo que separa el caso bueno del malo es LA
+ * DISTANCIA: recordar algo que se oyó hace veinte minutos es oficio; repetir
+ * algo que se oyó hace veinte segundos es un tartamudeo.
+ *
+ * Esto MIDE y AVISA. No reescribe, y es una decisión, no una dejadez: al
+ * calibrarlo contra un guion real, cualquier regla lo bastante estricta para
+ * cazar «El 20 de octubre de 2024, el informe de ADN…» —que abría repitiendo el
+ * ADN del acto anterior— marcaba también «Con la identidad ya establecida, la
+ * RCMP tenía un nombre. Pero no tenía sospechoso», que es una transición BUENA.
+ * Reescribir esa automáticamente empeoraría el guion y lo cobraría. Donde el
+ * juicio es editorial, la herramienta enseña y decide quien escribe.
+ *
+ * Se compara la APERTURA de cada acto con el CIERRE del anterior, en grupos de
+ * cuatro palabras. La primera costura no cuenta: el acto 1 es el gancho de todos
+ * los géneros y el 2 lo desarrolla — esa repetición es el diseño.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+const PALABRAS_DE_APERTURA = 70;
+const PALABRAS_DE_CIERRE = 150;
+const GRUPO = 4;
+
+const enPalabras = (t) =>
+  String(t || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+
+const gruposDe = (palabras) => {
+  const s = new Set();
+  for (let i = 0; i + GRUPO <= palabras.length; i++) s.add(palabras.slice(i, i + GRUPO).join(' '));
+  return s;
+};
+
+/** Lo que la apertura de un acto repite del cierre del anterior. */
+export function solapeDeApertura(anterior, acto) {
+  const cierre = gruposDe(enPalabras(anterior).slice(-PALABRAS_DE_CIERRE));
+  const apertura = gruposDe(enPalabras(acto).slice(0, PALABRAS_DE_APERTURA));
+  return [...apertura].filter((g) => cierre.has(g));
+}
+
+/**
+ * Los actos de un guion ya escrito que abren repitiendo, con lo que repiten.
+ *
+ * Trabaja sobre el TEXTO, no sobre el proceso: sirve igual para un guion recién
+ * generado, uno editado a mano o uno de hace tres meses.
+ */
+// Desde el TERCER acto: la costura 1→2 es el gancho y su desarrollo, y ahí la
+// repetición es el diseño del género — el gancho enseña el momento sin explicarlo
+// y el acto siguiente lo cuenta en serio. Empezando en el 2 se marcaba siempre.
+export function solapesDelGuion(guion, { desdeElActo = 3, minimo = 3 } = {}) {
+  const actos = String(guion || '')
+    .split(/^## /m)
+    .filter((x) => x.trim())
+    .map((a) => ({ titulo: a.split('\n')[0].trim(), texto: a.split('\n').slice(1).join('\n') }));
+  const salida = [];
+  for (let i = Math.max(1, desdeElActo - 1); i < actos.length; i++) {
+    const comunes = solapeDeApertura(actos[i - 1].texto, actos[i].texto);
+    if (comunes.length >= minimo) {
+      salida.push({ n: i + 1, titulo: actos[i].titulo, tras: actos[i - 1].titulo, comunes });
+    }
+  }
+  return salida;
+}
 
 /**
  * La huella de la estructura de actos: con qué actos se escribió un guion parcial.

@@ -3792,4 +3792,87 @@ export const invariantes = [
     // catálogo, y lo guardado desde un episodio se cae en la primera carga.
     romper: (ctx) => conFuncion(ctx, 'tomasDeBiblioteca', (o) => ctx.fn.tomasDeBiblioteca({ ...o, propios: [] })),
   },
+
+  {
+    nombre: 'ningun-acto-abre-repitiendo-el-final-del-anterior',
+    dice: '«El hecho de que abra con el cierre del acto anterior, ¿está bien o está mal?» Mal, y lo que separa el caso bueno del malo es LA DISTANCIA: recordar algo que se oyó hace veinte minutos es oficio; repetir algo que se oyó hace veinte segundos es un tartamudeo. El guion se escribe con una llamada por acto y cada una recibe los anteriores COMPLETOS, así que no es falta de contexto: es el reflejo de «situar al espectador» al abrir una sección, y hay que prohibirlo por su nombre porque «no repitas lo ya contado» no lo cubre — quien escribe no cree estar repitiendo, cree estar enlazando. En un guion real de treinta minutos, el acto que seguía al del ADN abría con «El 20 de octubre de 2024, el informe de ADN…»: el mismo golpe, dos veces, sin nada en medio.',
+    comprobar(ctx) {
+      const { solapeDeApertura, solapesDelGuion } = ctx.fn;
+      const gui = fuente(ctx, 'app/fases/guion.js');
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      // ── 1 · SE PROHÍBE POR SU NOMBRE ──────────────────────────────────────
+      // «No repitas lo ya contado» ya estaba, y el guion seguía haciéndolo.
+      if (!/NO EMPIECES ESTE ACTO CONTANDO OTRA VEZ CÓMO TERMINÓ EL ANTERIOR/.test(gui)) {
+        fallos.push('No se le dice al guion que no abra un acto repitiendo el final del anterior.');
+      }
+      // Y SE DICE DÓNDE ESTÁ LA LÍNEA. Sin esto se cambia un fallo por otro: un
+      // acto que no puede apoyarse en lo anterior empieza en el aire.
+      if (!/Enlazar sí/.test(gui)) {
+        fallos.push('Se prohíbe repetir sin decir que enlazar sí vale: los actos quedarían sueltos.');
+      }
+      // Y solo cuando hay algo escrito antes: al primer acto no se le puede pedir
+      // que no repita lo que todavía no existe.
+      const i = gui.indexOf('NO EMPIECES ESTE ACTO');
+      if (i > 0 && !gui.slice(0, i).includes('partes.length')) {
+        fallos.push('La regla se le pide también al primer acto, que no tiene anterior.');
+      }
+
+      // ── 2 · Y SE MIDE ─────────────────────────────────────────────────────
+      // Una regla en el encargo es una petición, no una garantía.
+      const cierre = 'El informe llegó el 20 de octubre de 2024. Las bases de datos criminales fueron rastreadas. El resultado fue inequívoco: cero coincidencias. La mujer del tetrápodo no existía en los registros.';
+      const repite = 'El 20 de octubre de 2024, las bases de datos criminales fueron rastreadas y el resultado fue inequívoco: cero coincidencias, la mujer del tetrápodo no existía en los registros de nadie.';
+      const enlaza = 'Con la identidad ya establecida, la policía tenía un nombre y un rostro. Pero no tenía un sospechoso, y esa fue la siguiente pregunta.';
+      if (solapeDeApertura(cierre, repite).length < 3) {
+        fallos.push('Un acto que abre repitiendo el final del anterior no se detecta.');
+      }
+      // Y LO QUE ENLAZA NO SE MARCA. Esto es la mitad del valor: una medida que
+      // marca las transiciones buenas es peor que ninguna, porque enseña a
+      // borrarlas.
+      if (solapeDeApertura(cierre, enlaza).length >= 3) {
+        fallos.push('Una transición legítima se marca como repetición: se acabaría borrando lo que enlaza.');
+      }
+
+      // ── 3 · LA PRIMERA COSTURA NO CUENTA ──────────────────────────────────
+      // El acto 1 es el gancho en TODOS los géneros y el 2 lo desarrolla: ahí la
+      // repetición es el diseño, no un defecto.
+      const conGancho =
+        `## Gancho\n${cierre}\n\n## Reconstrucción\n${repite}\n\n## Tercero\nAlgo completamente distinto que no repite nada de nada en absoluto.\n`;
+      if (solapesDelGuion(conGancho).length) {
+        fallos.push('Se marca la costura entre el gancho y su desarrollo, que es el diseño del género.');
+      }
+      // Pero de la tercera en adelante sí.
+      const masTarde = `## Uno\nx\n\n## Dos\n${cierre}\n\n## Tres\n${repite}\n`;
+      const marcados = solapesDelGuion(masTarde);
+      if (marcados.length !== 1 || marcados[0].n !== 3) {
+        fallos.push(`Un acto tardío que abre repitiendo no se marca: ${JSON.stringify(marcados.map((x) => x.n))}`);
+      }
+
+      // ── 4 · Y SE AVISA, SIN REESCRIBIR ────────────────────────────────────
+      // Distinguir lo que repite de lo que enlaza es un juicio de guion.
+      // Reescribir por error una transición buena empeoraría la pieza y la
+      // cobraría, así que la herramienta enseña y decide quien escribe.
+      if (!/solapesDelGuion\(texto\)/.test(main)) {
+        fallos.push('La pantalla no mira si algún acto abre repitiendo: el aviso no llega nunca.');
+      }
+      if (!/abre repitiendo el final del anterior/.test(main)) {
+        fallos.push('El aviso no dice qué pasa ni en qué acto.');
+      }
+      // Y NO se reescribe solo.
+      if (/solapesDelGuion[\s\S]{0,400}escribirGuion\(/.test(main)) {
+        fallos.push('El guion se reescribe solo al detectar solape: pagaría por un juicio que no es suyo.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: la medida cuenta cualquier palabra suelta en común,
+    // así que marca también las transiciones buenas — y con todo marcado, no hay
+    // nada marcado.
+    romper: (ctx) =>
+      conFuncion(ctx, 'solapeDeApertura', (anterior, acto) => {
+        const pal = (t) => String(t || '').toLowerCase().match(/[a-záéíóúñ]+/g) || [];
+        const antes = new Set(pal(anterior));
+        return [...new Set(pal(acto).filter((w) => antes.has(w)))];
+      }),
+  },
 ];
