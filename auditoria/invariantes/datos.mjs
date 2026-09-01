@@ -3849,7 +3849,33 @@ export const invariantes = [
         fallos.push(`Un acto tardío que abre repitiendo no se marca: ${JSON.stringify(marcados.map((x) => x.n))}`);
       }
 
-      // ── 4 · Y SE AVISA, SIN REESCRIBIR ────────────────────────────────────
+      // ── 4 · Y DOS BLOQUES SEGUIDOS NO TIENEN EL MISMO TRABAJO ─────────────
+      //
+      // La causa de verdad no estaba en cómo se escribía: estaba en el catálogo.
+      // El peritaje terminaba en «dónde se acaba lo que la técnica sabía leer» y
+      // el muro empezaba en «ninguna denuncia encaja» — el mismo momento, dos
+      // veces. Prohibirlo en el encargo no podía funcionar: al acto se le pedía a
+      // la vez que lo contara y que no lo repitiera.
+      const frio = (ctx.fn.GENEROS || []).find((g) => g.id === 'crimen-frio');
+      const bloque = (id) => (frio?.bloques || []).find((b) => b.id === id);
+      const peritaje = bloque('peritaje')?.funcion || '';
+      const muro = bloque('muro')?.funcion || '';
+      if (!peritaje || !muro) fallos.push('No se encuentran los bloques del peritaje y el muro.');
+      else {
+        // El peritaje se queda en el cuerpo y DICE que ahí termina.
+        if (!/TERMINA/.test(peritaje)) {
+          fallos.push('El peritaje no dice dónde termina: se come el bloque siguiente.');
+        }
+        if (!/identidad es del bloque siguiente|NO se busca todavía/i.test(peritaje)) {
+          fallos.push('El peritaje sigue pudiendo buscar la identidad, que es el trabajo del muro.');
+        }
+        // Y el muro EMPIEZA ahí, no lo recibe ya contado.
+        if (!/EMPIEZA/.test(muro)) {
+          fallos.push('El muro no dice que la búsqueda de identidad empieza en él: la daría por contada.');
+        }
+      }
+
+      // ── 5 · Y SE AVISA, SIN REESCRIBIR ────────────────────────────────────
       // Distinguir lo que repite de lo que enlaza es un juicio de guion.
       // Reescribir por error una transición buena empeoraría la pieza y la
       // cobraría, así que la herramienta enseña y decide quien escribe.

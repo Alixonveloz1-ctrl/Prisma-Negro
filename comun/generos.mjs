@@ -73,22 +73,41 @@ export const GENEROS = [
           'quién encuentra el cuerpo, qué estaba haciendo esa mañana, y en qué ' +
           'sitio imposible estuvo todos estos años sin que nadie lo viera',
       },
+      // ── ESTOS DOS BLOQUES TENÍAN EL MISMO TRABAJO ──────────────────────────
+      //
+      // «El hecho de que abra con el cierre del acto anterior, ¿está bien o está
+      //  mal?» Mal. Y en este género se repetía en la misma costura tres veces
+      //  seguidas, cada vez peor: el acto 4 llegó a abrir casi copiando la frase
+      //  con la que cerraba el 3.
+      //
+      // No era un tic de redacción, y por eso prohibirlo en el encargo no lo
+      // arregló: el peritaje terminaba en «dónde se acaba lo que la técnica de
+      // entonces sabía leer» y el muro empezaba en «ninguna denuncia encaja».
+      // Es el MISMO momento contado dos veces, y al acto 4 se le estaba pidiendo
+      // a la vez que lo contara y que no lo repitiera.
+      //
+      // Se separan por el objeto de cada uno, y cada función dice DÓNDE TERMINA:
+      // el peritaje se queda en el cuerpo; la identidad es del muro entero.
+      // ───────────────────────────────────────────────────────────────────────
       {
         id: 'peritaje',
         nombre: 'Autoridades y primer peritaje',
         peso: 0.16,
         funcion:
-          'lo que las autoridades pueden establecer y lo que NO: qué dice el ' +
-          'cuerpo, qué dicen los objetos, y dónde se acaba lo que la técnica de ' +
-          'entonces sabía leer',
+          'qué dicen EL CUERPO y LOS OBJETOS que salieron con él: la autopsia, lo ' +
+          'que se recupera, y el objeto que en su momento no se pudo leer. TERMINA ' +
+          'ahí, con ese objeto en la mano. NO se busca todavía de quién es el ' +
+          'cuerpo: la identidad es del bloque siguiente y no se toca aquí',
       },
       {
         id: 'muro',
         nombre: 'El muro: nada coincide',
         peso: 0.1,
         funcion:
-          'enseñar que ninguna denuncia encaja y que el caso se queda parado; el ' +
-          'espectador tiene que sentir el muro, no oír que lo hubo',
+          'EMPIEZA la búsqueda de identidad, que hasta ahora no se había intentado: ' +
+          'las bases de datos, que no encaja nada, y el muro. El espectador tiene ' +
+          'que sentirlo, no oír que lo hubo. Y CIERRA con la vía lateral que por fin ' +
+          'devuelve un nombre, que es lo que abre el bloque siguiente',
       },
       {
         id: 'pistafalsa',
