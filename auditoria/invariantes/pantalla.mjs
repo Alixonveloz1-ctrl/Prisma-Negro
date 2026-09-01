@@ -1775,10 +1775,28 @@ export const invariantes = [
       const css = hoja(ctx);
       const fallos = [];
 
+      // EN EL REPRODUCTOR, que es de lo que protege esta regla: seguir SOLO a la
+      // toma activa, ochenta y tres veces seguidas, sin que nadie lo pida. Un salto
+      // a petición —pulsar «Ver» y aterrizar en la lista— es lo contrario, y
+      // prohibirlo en todo el archivo obligaba a dejar botones que no llevan a
+      // ninguna parte. Se acota a la función que lo hacía.
+      //
       // La LLAMADA, no la palabra: el comentario que explica por qué se quitó
       // también dice «scrollIntoView» y no es un fallo.
-      if (/\.scrollIntoView\(/.test(main)) {
+      const iRepro = main.indexOf('function pintarTiras');
+      const repro = iRepro < 0 ? '' : main.slice(iRepro, main.indexOf('\n}\n', iRepro));
+      if (!repro) fallos.push('No se encuentra el reproductor.');
+      else if (/\.scrollIntoView\(/.test(repro)) {
         fallos.push('El reproductor sigue moviendo la página con scrollIntoView: se va de pantalla en cada toma.');
+      }
+      // Y NUNCA SOLO: si aparece fuera, tiene que ser dentro de un manejador de
+      // pulsación. Un scroll que nadie pidió es el fallo, esté donde esté.
+      for (const m of main.matchAll(/\.scrollIntoView\(/g)) {
+        const antes = main.slice(Math.max(0, m.index - 700), m.index);
+        if (!/onclick|addEventListener\('click'|\.click\(\)/.test(antes)) {
+          fallos.push('Hay un scrollIntoView que no lo dispara una pulsación: la página se mueve sola.');
+          break;
+        }
       }
       // DENTRO DEL VISOR, contando las etiquetas. Antes esto se medía por
       // distancia —«a menos de 600 caracteres del visor»— y era frágil de la peor
@@ -2080,8 +2098,47 @@ export const invariantes = [
         fallos.push(`Lo heredado se cuenta como pendiente: pediría pagar por lo que ya está. «${texto(con).slice(0, 90)}»`);
       }
 
-      // ── 4 · Y LA PASTILLA DEL BOTÓN TAMPOCO SE QUEDA MUDA ─────────────────
+      // ── 4 · Y CADA FILA LLEVA A DONDE SE HACE ─────────────────────────────
+      //
+      // «No puedo ver las imágenes que faltan, las que ya están listas, no puedo
+      //  escuchar los audios, no puedo escuchar la música, no puedo hacer nada.»
+      //
+      // Se podía —las listas existen en Tomas— pero en otra pestaña y sin nada que
+      // lo dijera. Un desglose que informa y no deja actuar es media herramienta.
       const main = fuente(ctx, 'app/main.js');
+      if (!/data-desglose/.test(main)) {
+        fallos.push('Las filas del desglose no llevan a ninguna parte: informan y no dejan hacer nada.');
+      }
+      // Y lo que falta se HACE desde ahí. Decía «falta la dirección de arte» y el
+      // único botón para hacerla estaba en otra pestaña: nada en pantalla lo decía.
+      if (!/falta: dirigidas \? '' : 'Dirección de arte'/.test(main)) {
+        fallos.push('Cuando falta la dirección de arte no se ofrece hacerla: hay que ir a buscarla a otra pestaña.');
+      }
+      if (!/\$\(f\.hacer\)\?\.click\(\)/.test(main)) fallos.push('El botón de la fila no dispara nada.');
+      for (const ancla of ['lista-voz', 'galeria', 'lista-clips', 'lista-musica']) {
+        if (!new RegExp(`ancla: '${ancla}'`).test(main)) {
+          fallos.push(`Ninguna fila lleva a «${ancla}»: esa fase no se puede ni ver ni oír desde aquí.`);
+        }
+      }
+
+      // ── 5 · Y REPARTIR EL GUION NO TIRA LO PAGADO ─────────────────────────
+      //
+      // «Ahora dice que el audio cero de doscientos cuatro, cuando ya los había
+      //  generado todos.» Hay DOS caminos que reparten el guion en tomas y solo
+      //  uno conservaba: el otro hacía `tomas = r.tomas` a secas y dejaba
+      //  doscientas cuatro locuciones pagadas sin enlazar con nada. Se cuentan,
+      //  como el aviso: «hay al menos uno» ya falló una vez por esto mismo.
+      const reparten = (main.match(/segmentarVerificado\(/g) || []).length;
+      const conservan = (main.match(/repartirConservando\(/g) || []).length - 1; // menos su definición
+      if (!reparten) fallos.push('No se encuentra dónde se reparte el guion en tomas.');
+      else if (conservan < reparten) {
+        fallos.push(`${reparten} caminos reparten el guion y solo ${conservan} conservan lo pagado.`);
+      }
+      if (/pieza\(\)\.tomas = r\.tomas;/.test(main)) {
+        fallos.push('Un camino sigue sustituyendo las tomas a secas: se pierde todo lo generado.');
+      }
+
+      // ── 6 · Y LA PASTILLA DEL BOTÓN TAMPOCO SE QUEDA MUDA ─────────────────
       if (!/pieza\(\)\.tomas\.length \? '—' : ''/.test(main)) {
         fallos.push('Con tomas y sin nada que planear, la pastilla del botón se queda en blanco.');
       }

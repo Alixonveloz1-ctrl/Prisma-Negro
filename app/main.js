@@ -122,6 +122,35 @@ const colaInvestiga = new Cola({
  * Ahora lo compone esta función y la llaman los dos. Ver `solapesDelGuion`.
  * ─────────────────────────────────────────────────────────────────────────────
  */
+/**
+ * Reparte el guion en tomas SIN tirar lo que ya está pagado.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Ahora dice que el audio cero de doscientos cuatro, cuando ya los había
+ *  generado todos.»
+ *
+ * HAY DOS CAMINOS que reparten el guion —«Escribir el guion», que reparte al
+ * terminar, y «Partir en tomas»— y solo el segundo conservaba lo generado. El
+ * primero hacía `pieza().tomas = r.tomas` a secas: tomas nuevas, con `audio` en
+ * blanco, y doscientas cuatro locuciones pagadas que dejaban de estar enlazadas
+ * a nada. La protección existía, con su comentario y todo, en el camino que él no
+ * usa. Es el mismo fallo que el aviso del guion: dos caminos, uno protegido.
+ *
+ * Se conserva por TEXTO: una toma cuyo texto no cambió se queda con su audio, su
+ * imagen y su clip. Si el texto cambió, su narración ya no vale y se regenera —
+ * eso sí es correcto.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+function repartirConservando(z, r) {
+  const antes = new Map((z.tomas || []).map((t) => [t.texto, t]));
+  z.tomas = r.tomas.map((t) => {
+    const viejo = antes.get(t.texto);
+    return viejo ? { ...t, ...viejo, i: t.i, escena: t.escena } : t;
+  });
+  z.escenas = r.escenas;
+  return z.tomas.filter((t) => antes.has(t.texto)).length;
+}
+
 function avisoDeGuion(donde, texto, extra = '') {
   const n = guionFase.contarPalabras(texto);
   const repiten = guionFase.solapesDelGuion(texto);
@@ -720,7 +749,8 @@ function desgloseDeFases() {
   // `porque` explica un total de cero: sin él, «0/0» y «aún no se puede» se ven
   // exactamente igual.
   return [
-    { que: 'Narración', hechas: voz[2], total: voz[3], gratis: 0, porque: t.length ? '' : 'parte el guion en tomas primero' },
+    { que: 'Narración', hechas: voz[2], total: voz[3], gratis: 0, ancla: 'lista-voz',
+      porque: t.length ? '' : 'parte el guion en tomas primero' },
     {
       que: 'Imágenes',
       hechas: imagenes[2],
@@ -731,6 +761,10 @@ function desgloseDeFases() {
         repitenImg ? `${repitenImg} repiten plano` : '',
       ].filter(Boolean).join(' · '),
       porque: dirigidas ? '' : 'falta la dirección de arte',
+      ancla: 'galeria',
+      // Sin dirección de arte no hay nada que ver: se ofrece HACERLA, aquí mismo.
+      falta: dirigidas ? '' : 'Dirección de arte',
+      hacer: dirigidas ? '' : 'b-dirigir',
     },
     {
       que: 'Clips',
@@ -742,8 +776,12 @@ function desgloseDeFases() {
         repitenVid ? `${repitenVid} repiten plano` : '',
       ].filter(Boolean).join(' · '),
       porque: !dirigidas ? 'falta la dirección de arte' : conClip ? '' : 'ninguna toma lleva clip',
+      ancla: 'lista-clips',
+      falta: dirigidas ? '' : 'Dirección de arte',
+      hacer: dirigidas ? '' : 'b-dirigir',
     },
-    { que: 'Música', hechas: musica[2], total: musica[3], gratis: 0, porque: escenas.length ? '' : 'sin escenas' },
+    { que: 'Música', hechas: musica[2], total: musica[3], gratis: 0, ancla: 'lista-musica',
+      porque: escenas.length ? '' : 'sin escenas' },
   ];
 }
 
@@ -751,8 +789,9 @@ function pintarDesglose() {
   const caja = $('desglose');
   if (!caja) return;
   caja.className = 'desglose';
-  caja.innerHTML = desgloseDeFases()
-    .map((f) => {
+  const filas = desgloseDeFases();
+  caja.innerHTML = filas
+    .map((f, n) => {
       const listo = f.total > 0 && f.hechas === f.total;
       const cifra = f.total
         ? `<span class="n ${listo ? 'ok' : f.hechas ? 'falta' : ''}">${f.hechas}/${f.total}</span>` +
@@ -761,9 +800,27 @@ function pintarDesglose() {
       const gratis = f.gratis
         ? `<span class="gratis">+${f.gratis} sin pagar${f.detalle ? ` (${escapar(f.detalle)})` : ''}</span>`
         : '';
-      return `<div class="f"><b>${f.que}</b>${cifra}${gratis}</div>`;
+      // CADA FILA LLEVA A DONDE SE HACE. «No puedo ver las imágenes que faltan,
+      // las que ya están, no puedo escuchar los audios ni la música»: se podía,
+      // pero en otra pestaña y sin nada que lo dijera. Un desglose que informa y
+      // no deja actuar es media herramienta.
+      const ir = f.falta
+        ? `<button class="btn chico primario" data-desglose="${n}">${escapar(f.falta)}</button>`
+        : `<button class="btn chico fantasma" data-desglose="${n}">${f.total ? 'Ver' : 'Abrir'}</button>`;
+      return `<div class="f"><b>${f.que}</b>${cifra}${gratis}${ir}</div>`;
     })
     .join('');
+
+  for (const boton of caja.querySelectorAll('[data-desglose]')) {
+    const f = filas[Number(boton.dataset.desglose)];
+    boton.onclick = () => {
+      // Lo que falta de verdad se HACE aquí mismo; lo demás lleva a su lista.
+      if (f.hacer) return $(f.hacer)?.click();
+      ir('tomas');
+      const donde = $(f.ancla);
+      if (donde?.scrollIntoView) donde.scrollIntoView({ block: 'start' });
+    };
+  }
 }
 
 /**
@@ -1348,8 +1405,8 @@ accion(
     $('guion').value = texto;
 
     const r = segmentarVerificado(texto, P.config.segmentacion);
-    pieza().tomas = r.tomas;
-    pieza().escenas = r.escenas;
+    // CONSERVANDO lo pagado. Aquí se tiraba: ver `repartirConservando`.
+    const salvadas = repartirConservando(pieza(), r);
     await guardar();
     pintarTodo();
     // La conclusión va DONDE FUE EL PROGRESO.
@@ -1357,7 +1414,12 @@ accion(
     // Iba a la caja del paso 2 mientras el progreso escribía en la del 3, así que
     // arriba ponía «terminado» y abajo seguía poniendo «escribiendo el acto 4 de
     // 4…» para siempre. Un aviso que no se limpia solo es un aviso que miente.
-    avisoDeGuion('paso3', texto, ` ${r.tomas.length} tomas y ${r.escenas.length} escenas.`);
+    avisoDeGuion(
+      'paso3',
+      texto,
+      ` ${r.tomas.length} tomas y ${r.escenas.length} escenas` +
+        (salvadas ? `, y ${salvadas} conservan lo que ya tenían generado.` : '.'),
+    );
   },
   'paso3',
 );
@@ -1410,14 +1472,8 @@ accion(
     // §4.3: segmentar SIN comprobar la cobertura es como no haber comprobado nunca.
     const r = segmentarVerificado(pieza().guion, P.config.segmentacion);
 
-    // Se conserva lo ya generado de las tomas cuyo texto no cambió: repartir otra
-    // vez el guion no debería obligar a pagar la narración otra vez.
-    const antes = new Map(pieza().tomas.map((t) => [t.texto, t]));
-    pieza().tomas = r.tomas.map((t) => {
-      const viejo = antes.get(t.texto);
-      return viejo ? { ...t, ...viejo, i: t.i, escena: t.escena } : t;
-    });
-    pieza().escenas = r.escenas;
+    // Por la misma función que el otro camino: ver `repartirConservando`.
+    repartirConservando(pieza(), r);
     await guardar();
     pintarTodo();
     avisar(

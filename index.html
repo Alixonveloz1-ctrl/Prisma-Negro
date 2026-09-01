@@ -333,6 +333,9 @@ nav.pestanas button.on{background:var(--violeta);border-color:var(--violeta);col
 .desglose .n.falta{color:var(--oro)}
 .desglose .gratis{color:var(--tinta-3);font-size:12px}
 .desglose .porque{color:var(--tinta-3);font-size:12px;font-style:italic}
+/* El botón de cada fila, al final y sin empujar los números. */
+.desglose .f .btn{margin-left:auto;flex:none}
+@media (max-width:420px){.desglose .f{flex-wrap:wrap}.desglose .f .btn{margin-left:0}}
 .cuenta-fase{font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;border:1px solid var(--linea-2);color:var(--tinta-2);background:var(--carta)}
 .cuenta-fase:empty{display:none}
 .cuenta-fase.lista{color:var(--verde);border-color:rgba(61,214,140,.3);background:var(--verde-suave)}
