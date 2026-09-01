@@ -222,6 +222,30 @@ export const admiteTamanoImagen = (id) => /^gemini-3/i.test(String(id));
  * un segundo —que el montaje recorta— que faltar uno, que se ve como imagen
  * congelada. Por encima del máximo se pide el máximo.
  */
+/**
+ * LA DURACIÓN MÁS LARGA QUE DA ESTE GENERADOR.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Todos los clips se deben generar de ocho segundos para aprovecharlos. En caso
+ *  de que la toma sea de menos de ocho segundos, se corta el clip, y ya, no
+ *  importa que el resto se pierda: es un clip que se puede reutilizar para
+ *  futuras generaciones en una toma que sí utilice los ocho segundos.»
+ *
+ * Un clip de cuatro segundos es un callejón sin salida: solo cubre tomas de
+ * cuatro segundos, y en cuanto vuelva a hacer falta ese plano en una toma de doce
+ * hay que pagarlo otra vez. Uno de ocho cubre hasta veinte estirando dentro del
+ * tope, y se paga UNA vez para siempre.
+ *
+ * Cuesta más por clip y menos por canal. El archivo ya lo hacía así
+ * —`SEGUNDOS_DE_CLIP = 8`, con este mismo razonamiento escrito al lado— y la fase
+ * del episodio se había quedado pidiendo la duración MÁS CERCANA a la toma.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export function duracionMasLarga(clave) {
+  const fila = familiaDe('video').find((f) => f.clave === clave || f.ids.includes(clave));
+  return (fila?.duraciones || [4, 6, 8]).reduce((a, b) => (b > a ? b : a));
+}
+
 export function duracionValida(clave, segundos) {
   const fila = familiaDe('video').find((f) => f.clave === clave || f.ids.includes(clave));
   const lista = fila?.duraciones || [4, 6, 8];

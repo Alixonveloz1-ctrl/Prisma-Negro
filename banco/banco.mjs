@@ -145,8 +145,13 @@ function proyectoSintetico() {
       // La 2 con su clip pagado; la 5 con el clip solo PROPUESTO. La 5 tiene que
       // montarse con su imagen y recorrido de cámara — el clip es opcional, y
       // este es el único sitio donde ese camino pasa por ffmpeg de verdad.
-      movimiento: i === 2 || i === 5,
+      // La 2 con su clip pagado; la 5 con el clip solo PROPUESTO. Y la 6 y la 7
+      // HEREDAN EL MISMO clip: dos tomas seguidas con el mismo material, que es lo
+      // que el montaje tiene que fundir en un solo plano continuo. Sin ellas aquí,
+      // la fusión no pasaba nunca por ffmpeg de verdad.
+      movimiento: i === 2 || i === 5 || i === 6 || i === 7,
       video: i === 2 ? 'ok' : null,
+      heredadoVid: i === 6 || i === 7 ? 'biblioteca/t041/vid' : null,
       // El silencio, que también se monta: la apertura en frío retrasa la voz de
       // la primera toma, y el respiro deja la imagen sola tras la última palabra.
       // Sin esto aquí, el camino de ffmpeg que los ejecuta (`adelay`, el relleno
@@ -297,8 +302,19 @@ if (!hayFfmpeg()) {
       '-c',
       `ls ${JSON.stringify(TALLER)}/seg_*.mp4 2>/dev/null | wc -l`,
     ]).toString().trim();
-    if (Number(cuenta) === hoja.tomas.length) bien(`${cuenta} segmentos, uno por toma, codificados una vez`);
-    else mal(`${cuenta} segmentos para ${hoja.tomas.length} tomas`);
+    // UN SEGMENTO POR PLANO, no por toma: las tomas seguidas con el mismo material
+    // se funden. Las 7 y 8 comparten clip heredado, así que de 8 tomas salen 7
+    // segmentos — y que el total siga durando lo mismo lo comprueba el ±0.000 de
+    // arriba, que es la prueba de verdad de que fundir no descuadra nada.
+    let planos = 0;
+    for (let k = 0; k < hoja.tomas.length; k++) {
+      const a = hoja.tomas[k];
+      const b = hoja.tomas[k - 1];
+      if (!(b && b.movimiento && a.movimiento && b.archivo === a.archivo)) planos++;
+    }
+    if (Number(cuenta) !== planos) mal(`${cuenta} segmentos para ${planos} planos (${hoja.tomas.length} tomas)`);
+    else if (planos === hoja.tomas.length) mal('no se fundió ninguna toma: la fusión no se está ejecutando con ffmpeg');
+    else bien(`${cuenta} segmentos para ${hoja.tomas.length} tomas: las seguidas con el mismo clip se fundieron`);
   }
 
   // ── El estirado del clip, con el shell de verdad ───────────────────────────
@@ -342,10 +358,35 @@ if (!hayFfmpeg()) {
     if (g === 1) bien('un clip que ya cubre la toma no se estira');
     else mal(`un clip de 8 s en una toma de 7 s se estira ×${g}: sobra clip, no falta`);
 
-    // Y uno demasiado corto NO se convierte en cámara lenta: manda el bucle.
-    const h = factorCon(2, 11);
-    if (h === 1) bien('un clip demasiado corto no se estira a cámara lenta: se queda el bucle');
-    else mal(`un clip de 2 s en una toma de 11 s se estira ×${h}: eso es cámara lenta evidente`);
+    // ── Y CUANDO EL CLIP NO DA, SE REPITE ENTERO ───────────────────────────
+    //
+    // «Prefiero que se repita a que se congele el último fotograma: si el último
+    //  fotograma termina en una imagen borrosa, queda una imagen borrosa y
+    //  congelada. Entre los dos, es más profesional que se repita.»
+    //
+    // Y con una condición suya, que es la que manda aquí: «no puedes alargar uno
+    // que va a ir superlento y después repetir a velocidad normal». Antes esto
+    // devolvía 1 —repetir a velocidad normal— y la última vuelta se cortaba a
+    // media. Ahora se busca el menor número de vueltas que quepa dentro del tope y
+    // se estira a ese factor: UNA sola velocidad, y la última vuelta acaba justo
+    // en el corte.
+    // Solo clips de OCHO segundos: es lo único que se pide ya, para que sirvan en
+    // cualquier toma futura. Probar con clips de dos o cuatro sería probar un caso
+    // que la herramienta no produce. Ver `duracionQueSePide`.
+    for (const [clip, toma] of [[8, 11], [8, 20], [8, 27], [8, 41]]) {
+      const h = factorCon(clip, toma);
+      const vueltas = toma / (clip * h);
+      const entera = Math.abs(vueltas - Math.round(vueltas)) < 0.01;
+      if (h > 2.5 + 1e-6) mal(`un clip de ${clip} s en ${toma} s se estira ×${h}: pasa del tope de 2,5`);
+      else if (!entera) mal(`un clip de ${clip} s en ${toma} s da ${vueltas.toFixed(2)} vueltas: la última se corta a media`);
+      else if (Math.abs(vueltas * clip * h - toma) > 0.02) mal(`un clip de ${clip} s no cubre los ${toma} s de la toma`);
+      else bien(`un clip de ${clip} s cubre ${toma} s con ${Math.round(vueltas)} vueltas a ×${h.toFixed(3)}, una sola velocidad`);
+    }
+
+    // Y SE GASTA EL ESTIRAMIENTO ANTES DE AÑADIR UNA VUELTA: repetir es lo que no
+    // se quiere, así que dos vueltas lentas ganan a tres normales.
+    if (Math.abs(factorCon(8, 27) - 27 / 16) < 0.02) bien('se repite lo menos posible: 27 s de un clip de 8 son dos vueltas, no tres');
+    else mal(`27 s de un clip de 8 s dan ×${factorCon(8, 27)} y deberían dar ×${(27 / 16).toFixed(3)} (dos vueltas)`);
   }
 }
 

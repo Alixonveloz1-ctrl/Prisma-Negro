@@ -3942,4 +3942,53 @@ export const invariantes = [
         return [...new Set(pal(acto).filter((w) => antes.has(w)))];
       }),
   },
+
+  {
+    nombre: 'un-clip-se-pide-siempre-de-lo-mas-largo-que-de-el-generador',
+    dice: '«Todos los clips se deben generar de ocho segundos para aprovecharlos. En caso de que la toma sea de menos de ocho segundos, se corta el clip y ya, no importa que el resto se pierda: es un clip que se puede reutilizar para futuras generaciones en una toma que sí utilice los ocho segundos.» Y aquí se pedía la duración MÁS CERCANA a la toma: una toma de tres segundos pedía un clip de cuatro. Ese clip es un callejón sin salida —solo cubre tomas de cuatro segundos— y en cuanto el mismo plano haga falta en una toma de doce hay que pagarlo otra vez. El archivo ya lo hacía bien, con este razonamiento escrito al lado en `SEGUNDOS_DE_CLIP = 8`; la fase del episodio se había quedado atrás. Cuesta más por clip y menos por canal.',
+    comprobar(ctx) {
+      const { duracionQueSePide, duracionMasLarga, duracionMasCercana, segundosDeClip } = ctx.fn;
+      const mov = fuente(ctx, 'app/fases/movimiento.js');
+      const fallos = [];
+
+      // 1 · SIEMPRE LO MÁS LARGO, dure lo que dure la toma.
+      const pedida = duracionQueSePide();
+      if (pedida !== duracionMasLarga()) {
+        fallos.push(`Se pide un clip de ${pedida} s cuando el generador da hasta ${duracionMasLarga()}.`);
+      }
+      if (pedida < 8) fallos.push(`Se piden clips de ${pedida} s: por debajo de ocho no cubren una toma larga.`);
+      // Y NO DEPENDE DE LA TOMA. Es lo que lo hace reutilizable.
+      if (duracionQueSePide.length > 1) {
+        fallos.push('Lo que se pide todavía depende de la toma: volvería el clip que solo sirve para la suya.');
+      }
+
+      // 2 · Y NO SE USA LA MÁS CERCANA para pedir. Una toma de tres segundos pedía
+      // cuatro, y ese clip no sirve para ninguna otra.
+      if (/segundos: duracionMasCercana\(/.test(mov)) {
+        fallos.push('Se sigue pidiendo la duración más cercana a la toma: vuelven los clips de cuatro segundos.');
+      }
+      // La cuenta del gasto tiene que decir lo mismo que lo que se pide, o el
+      // presupuesto que se enseña antes de gastar es mentira.
+      if (!/con\.length \* duracionQueSePide\(/.test(mov)) {
+        fallos.push('El presupuesto no cuenta lo que de verdad se va a pedir.');
+      }
+
+      // 3 · `duracionMasCercana` se queda: la usa el montaje para saber qué cabe,
+      // que es otra pregunta. Lo que no puede es decidir lo que se PIDE.
+      if (typeof duracionMasCercana !== 'function' || duracionMasCercana(11) !== 8) {
+        fallos.push('Se ha perdido el cálculo de qué duración de la lista cubre una toma.');
+      }
+      // Y una toma corta sigue pidiendo el clip largo: se corta y lo que sobra se
+      // reutiliza. Eso es lo contrario de lo que hacía.
+      for (const corta of [3, 5, 7]) {
+        if (duracionMasCercana(segundosDeClip({ segundos: corta })) >= pedida) continue;
+        if (duracionQueSePide() !== pedida) {
+          fallos.push(`Una toma de ${corta} s cambia lo que se pide: el clip dejaría de ser reutilizable.`);
+        }
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: la duración más cercana a la toma.
+    romper: (ctx) => conFuncion(ctx, 'duracionQueSePide', () => 4),
+  },
 ];

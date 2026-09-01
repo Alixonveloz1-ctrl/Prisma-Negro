@@ -260,6 +260,32 @@ const TOPE_LENTO = 2.5;
  *   5. Una sola codificación de audio, al final (§5.5).
  *   6. La música cede paso por compresión lateral, no por volumen fijo (§5.6).
  */
+/**
+ * Los PLANOS de una hoja: tomas seguidas con el mismo material, fundidas en una.
+ *
+ * Fuera de `guionFfmpeg` para poder ejecutarla suelta en la auditoría: la fusión
+ * no se ve leyendo el guion de ffmpeg, y una comprobación que solo mira texto no
+ * habría cazado que dejara de fundir.
+ *
+ * Los fotogramas se SUMAN ya redondeados, no se redondea la suma: la pieza tiene
+ * que durar exactamente lo mismo que antes y el banco lo mide al fotograma.
+ */
+export function planosDeLaHoja(hoja, fps) {
+  const planos = [];
+  for (const t of hoja?.tomas || []) {
+    const ultimo = planos[planos.length - 1];
+    const mismo = ultimo && ultimo.movimiento && t.movimiento && ultimo.archivo === t.archivo;
+    if (mismo) {
+      ultimo.frames += Math.round(t.duracion * fps);
+      ultimo.duracion = ultimo.frames / fps;
+      ultimo.tomas.push(t.i);
+    } else {
+      planos.push({ ...t, frames: Math.round(t.duracion * fps), tomas: [t.i] });
+    }
+  }
+  return planos;
+}
+
 export function guionFfmpeg(hoja) {
   const a = { ...PREDETERMINADO, ...(hoja.ajustes || {}) };
   const { ancho: W, alto: H, fps } = hoja;
@@ -283,11 +309,40 @@ export function guionFfmpeg(hoja) {
   p('rm -f lista_video.txt lista_voz.txt');
   p('');
 
-  // ── 1. Un segmento mudo por toma ────────────────────────────────────────────
-  p('# ── 1. Un segmento por toma, codificado UNA vez, mudo, con la marca dentro ──');
-  hoja.tomas.forEach((t, n) => {
+  // ── 1. Un segmento mudo por PLANO ───────────────────────────────────────────
+  //
+  // ───────────────────────────────────────────────────────────────────────────
+  // TOMAS SEGUIDAS CON EL MISMO MATERIAL SON UN SOLO PLANO.
+  //
+  // «Hay imágenes que se están reutilizando, pero continuas. No sé si está bien o
+  //  hay un error.»
+  //
+  // Compartir estaba bien —tres tomas del mismo testimonio son la misma cara, y se
+  // paga una vez—. Lo que estaba mal era el montaje: un segmento por toma, cada uno
+  // arrancando el mismo clip desde cero y con SU PROPIO factor de estiramiento. Tres
+  // tomas de 8, 9 y 10 segundos daban el mismo video tres veces, a ×1,0, ×1,125 y
+  // ×1,25. Un bucle y encima con cambios de velocidad dentro.
+  //
+  // «No puedes alargar uno que va a ir superlento y después repetir a velocidad
+  //  normal. Tendría que repetirse los tres.»
+  //
+  // Eso: se funden en UN plano de veintisiete segundos, con UNA velocidad para todo
+  // y un número ENTERO de vueltas, que es lo que hace que la última acabe justo en
+  // el corte en vez de quedarse a medias. Ver el cálculo de `L`.
+  //
+  // La voz NO se toca: va toma a toma, en su propia sección. Aquí solo se une la
+  // imagen. Y los fotogramas se SUMAN ya redondeados, no se redondea la suma: la
+  // pieza tiene que durar exactamente lo mismo que antes, y el banco lo mide.
+  // ───────────────────────────────────────────────────────────────────────────
+  const planos = planosDeLaHoja(hoja, fps);
+
+  p('# ── 1. Un segmento por plano, codificado UNA vez, mudo, con la marca dentro ──');
+  planos.forEach((t, n) => {
     const seg = `seg_${String(n).padStart(4, '0')}.mp4`;
-    const frames = Math.round(t.duracion * fps);
+    const frames = t.frames;
+    if (t.tomas.length > 1) {
+      p(`# tomas ${t.tomas.map((i) => i + 1).join(', ')}: mismo material, un solo plano continuo`);
+    }
     const cadenas = [];
 
     if (t.movimiento) {
@@ -330,10 +385,25 @@ export function guionFfmpeg(hoja) {
         `D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 ` +
           `${sh(nombreLocal(t.archivo))} 2>/dev/null || true)`,
       );
+      // UNA SOLA VELOCIDAD Y VUELTAS ENTERAS.
+      //
+      // Antes: se estiraba hasta el tope y, si no llegaba, factor 1 y a repetir a
+      // velocidad normal cortando a media vuelta. Con tomas fundidas eso es justo
+      // lo que él descartó —«no puedes alargar uno que va superlento y después
+      // repetir a velocidad normal»— y a media vuelta el corte cae en cualquier
+      // parte del movimiento.
+      //
+      // Ahora se busca el MENOR número de vueltas `n` cuyo estiramiento quepa
+      // dentro del tope, y se estira a `t/(n*d)`: la misma velocidad de principio a
+      // fin y la última vuelta acaba justo en el corte. Con 27 s y un clip de 8:
+      // una vuelta pediría ×3,375, que pasa del tope; dos dan ×1,687 y cuadran
+      // exacto. Menos vueltas es mejor —repetir es lo que no se quiere— así que se
+      // gasta todo el estiramiento permitido antes de añadir una.
       p(
         `L=$(LC_ALL=C awk -v d="$D" -v t=${t.duracion.toFixed(3)} -v m=${TOPE_LENTO} ` +
-          `'BEGIN{ if (d+0 <= 0.1) { print "1"; exit } f = t / (d+0); ` +
-          `if (f <= 1.02 || f > m) { print "1" } else { printf "%.5f", f } }')`,
+          `'BEGIN{ if (d+0 <= 0.1) { print "1"; exit } n = 1; ` +
+          `while (n < 200 && t / (n * (d+0)) > m) { n++ } f = t / (n * (d+0)); ` +
+          `if (f <= 1.02) { print "1" } else { printf "%.5f", f } }')`,
       );
       cadenas.push(
         `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,` +

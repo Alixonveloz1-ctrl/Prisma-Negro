@@ -748,7 +748,24 @@ export const invariantes = [
       }
       for (const [linea] of factores) {
         // El factor es toma ÷ clip. Al revés sería cámara rápida.
-        if (!/f\s*=\s*t\s*\/\s*\(?d/.test(linea)) fallos.push('El factor no se calcula como duración de la toma entre la del clip.');
+        // Toma ÷ clip, y ahora también ÷ el número de vueltas. Al revés sería
+        // cámara rápida; sin las vueltas, un plano largo pediría un estiramiento
+        // que no cabe en el tope y se caía al bucle a velocidad normal.
+        if (!/f\s*=\s*t\s*\/\s*\(?\s*n?\s*\*?\s*\(?d/.test(linea)) {
+          fallos.push('El factor no se calcula como duración de la toma entre la del clip.');
+        }
+        // VUELTAS ENTERAS Y UNA SOLA VELOCIDAD.
+        //
+        // «No puedes alargar uno que va a ir superlento y después repetir a
+        //  velocidad normal. Tendría que repetirse los tres.»
+        //
+        // Antes: se estiraba hasta el tope y, si no llegaba, factor 1 y a repetir a
+        // velocidad normal, cortando a media vuelta. Ahora se busca el MENOR número
+        // de vueltas que quepa dentro del tope: misma velocidad de principio a fin
+        // y la última acaba justo en el corte.
+        if (!/while \([^)]*t \/ \(n \* \(d\+0\)\) > m\)/.test(linea)) {
+          fallos.push('No se buscan vueltas enteras: la última se cortaría a media y a otra velocidad.');
+        }
         // Y hay un tope: más allá, cámara lenta evidente. Sin tope, un clip de dos
         // segundos en una toma de veinte saldría a un décimo de velocidad.
         const tope = Number(/-v m=([\d.]+)/.exec(linea)?.[1] || 0);
@@ -774,7 +791,37 @@ export const invariantes = [
         }
       }
 
-      // 4 · Y EL BUCLE SE QUEDA de red de seguridad, para lo que no cabe en el tope.
+      // 4 · TOMAS SEGUIDAS CON EL MISMO MATERIAL SON UN SOLO PLANO.
+      //
+      // «Hay imágenes que se están reutilizando, pero continuas.» Compartir estaba
+      // bien —tres tomas del mismo testimonio son la misma cara— pero el montaje
+      // hacía un segmento por toma: el mismo clip arrancando de cero tres veces y
+      // con tres factores distintos. Un bucle, y encima con cambios de velocidad.
+      const plano = { encuadre: 'x', movimientoCamara: 'fijo', lugar: 'y', luz: 'z', sujetos: [], descripcion: 'd' };
+      const seguidas = [0, 1, 2].map((i) => ({
+        i, escena: 0, texto: 't', segundos: 8 + i, medida: true, plano, audio: 'ok',
+        imagen: 'ok', movimiento: true, heredado: 'biblioteca/t041/img', heredadoVid: 'biblioteca/t041/vid',
+      }));
+      const hj = ctx.fn.construirHoja({ pieza: 'p01', tomas: seguidas, escenas: [{ n: 0 }] });
+      const planos = ctx.fn.planosDeLaHoja(hj, 30);
+      if (planos.length !== 1) {
+        fallos.push(`Tres tomas seguidas con el mismo clip dan ${planos.length} planos: el video arranca de cero en cada una.`);
+      } else {
+        // Y DURA LO MISMO: fundir no puede descuadrar la pieza ni un fotograma.
+        const suelto = seguidas.reduce((n, t) => n + Math.round(hj.tomas.find((x) => x.i === t.i).duracion * 30), 0);
+        if (planos[0].frames !== suelto) {
+          fallos.push(`El plano fundido dura ${planos[0].frames} fotogramas y las tomas sueltas ${suelto}.`);
+        }
+      }
+      // Y lo que NO comparte material no se funde: serían dos planos distintos
+      // pegados en uno.
+      const distintas = seguidas.map((t, i) => ({ ...t, heredadoVid: `biblioteca/t0${41 + i}/vid` }));
+      const hj2 = ctx.fn.construirHoja({ pieza: 'p01', tomas: distintas, escenas: [{ n: 0 }] });
+      if (ctx.fn.planosDeLaHoja(hj2, 30).length !== 3) {
+        fallos.push('Se funden tomas con material distinto: se perdería el corte entre planos.');
+      }
+
+      // 5 · Y EL BUCLE SE QUEDA de red de seguridad, para lo que no cabe en el tope.
       if (!/-stream_loop -1 -i '[^']*_vid\.mp4'/.test(g)) {
         fallos.push('Se quitó el bucle: un clip demasiado corto para estirarlo dejaría el segmento sin cubrir.');
       }

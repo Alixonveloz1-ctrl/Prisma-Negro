@@ -270,10 +270,13 @@ async function funcionesPuras() {
     silencios: aud.silencios,
     componerManifiesto: hoj.componerManifiesto,
     guionFfmpeg: hoj.guionFfmpeg,
+    planosDeLaHoja: hoj.planosDeLaHoja,
     repartirRespiros: dir.repartirRespiros,
     RESPIROS: dir.RESPIROS,
     segundosDeClip: mov.segundosDeClip,
     duracionMasCercana: mov.duracionMasCercana,
+    duracionQueSePide: mov.duracionQueSePide,
+    duracionMasLarga: mod.duracionMasLarga,
   };
 }
 

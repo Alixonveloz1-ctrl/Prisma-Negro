@@ -16,12 +16,17 @@ import { llamar, esperarOperacion } from '../api.js';
 import { claveToma } from '../../comun/claves.mjs';
 import { reducirFotogramaDePartida } from '../imagenes.js';
 import { fotogramaDe, generarImagen } from './imagen.js';
-import { duracionValida, PREDETERMINADO } from '../../comun/modelos.mjs';
+import { duracionValida, duracionMasLarga, PREDETERMINADO } from '../../comun/modelos.mjs';
 
 // Las duraciones válidas dependen del generador elegido —Veo 2 admite 5 y 7, los
 // 3.1 no— y en un EMPATE se coge la MAYOR: vale más sobrar un segundo, que el
 // montaje recorta, que faltar uno, que se ve como imagen congelada.
 export const duracionMasCercana = (s, clave = PREDETERMINADO.video) => duracionValida(clave, s);
+
+// LO QUE SE PIDE DE VERDAD: siempre lo más largo que dé el generador, dure lo que
+// dure la toma. Un clip corto solo sirve para su toma; uno de ocho segundos se
+// reutiliza en cualquiera. Ver `duracionMasLarga`.
+export const duracionQueSePide = (clave = PREDETERMINADO.video) => duracionMasLarga(clave);
 
 export function planificar(tomas, { soloLasQueFaltan = true } = {}) {
   return tomas.filter((t) => {
@@ -55,7 +60,7 @@ export function resumen(tomas, clave) {
     clips: con.length,
     faltan: planificar(tomas).length,
     proporcion: tomas.length ? +(con.length / tomas.length).toFixed(2) : 0,
-    segundos: con.reduce((s, t) => s + duracionMasCercana(segundosDeClip(t), clave), 0),
+    segundos: con.length * duracionQueSePide(clave),
   };
 }
 
@@ -122,7 +127,7 @@ export async function generarClip({ toma, tomas, pieza, config, tratamiento = nu
       fotograma,
       // La locución MÁS el respiro: el silencio también hay que cubrirlo con
       // movimiento, o el clip se congela justo donde se está mirando.
-      segundos: duracionMasCercana(segundosDeClip(toma), config.videoModelo?.modelo),
+      segundos: duracionQueSePide(config.videoModelo?.modelo),
       aspecto: config.formato.vertical ? '9:16' : '16:9',
       // La misma clave que en la consulta: de ella sale la carpeta donde Veo
       // escribe el clip en vez de devolverlo en la respuesta.
