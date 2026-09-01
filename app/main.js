@@ -183,6 +183,38 @@ const pieza = () => estado.piezaDe(P, P.piezaActiva);
 const mundoDeLaPieza = () => mundoDelCaso(pieza()?.caso || {});
 
 /**
+ * Guarda una imagen del episodio en el archivo del canal.
+ *
+ * No copia ni regenera nada: la entrada APUNTA al material que ya está pagado, con
+ * el mismo `heredado` que usa la herencia entre piezas. Y el clip se va con ella si
+ * lo tiene. Ver `entradaDeArchivo`.
+ */
+async function guardarEnArchivo(i, nombre) {
+  const z = pieza();
+  const toma = z.tomas.find((t) => t.i === i);
+  if (!toma) throw new Error('No encuentro esa toma.');
+  const entrada = bibliotecaFase.entradaDeArchivo(toma, {
+    nombre,
+    pieza: P.id,
+    tomas: z.tomas,
+    propios: P.archivoPropio,
+  });
+  P.archivoPropio = [...(P.archivoPropio || []), entrada];
+  // Se vuelve a sincronizar para que la entrada tenga ya su sitio y su índice: sin
+  // esto no aparecería en el Archivo hasta la siguiente carga.
+  laBiblioteca();
+  await guardar();
+  pintarPorTipo();
+  pintarBiblioteca();
+  avisar(
+    'previa',
+    `«${entrada.nombre}» ya está en el archivo${entrada.heredadoVid ? ', con su clip' : ''}. ` +
+      'El director la verá al dirigir los casos que vengan.',
+    'bueno',
+  );
+}
+
+/**
  * Las fichas, el caso y el tema son DE LA PIEZA, no del proyecto.
  *
  * Estaban en el proyecto, y por eso elegir un caso nuevo dejaba las fichas del
@@ -1029,6 +1061,9 @@ accion(
     const fichas = await investigacion.construirCaso({
       caso: pieza().caso,
       genero: generoPorId(P.config.genero),
+      // Lo guardado desde otros episodios, para que el director sepa que ya
+      // existe una costa y no la mande a generar otra vez.
+      guardados: P.archivoPropio,
     });
     if (!fichas.length) throw new Error('El expediente salió vacío. Vuelve a darle.');
     // Se REEMPLAZA, no se fusiona: fusionar dos expedientes junta dos casos
@@ -1086,6 +1121,9 @@ accion(
       fichas: pieza().fichas,
       minutos: minutosObjetivo(),
       genero: generoPorId(P.config.genero),
+      // Lo guardado desde otros episodios, para que el director sepa que ya
+      // existe una costa y no la mande a generar otra vez.
+      guardados: P.archivoPropio,
       anteriores: yaContado,
     });
     // En una continuación, el ASPECTO lo pone la primera parte, no el director:
@@ -1179,6 +1217,9 @@ accion(
       tratamiento: pieza().tratamiento,
       // El género trae la estructura de bloques del episodio.
       genero: generoPorId(P.config.genero),
+      // Lo guardado desde otros episodios, para que el director sepa que ya
+      // existe una costa y no la mande a generar otra vez.
+      guardados: P.archivoPropio,
       anteriores: loYaContado(),
       yaEscritos: parcial?.huella === huella && Array.isArray(parcial.partes) ? parcial.partes : [],
       alActo: async (parte, n) => {
@@ -1230,6 +1271,9 @@ accion(
       tratamiento: pieza().tratamiento,
       // El género trae la estructura de bloques del episodio.
       genero: generoPorId(P.config.genero),
+      // Lo guardado desde otros episodios, para que el director sepa que ya
+      // existe una costa y no la mande a generar otra vez.
+      guardados: P.archivoPropio,
       anteriores: loYaContado(),
       yaEscritos: parcial?.huella === huella && Array.isArray(parcial.partes) ? parcial.partes : [],
       alActo: async (parte, n) => {
@@ -1382,6 +1426,9 @@ accion(
       config: P.config,
       tratamiento: pieza().tratamiento,
       genero: generoPorId(P.config.genero),
+      // Lo guardado desde otros episodios, para que el director sepa que ya
+      // existe una costa y no la mande a generar otra vez.
+      guardados: P.archivoPropio,
       // Son varias llamadas y algunas tardan: sin esto parece que se ha colgado.
       alAvanzar: (hechas, total) =>
         avisar('tomas', `Dirigiendo… ${hechas} de ${total} tomas.`),
@@ -1570,7 +1617,10 @@ accion('b-movimiento', async () => {
  * invariante que la vigila necesita ejecutarla.
  */
 function laBiblioteca() {
-  return bibliotecaFase.sincronizarEnSitio(P.piezas);
+  // CON LO GUARDADO DESDE LOS EPISODIOS. Sin pasarlo aquí, las entradas propias
+  // desaparecerían en la primera sincronización: el archivo se reconstruye desde
+  // el catálogo, y lo que no esté en él no sobrevive.
+  return bibliotecaFase.sincronizarEnSitio(P.piezas, P.archivoPropio);
 }
 
 function pintarBiblioteca() {
@@ -1781,9 +1831,13 @@ async function verClip({ tarjeta, hueco, clave, boton }) {
 }
 
 /** Suelta todo lo que ya no está en pantalla. */
-function soltarUrles(enUso) {
+function soltarUrles(enUso, dentroDe = '') {
   for (const [clave, url] of urlesDeMaterial) {
     if (enUso.has(clave)) continue;
+    // SOLO LO DE ESTA GALERÍA. El Archivo y el episodio comparten este almacén, y
+    // sin acotar, repintar uno soltaría las imágenes del otro — que las volvería a
+    // crear en su siguiente repintado. Cada galería limpia lo suyo.
+    if (dentroDe && !clave.startsWith(dentroDe)) continue;
     URL.revokeObjectURL(url);
     urlesDeMaterial.delete(clave);
   }
@@ -1848,7 +1902,10 @@ function pintarGaleriaBiblioteca() {
   // Y SE SUELTA LO QUE YA NO SE VE. Sin esto la memoria solo sube: ver
   // `urlesDeMaterial`. Se calcula sobre lo que queda en pantalla, no sobre lo que
   // se acaba de pintar, para que cambiar de filtro también libere.
-  soltarUrles(new Set(visibles.map((x) => claveFotograma(bibliotecaFase.ID_BIBLIOTECA, x, tomas))));
+  soltarUrles(
+    new Set(visibles.map((x) => claveFotograma(bibliotecaFase.ID_BIBLIOTECA, x, tomas))),
+    `${bibliotecaFase.ID_BIBLIOTECA}/`,
+  );
 
   const mas = $('b-biblioteca-mas');
   if (mas) {
@@ -2823,6 +2880,9 @@ function pintarPorTipo() {
     : '';
   const g = $('galeria');
   g.innerHTML = conImagen.length ? '' : '<p class="nota">Dirige las tomas primero: la imagen sale de la ficha de plano.</p>';
+  // Y SE SUELTA LO QUE YA NO SE VE, acotado a este episodio. Sin esto, cada
+  // repintado de la galería creaba ochenta URL nuevas y no soltaba ninguna.
+  soltarUrles(new Set(conImagen.map((x) => claveFotograma(P.id, x, t))), `${P.id}/`);
   for (const x of conImagen) {
     const d = document.createElement('div');
     d.className = 'pieza-mat';
@@ -2839,12 +2899,24 @@ function pintarPorTipo() {
     // El estado del clip, AQUÍ MISMO: con 83 imágenes, saber cuál tiene ya su
     // video no puede exigir cruzar a la otra pestaña llevando la cuenta de cabeza.
     const clipListo = x.video === 'ok' || !!x.heredadoVid;
+    // ¿ESTÁ YA GUARDADA EN EL ARCHIVO? Se mira por la clave del material, no por
+    // el número de toma: es lo único que no cambia al reescribir el caso.
+    const suClave = hay ? claveFotograma(P.id, x, t) : '';
+    const yaEnArchivo = !!suClave && (P.archivoPropio || []).some((p) => p.heredado === suClave);
     cuerpo.innerHTML =
       `<p>#${x.i + 1}${x.heredado ? ' · heredada' : ''} · ${escapar((x.texto || '').slice(0, 70))}…</p>` +
       (clipListo
         ? '<span class="pastilla p-ok">clip listo</span>'
         : x.movimiento
           ? '<span class="pastilla p-aviso">clip pendiente</span>'
+          : '') +
+      // LA MARCA DEL DIRECTOR: él dice cuáles servirían en otro caso. Es una
+      // sugerencia para no ir buscando entre ochenta tomas — la última palabra la
+      // tienes tú, y por eso el botón sale en todas.
+      (yaEnArchivo
+        ? '<span class="pastilla p-ok">en el archivo</span>'
+        : x.generico
+          ? '<span class="pastilla">el director la ve genérica</span>'
           : '');
     d.appendChild(cuerpo);
 
@@ -2856,7 +2928,12 @@ function pintarPorTipo() {
           return;
         }
         const img = document.createElement('img');
-        img.src = URL.createObjectURL(blob);
+        // POR EL ALMACÉN DE URL, igual que el Archivo. Esta galería se quedó con la
+        // fuga original: `createObjectURL` MANTIENE VIVO EL BLOB hasta que se
+        // revoca, y aquí no se revocaba ninguna. Con ochenta imágenes de dos megas
+        // es exactamente lo que descargó la pestaña en Safari — y ahora se recorre
+        // mucho más, porque es desde aquí donde se guarda en el archivo.
+        img.src = urlDeMaterial(claveFotograma(P.id, x, t), blob);
         img.alt = '';
         img.loading = 'lazy';
         d.replaceChild(img, visual);
@@ -2877,6 +2954,42 @@ function pintarPorTipo() {
       b.textContent = 'Rehacer';
     };
     cuerpo.appendChild(b);
+
+    // ── GUARDAR EN EL ARCHIVO ─────────────────────────────────────────────
+    //
+    // «Todas deben tener su botón para guardar todas las imágenes que se generen
+    //  en el episodio, que no son del banco de las que estamos reutilizando.»
+    //
+    // TODAS, no solo las que el director marca: su marca es una sugerencia y la
+    // última palabra es de quien paga. Las únicas sin botón son las que YA salen
+    // del archivo —guardarlas sería meter la misma imagen dos veces, ocupando dos
+    // sitios en la rotación de su papel— y las que aún no tienen imagen.
+    if (hay && !x.heredado && !yaEnArchivo) {
+      const g = document.createElement('button');
+      g.className = `btn chico ${x.generico ? 'primario' : 'fantasma'}`;
+      g.textContent = 'Guardar en el archivo';
+      g.onclick = async () => {
+        // El nombre VIENE ESCRITO: sale del plano, que es lo que se le pidió al
+        // generador. Solo hay que corregirlo si no convence.
+        const sugerido = bibliotecaFase.nombreDeArchivoPara(x);
+        const nombre = prompt(
+          'Nombre para el archivo. Con este nombre lo buscará el director en los ' +
+            'casos que vengan:',
+          sugerido,
+        );
+        if (nombre === null) return;
+        g.disabled = true;
+        g.textContent = '…';
+        try {
+          await guardarEnArchivo(x.i, nombre);
+        } catch (e) {
+          avisar('previa', e.message, 'malo');
+          g.disabled = false;
+          g.textContent = 'Guardar en el archivo';
+        }
+      };
+      cuerpo.appendChild(g);
+    }
 
     // Cualquier imagen se puede animar, la marcara el director o no. Mirando la
     // imagen es cuando se ve si merece moverse; decidirlo antes, a ciegas, era

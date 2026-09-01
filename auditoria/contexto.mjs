@@ -213,6 +213,8 @@ async function funcionesPuras() {
     resumenBiblioteca: bib.resumenBiblioteca,
     clipsPosibles: bib.clipsPosibles,
     huellaDePlano: bib.huellaDePlano,
+    entradaDeArchivo: bib.entradaDeArchivo,
+    nombreDeArchivoPara: bib.nombreDeArchivoPara,
     ENCARGOS_ANTERIORES: bib.ENCARGOS_ANTERIORES,
     ID_BIBLIOTECA: bib.ID_BIBLIOTECA,
     elegirVariante: bib.elegirVariante,

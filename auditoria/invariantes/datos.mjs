@@ -3681,4 +3681,115 @@ export const invariantes = [
         ),
       ),
   },
+
+  {
+    nombre: 'lo-que-sale-de-un-episodio-puede-quedarse-en-el-archivo',
+    dice: '«¿Ese contenido que identifica ese caso puede ir pasando a formar parte de la biblioteca para que también se pueda reutilizar en futuros casos? El caso que estoy trabajando se basa en un pueblo costero: alguna imagen o algún clip de la costa se puede reutilizar para casos futuros.» El archivo tenía SOLO los veinte sitios y el reparto escritos en el catálogo del código, y `sincronizarBiblioteca` lo reconstruye desde ese catálogo en cada carga: una entrada añadida a mano desaparecía al recargar. Así que el plano de la costa se generaba, se pagaba, se aprobaba, y moría con su episodio. Ahora el catálogo se amplía en marcha y una entrada guardada se comporta igual que las de fábrica: el director la ve, el banco la encuentra y la galería la enseña. No se copia nada —apunta al material ya pagado— y las personas también entran, porque cada cara guardada engorda el reparto y espacia las repeticiones.',
+    comprobar(ctx) {
+      const { entradaDeArchivo, nombreDeArchivoPara, tomasDeBiblioteca, sincronizarBiblioteca, sanear } = ctx.fn;
+      const dir = fuente(ctx, 'app/fases/direccion.js');
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      const plano = { encuadre: 'plano general', lugar: 'la costa del pueblo', luz: 'gris de mañana', sujetos: [], descripcion: 'El rompiente visto desde el espigón.' };
+      const sitio = { i: 7, plano, imagen: 'ok', movimiento: true, video: 'ok', versionImagen: 1, versionClip: 1 };
+      const persona = { i: 9, personaje: 'testigo', plano: { ...plano, sujetos: ['Testigo — una mujer de sesenta años'] }, imagen: 'ok' };
+
+      // ── 1 · EL NOMBRE VIENE ESCRITO ───────────────────────────────────────
+      // «El nombre debe venir escrito por defecto; sale del prompt con el que se
+      //  generó la imagen.» Sale del plano, que es exactamente eso.
+      if (!/costa del pueblo/i.test(nombreDeArchivoPara(sitio))) {
+        fallos.push(`El nombre por defecto no sale del plano: «${nombreDeArchivoPara(sitio)}».`);
+      }
+      if (!/testigo/i.test(nombreDeArchivoPara(persona))) {
+        fallos.push('El nombre por defecto de una persona no dice de qué papel es.');
+      }
+
+      // ── 2 · SE GUARDA APUNTANDO, NO COPIANDO ──────────────────────────────
+      const e = entradaDeArchivo(sitio, { nombre: 'la costa del pueblo', pieza: 'p04', tomas: [sitio] });
+      if (e.heredado !== 'p04/t007/img') fallos.push(`La entrada no apunta al material pagado: ${e.heredado}`);
+      // Y EL CLIP SE VA CON ELLA. Es lo más caro que hay; dejarlo atrás sería
+      // guardar la imagen y volver a pagar el video en el caso siguiente.
+      if (e.heredadoVid !== 'p04/t007/vid') fallos.push('El clip no se guarda con su imagen.');
+      if (!e.recurso || e.personaje) fallos.push('Un sitio guardado no entra como recurso.');
+
+      // Una persona entra como UNA VERSIÓN MÁS DE SU PAPEL: es lo que hace que
+      // guardar caras espacie las repeticiones en vez de crear un papel nuevo.
+      const ep = entradaDeArchivo(persona, { nombre: 'testigo · la vecina', pieza: 'p04', tomas: [persona] });
+      if (ep.personaje !== 'testigo') fallos.push('Una persona guardada no se ata a su papel: no entraría en la rotación.');
+      if (!/^personaje:testigo:/.test(ep.clave)) fallos.push(`La clave de una persona guardada no es la de su papel: ${ep.clave}`);
+      // Y no choca con las versiones del catálogo.
+      if (/:v\d+$/.test(ep.clave)) fallos.push('Una versión guardada usa la numeración del catálogo: pisaría una de fábrica.');
+      // Dos del mismo papel no comparten clave, o la segunda taparía a la primera.
+      const otra = entradaDeArchivo(persona, { nombre: 'x', pieza: 'p05', tomas: [persona], propios: [ep] });
+      if (otra.clave === ep.clave) fallos.push('Dos caras guardadas del mismo papel comparten clave: una tapa a la otra.');
+
+      // Lo que YA sale del archivo no se vuelve a guardar: sería la misma imagen
+      // ocupando dos sitios en la rotación.
+      let rebotó = false;
+      try {
+        entradaDeArchivo({ ...sitio, heredado: 'biblioteca/t003/img' }, { pieza: 'p04', tomas: [sitio] });
+      } catch {
+        rebotó = true;
+      }
+      if (!rebotó) fallos.push('Una imagen que ya viene del archivo se puede guardar otra vez.');
+
+      // ── 3 · Y SOBREVIVE A LA SINCRONIZACIÓN ───────────────────────────────
+      // Aquí estaba el obstáculo: el archivo se reconstruye desde el catálogo y lo
+      // que no esté en él desaparece al recargar.
+      const conPropia = tomasDeBiblioteca({ propios: [e] });
+      const enCatalogo = conPropia.find((t) => t.clave === e.clave);
+      if (!enCatalogo) fallos.push('Lo guardado no entra en el archivo: desaparece en la siguiente carga.');
+      else {
+        if (enCatalogo.imagen !== 'ok' || enCatalogo.heredado !== e.heredado) {
+          fallos.push('La entrada guardada no llega con su material: pediría generarla otra vez.');
+        }
+        if (enCatalogo.aprobada !== true) fallos.push('Lo guardado entra sin visto bueno: no podría pasar a clip.');
+      }
+      const z = sincronizarBiblioteca({ tomas: [] }, [e]);
+      const tras = z.tomas.find((t) => t.clave === e.clave);
+      if (!tras || tras.imagen !== 'ok') fallos.push('Sincronizar el archivo se lleva por delante lo guardado.');
+      // Y el índice de lo de fábrica NO se mueve al añadir: si se moviera, todo lo
+      // ya pagado apuntaría a otra cara.
+      const sinPropia = sincronizarBiblioteca({ tomas: [] }, []);
+      const primeraDe = (x) => x.tomas[0];
+      if (primeraDe(z).clave !== primeraDe(sinPropia).clave || primeraDe(z).i !== primeraDe(sinPropia).i) {
+        fallos.push('Guardar una entrada mueve los índices del catálogo: lo pagado apuntaría a otra imagen.');
+      }
+
+      // ── 4 · Y SOBREVIVE A GUARDAR Y CARGAR ────────────────────────────────
+      const vuelta = sanear({ piezas: [], archivoPropio: [e] });
+      if (vuelta.archivoPropio?.[0]?.heredado !== e.heredado) {
+        fallos.push('El archivo guardado no sobrevive a recargar: se pierde en cada carga.');
+      }
+      // Y una entrada rota no entra: sin material no apunta a nada.
+      if (sanear({ piezas: [], archivoPropio: [{ clave: 'x' }] }).archivoPropio.length) {
+        fallos.push('Una entrada sin material entra igual: la galería pediría un archivo que no existe.');
+      }
+
+      // ── 5 · EL DIRECTOR LA VE, Y MARCA LAS GENÉRICAS ──────────────────────
+      // Sin la lista, el director no sabe que la costa existe y la manda a generar
+      // otra vez: el archivo crecería y no serviría de nada.
+      if (!/guardados/.test(dir)) fallos.push('El director no recibe lo guardado: mandaría a generar lo que ya existe.');
+      if (!/generico: \{ type: 'boolean' \}/.test(dir)) {
+        fallos.push('El director no puede marcar qué planos servirían en otro caso.');
+      }
+      if (!/guardados: P\.archivoPropio/.test(main)) fallos.push('La pantalla no le pasa el archivo al director.');
+
+      // ── 6 · Y EL BOTÓN SALE EN TODAS ──────────────────────────────────────
+      // «Todas deben tener su botón para guardar.» La marca del director es una
+      // sugerencia; la última palabra es de quien paga.
+      const i = main.indexOf('Guardar en el archivo');
+      const cerca = i < 0 ? '' : main.slice(Math.max(0, i - 700), i + 200);
+      if (!cerca) fallos.push('No hay botón para guardar una imagen del episodio en el archivo.');
+      else if (!/if \(hay && !x\.heredado && !yaEnArchivo\)/.test(cerca)) {
+        fallos.push('El botón de guardar no sale en todas: solo en las que marcó el director.');
+      }
+      if (!/nombreDeArchivoPara\(x\)/.test(main)) fallos.push('El nombre no viene escrito: hay que inventarlo cada vez.');
+      return fallos;
+    },
+    // Se rompe como estaba: el archivo solo tiene lo que hay escrito en el
+    // catálogo, y lo guardado desde un episodio se cae en la primera carga.
+    romper: (ctx) => conFuncion(ctx, 'tomasDeBiblioteca', (o) => ctx.fn.tomasDeBiblioteca({ ...o, propios: [] })),
+  },
 ];

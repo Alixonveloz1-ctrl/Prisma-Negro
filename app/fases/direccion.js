@@ -101,6 +101,12 @@ const ESQUEMA = {
           // lluvia» es una redacción. Buscando por la redacción no se encuentra
           // nunca lo ya pagado; buscando por la clave, siempre.
           recurso: { type: 'string' },
+          // ¿SERVIRÍA ESTE PLANO EN OTRO CASO? Una costa, una fachada, un pasillo
+          // valen para el caso de la semana que viene; la ficha con el número de
+          // expediente de ESTE, no. Es una SUGERENCIA para no tener que buscarla
+          // entre ochenta tomas: el botón de guardar sale en todas y decide quien
+          // paga. Ver `guardarEnArchivo` en `app/main.js`.
+          generico: { type: 'boolean' },
           // Cuánto se queda la imagen DESPUÉS de la última palabra. Va en palabras
           // y no en segundos a propósito: un número libre sale disparatado, y lo
           // que se decide aquí no es una cifra, es si esta toma pesa o no pesa.
@@ -230,7 +236,7 @@ Reglas de este documental:
  * `alAvanzar(hechas, total)` permite que la pantalla diga por dónde va: son
  * varias llamadas y algunas tardan.
  */
-export async function dirigir({ tomas, escenas, tema, config, tratamiento = null, genero = null, senal, alAvanzar, alLote }) {
+export async function dirigir({ tomas, escenas, tema, config, tratamiento = null, genero = null, guardados = [], senal, alAvanzar, alLote }) {
   if (!tomas?.length) throw new Error('No hay tomas que dirigir. Segmenta el guion primero.');
 
   // Lo que ya está dirigido se conserva. Volver a dirigir después de que un lote
@@ -291,7 +297,16 @@ export async function dirigir({ tomas, escenas, tema, config, tratamiento = null
           `SITIOS DEL CANAL YA GENERADOS. Si un plano es uno de estos, pon su clave ` +
           `en «recurso» y describe el sitio tal cual; ya existe en varias versiones ` +
           `y no se vuelve a pagar:\n` +
-          RECURSOS.map((r) => `- ${r.id}: ${r.lugar} · ${r.encuadre} · ${r.luz}`).join('\n') +
+          RECURSOS.map((r) => `- ${r.id}: ${r.lugar} · ${r.encuadre} · ${r.luz}`)
+            // Y LO GUARDADO DESDE OTROS EPISODIOS. Sin esta lista, un plano de la
+            // costa guardado en el caso anterior no lo encuentra nadie: el
+            // director no sabe que existe y lo manda a generar otra vez.
+            .concat(
+              (guardados || [])
+                .filter((g) => g.recurso)
+                .map((g) => `- ${g.recurso}: ${g.nombre || g.plano?.lugar || ''}`),
+            )
+            .join('\n') +
           `\nSi el plano NO es ninguno de estos, deja «recurso» vacío.\n\n` +
           grupo
             .map(
@@ -502,6 +517,7 @@ function resolver(tomas, planos, config) {
       personaje: String(p.personaje || '').trim().toLowerCase(),
       // Y el sitio del canal, por lo mismo.
       recurso: String(p.recurso || '').trim().toLowerCase(),
+      generico: p.generico === true,
     };
 
     // SI EL PLANO CAMBIÓ, LA IMAGEN VIEJA YA NO ES DE ESTA TOMA.

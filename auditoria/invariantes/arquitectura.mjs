@@ -1263,7 +1263,11 @@ export const invariantes = [
         fallos.push('almacen.js no comprueba que lo subido tenga bytes (§7.6: cero bytes es ausente).');
       }
       for (const [ruta, texto] of archivosDe(ctx, 'app/fases/')) {
-        if (!/guardarEn|'subir'/.test(texto)) continue;
+        // CON LOS DOS PUNTOS, igual que el contador de abajo: es el PARÁMETRO lo
+        // que marca una subida. Con la palabra suelta, un comentario que cita
+        // `guardarEnArchivo` metía en la lista un archivo que no sube nada, y la
+        // invariante fallaba señalando a quien no era.
+        if (!/guardarEn:|'subir',/.test(texto)) continue;
         // Se exige que LANCE cuando el almacén no confirma. Que el texto mencione
         // `guardado.bytes` en algún sitio no prueba nada: la fase de imagen lo
         // nombraba en el valor de retorno y la comprobación pasaba con la guarda

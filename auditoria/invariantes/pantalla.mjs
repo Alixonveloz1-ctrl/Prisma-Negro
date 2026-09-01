@@ -960,6 +960,30 @@ export const invariantes = [
       if (!/soltarUrles\(new Set\(/.test(main)) {
         fallos.push('La galería no suelta las imágenes que salen de pantalla: la memoria crece con cada repintado.');
       }
+      // LAS DOS GALERÍAS. El Archivo se arregló y la del episodio se quedó con la
+      // fuga original —ochenta imágenes de dos megas, ninguna soltada—, que es
+      // justo la que descargó la pestaña. Y ahora se recorre más, porque es desde
+      // ahí donde se guarda en el archivo.
+      if ((main.match(/soltarUrles\(\s*new Set\(/g) || []).length < 2) {
+        fallos.push('Solo una de las dos galerías suelta sus imágenes: la otra sigue tumbando la pestaña.');
+      }
+      // Y CADA UNA LIMPIA LO SUYO. Comparten el almacén: sin acotar, repintar una
+      // soltaría las de la otra, que las volvería a crear en su siguiente
+      // repintado — cambiar una fuga por un ciclo.
+      if (!/if \(dentroDe && !clave\.startsWith\(dentroDe\)\) continue;/.test(main)) {
+        fallos.push('Una galería suelta las imágenes de la otra: se recrean en cada repintado.');
+      }
+      // Y NINGUNA crea la URL de una imagen por su cuenta. Con el `=` delante: es
+      // una ASIGNACIÓN lo que abre una URL, y sin él el comentario que explica esta
+      // misma fuga se cazaba a sí mismo — para que la comprobación pasara habría
+      // que borrar la explicación.
+      for (const suelta of main.matchAll(/=\s*URL\.createObjectURL\(blob\)/g)) {
+        const alrededor = main.slice(Math.max(0, suelta.index - 500), suelta.index);
+        if (!/function urlDeMaterial|function verClip/.test(alrededor)) {
+          fallos.push('Hay una imagen que abre su URL fuera del almacén: esa no la suelta nadie.');
+          break;
+        }
+      }
       if (sueltas < 1) fallos.push('No se encuentra ninguna URL de objeto: la comprobación mira otra cosa.');
 
       // 2 · APROBAR NO REPINTA LA GALERÍA ENTERA. Veinticuatro lecturas del

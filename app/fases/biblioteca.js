@@ -51,7 +51,7 @@ import {
   planoDeVariante,
   planoDeRecurso,
 } from '../../comun/elenco.mjs';
-import { clipVigente } from '../../comun/claves.mjs';
+import { clipVigente, claveFotograma, claveClip } from '../../comun/claves.mjs';
 import {
   ESTILO_DEL_CANAL,
   SIN_TEXTO_LEGIBLE,
@@ -93,7 +93,96 @@ export const claveDeRecurso = (recurso, variante) => `recurso:${recurso}:${varia
  * añadir una persona a un papel movería el índice de todas las de después y todo
  * lo ya pagado apuntaría a otra cara.
  */
-export function tomasDeBiblioteca({ elenco = ELENCO, recursos = RECURSOS } = {}) {
+/**
+ * EL ARCHIVO CRECE CON LO QUE SALE DE LOS EPISODIOS.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Ese contenido que identifica ese caso, ¿puede ir pasando a formar parte de la
+ *  biblioteca para que también se pueda reutilizar para futuros casos? El caso que
+ *  estoy trabajando se basa en un pueblo costero: alguna imagen o algún clip de la
+ *  costa, del pueblo en general, se puede reutilizar para casos futuros.»
+ *
+ * Hasta aquí el archivo tenía SOLO lo que estaba escrito en el catálogo del código:
+ * veinte sitios y el reparto. Y `sincronizarBiblioteca` lo reconstruye desde ese
+ * catálogo en cada carga, así que una entrada añadida a mano desaparecía al
+ * recargar. Un plano de la costa se generaba, se pagaba, se aprobaba —y moría con
+ * su episodio.
+ *
+ * Ahora el catálogo se amplía en marcha: `propios` son las entradas guardadas desde
+ * un episodio, y una vez dentro se comportan igual que las que venían de fábrica.
+ * El director las ve al dirigir el caso siguiente, el banco de planos las encuentra
+ * por su clave, y la galería del Archivo las enseña con sus mismos botones.
+ *
+ * NO SE COPIA NADA. La entrada apunta al material del episodio con `heredado`, que
+ * es el mecanismo de siempre y no cuesta ni un byte. Y no se queda huérfana al
+ * borrar el episodio: `borrarPieza` quita la entrada del proyecto y el archivo
+ * sigue en el almacén.
+ *
+ * Y las personas TAMBIÉN: un testigo guardado entra como una versión más de su
+ * papel. Cada cara guardada engorda el reparto, y con más caras la rotación tarda
+ * más en repetir — que es exactamente lo que se quiere.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+const enClave = (s) =>
+  String(s || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+
+/**
+ * El nombre que sale ya escrito en el botón de guardar.
+ *
+ * «El nombre debe venir escrito por defecto; se supone que puede salir del prompt
+ *  con el que se generó la imagen, que está describiendo qué hay en esa imagen.»
+ *
+ * Exacto: sale del plano, que es literalmente lo que se le pidió al generador.
+ */
+export function nombreDeArchivoPara(toma) {
+  const p = toma?.plano || {};
+  const papel = String(toma?.personaje || p.personaje || '').trim();
+  if (papel) {
+    // De una persona, lo que la distingue de las otras de su papel.
+    const quien = String((p.sujetos || [])[0] || '').split('—').pop().trim();
+    return (quien ? `${papel} · ${quien}` : papel).slice(0, 70);
+  }
+  return String(p.lugar || p.descripcion || '').trim().slice(0, 70);
+}
+
+/** Una entrada de archivo hecha desde una toma ya generada de un episodio. */
+export function entradaDeArchivo(toma, { nombre = '', pieza, tomas, propios = [] }) {
+  if (toma?.imagen !== 'ok') throw new Error('Esa toma todavía no tiene imagen que guardar.');
+  // La que ya viene del archivo no se vuelve a guardar: sería la misma imagen dos
+  // veces, ocupando dos sitios en la rotación de su papel.
+  if (toma.heredado) throw new Error('Esa imagen ya sale del archivo.');
+
+  const titulo = String(nombre || '').trim() || nombreDeArchivoPara(toma);
+  const papel = String(toma.personaje || toma.plano?.personaje || '').trim().toLowerCase();
+  const base = papel || enClave(titulo);
+  if (!base) throw new Error('Ponle un nombre, o después no hay forma de encontrarla.');
+
+  // `g` de guardada, para no chocar nunca con las `v` del catálogo.
+  const variante = `g${propios.filter((p) => (p.personaje || p.recurso) === base).length + 1}`;
+  return {
+    clave: papel ? claveDePersona(papel, variante) : claveDeRecurso(base, variante),
+    recurso: papel ? '' : base,
+    personaje: papel,
+    variante,
+    nombre: titulo,
+    // El plano CONGELADO, tal como se generó: es lo que permite rehacerla desde el
+    // archivo y lo que compara el banco de planos.
+    plano: toma.plano || null,
+    heredado: claveFotograma(pieza, toma, tomas),
+    // El clip se lleva con la imagen, si lo tiene y le corresponde.
+    heredadoVid: clipVigente(toma, tomas) ? claveClip(pieza, toma, tomas) : null,
+    desde: pieza,
+    cuando: Date.now(),
+  };
+}
+
+export function tomasDeBiblioteca({ elenco = ELENCO, recursos = RECURSOS, propios = [] } = {}) {
   const salida = [];
 
   for (const r of recursos) {
@@ -160,6 +249,39 @@ export function tomasDeBiblioteca({ elenco = ELENCO, recursos = RECURSOS } = {})
         aprobada: false,
       });
     }
+  }
+
+  // ── Y LO GUARDADO DESDE LOS EPISODIOS ──────────────────────────────────────
+  // Van al final para que las claves del catálogo conserven su orden de partida.
+  // El índice de cada una lo fija `sincronizarBiblioteca` y ya no se mueve.
+  for (const p of propios) {
+    if (!p?.clave || !p.heredado) continue;
+    salida.push({
+      i: salida.length,
+      escena: p.personaje ? 1 : 0,
+      texto: '',
+      segundos: SEGUNDOS_DE_CLIP,
+      medida: false,
+      clave: p.clave,
+      recurso: p.recurso || '',
+      variante: p.variante || 'g1',
+      personaje: p.personaje || '',
+      plano: p.plano || null,
+      tipoImagen: 'reconstruccion',
+      claseVisual: p.personaje ? 'dramatizacion' : 'recurso',
+      // Lleva clip si el episodio del que salió ya lo tenía pagado. Y si no, se le
+      // puede pedir desde su ficha como a cualquier otra.
+      movimiento: !!p.heredadoVid,
+      reusa: null,
+      audio: null,
+      // YA ESTÁ GENERADA Y PAGADA: viene de un episodio, y el material se apunta
+      // en vez de copiarse. Y aprobada, porque para llegar aquí hubo que mirarla.
+      imagen: 'ok',
+      heredado: p.heredado,
+      video: p.heredadoVid ? 'ok' : null,
+      heredadoVid: p.heredadoVid || null,
+      aprobada: true,
+    });
   }
 
   return salida;
@@ -342,9 +464,9 @@ export function huellaDePlano(plano, encargo = ENCARGO_DEL_CANAL) {
  * y no de la pantalla: en la pantalla no se podía ni comprobar.
  * ─────────────────────────────────────────────────────────────────────────────
  */
-export function sincronizarEnSitio(piezas) {
+export function sincronizarEnSitio(piezas, propios = []) {
   const previa = (piezas || []).find((z) => z.esBiblioteca) || null;
-  const z = sincronizarBiblioteca(previa);
+  const z = sincronizarBiblioteca(previa, propios);
   if (!previa) {
     piezas.push(z);
     return z;
@@ -357,11 +479,11 @@ export function sincronizarEnSitio(piezas) {
   return previa;
 }
 
-export function sincronizarBiblioteca(pieza) {
+export function sincronizarBiblioteca(pieza, propios = []) {
   const previas = new Map((pieza?.tomas || []).filter((t) => t.clave).map((t) => [t.clave, t]));
   let siguiente = Math.max(-1, ...[...previas.values()].map((t) => Number(t.i) || 0)) + 1;
 
-  const tomas = tomasDeBiblioteca().map((nueva) => {
+  const tomas = tomasDeBiblioteca({ propios }).map((nueva) => {
     const huella = huellaDePlano(nueva.plano);
     const vieja = previas.get(nueva.clave);
     if (!vieja) return { ...nueva, huella, i: siguiente++ };

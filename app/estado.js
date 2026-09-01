@@ -89,6 +89,26 @@ export function sanear(bruto) {
   p.idea = String(p.idea || '');
   p.casosPropuestos = Array.isArray(p.casosPropuestos) ? p.casosPropuestos : [];
 
+  // ── EL ARCHIVO QUE CRECE ────────────────────────────────────────────────────
+  // Lo que se ha guardado desde un episodio para reutilizarlo en los que vengan.
+  // Vive en el PROYECTO y no en la pieza de biblioteca, porque esa se reconstruye
+  // entera desde el catálogo en cada carga: guardado ahí, desaparecería.
+  // Ver `entradaDeArchivo` en `app/fases/biblioteca.js`.
+  p.archivoPropio = (Array.isArray(p.archivoPropio) ? p.archivoPropio : [])
+    .filter((x) => x && x.clave && x.heredado)
+    .map((x) => ({
+      clave: String(x.clave),
+      recurso: String(x.recurso || ''),
+      personaje: String(x.personaje || ''),
+      variante: String(x.variante || 'g1'),
+      nombre: String(x.nombre || ''),
+      plano: x.plano || null,
+      heredado: String(x.heredado),
+      heredadoVid: x.heredadoVid ? String(x.heredadoVid) : null,
+      desde: String(x.desde || ''),
+      cuando: Number(x.cuando) || 0,
+    }));
+
   // EL NÚMERO MÁS ALTO DE EPISODIO QUE SE HA LLEGADO A DAR. NUNCA BAJA.
   //
   // Sin esto, borrar un episodio es destruir material pagado sin avisar. El id se
@@ -417,6 +437,10 @@ function sanearToma(bruto, i, proyecto) {
     // muere en cada carga —la avería de `heredado` otra vez— y con él se perdería
     // el plano del que declara y su resolución contra la biblioteca.
     testimonio: String(t.testimonio || ''),
+    // LA MARCA DEL DIRECTOR: este plano serviría en otro caso. Es la sugerencia
+    // que hace que el botón de guardar en el archivo salga destacado. En la lista
+    // blanca o muere en cada carga, y la sugerencia se perdería al recargar.
+    generico: t.generico === true,
     // EL VISTO BUENO de la biblioteca: alguien miró esta imagen y dijo que vale.
     // Tiene que estar en esta lista blanca —la avería de `heredado` otra vez— o
     // cada recarga borraría la revisión de las 141 imágenes y habría que volver a
