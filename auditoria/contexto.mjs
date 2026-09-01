@@ -164,6 +164,7 @@ async function funcionesPuras() {
   const zip = await import('../comun/zip.mjs');
   return {
     normalizarWav: prv.normalizarWav,
+    catalogoDeVoces: prv.catalogoDeVoces,
     armarZip: zip.armarZip,
     crc32: zip.crc32,
     cabeEnZip: zip.cabeEnZip,

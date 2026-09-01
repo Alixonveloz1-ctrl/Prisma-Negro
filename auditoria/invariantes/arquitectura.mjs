@@ -1315,7 +1315,9 @@ export const invariantes = [
       const fin = resto.search(/\nexport /);
       const cuerpo = fin > 0 ? resto.slice(0, fin) : resto;
       const fallos = [];
-      if (!/\.filter\(/.test(cuerpo)) fallos.push('El catálogo no filtra nada.');
+      // Que filtra y que deduplica se comprueba EJECUTÁNDOLO, más abajo: mirar si
+      // el texto dice `.filter(` daba por buena cualquier forma de escribirlo y se
+      // rompía al cambiar el bucle, sin que el comportamiento cambiara en nada.
       // La región tiene que estar DENTRO de la etiqueta, no solo declarada en algún
       // sitio del archivo: dos voces distintas se ven idénticas en el desplegable si
       // la etiqueta es solo el nombre (§7.10).
@@ -1324,12 +1326,14 @@ export const invariantes = [
       // nombre —la región en las de Cloud, la familia en las de Gemini, que no
       // tienen región porque hablan el idioma del texto—. Antes esto exigía la
       // región en todas y saltaba en falso al añadir la segunda familia.
-      const etiquetas = [...cuerpo.matchAll(/etiqueta:/g)].map((m) =>
-        cuerpo.slice(m.index, m.index + 170),
-      );
+      // SOLO LAS LÍNEAS DE CÓDIGO, no la prosa. El comentario que explica este
+      // mismo fallo contiene «en la etiqueta:», y la comprobación se cazaba a sí
+      // misma: para que pasara habría que borrar la explicación. Es la tercera vez
+      // que un `matchAll` sobre una palabra suelta hace esto.
+      const etiquetas = [...t.matchAll(/^\s+etiqueta:/gm)].map((m) => t.slice(m.index, m.index + 170));
       if (!etiquetas.length) fallos.push('No se encontró ninguna etiqueta de voz.');
       for (const e of etiquetas) {
-        if (!/REGIONES\w*\[|Gemini/.test(e)) {
+        if (!/REGIONES\w*\[|\$\{region\}|Gemini/.test(e)) {
           fallos.push(`Una etiqueta de voz no lleva nada que la distinga: ${e.split('\n')[0].slice(0, 50)}`);
         }
       }
@@ -1368,7 +1372,7 @@ export const invariantes = [
       if (!/genero\s*=\s*'MALE'/.test(t)) {
         fallos.push('El catálogo de voces no filtra por género masculino por defecto.');
       }
-      if (!/ssmlGender === genero/.test(cuerpo)) {
+      if (!/ssmlGender !== genero/.test(t) && !/ssmlGender === genero/.test(t)) {
         fallos.push('El filtro de género no se aplica a las voces de Cloud TTS.');
       }
       // Y las de Gemini tienen que traer su género: la API no lo devuelve para
@@ -1376,14 +1380,80 @@ export const invariantes = [
       if (!/'MALE'\]/.test(t) || !/'FEMALE'\]/.test(t)) {
         fallos.push('La tabla de voces de Gemini no declara el género de cada voz.');
       }
+      // ── Y AHORA EJECUTÁNDOLO ──────────────────────────────────────────────
+      //
+      // «Sale una lista grande de un montón de voces y la mayoría están repetidas,
+      //  tanto en las españolas como en las latinas.»
+      //
+      // Era verdad y no se veía leyendo el código: `es-US` y `es-419` se rotulaban
+      // los dos «Latino», el servicio publica casi el mismo elenco bajo ambos, y el
+      // género iba en todas las filas siendo el mismo en todas. Cada voz salía dos
+      // veces con una etiqueta idéntica.
+      const catalogo = ctx.fn.catalogoDeVoces;
+      if (typeof catalogo !== 'function') fallos.push('El catálogo de voces no se puede ejecutar.');
+      else {
+        const crudas = [];
+        for (const [loc, caras] of [
+          ['es-US', ['Standard-B', 'Neural2-B', 'Wavenet-B', 'News-D']],
+          ['es-419', ['Standard-B', 'Neural2-B', 'Wavenet-B']],
+          ['es-MX', ['Standard-B', 'Neural2-B']],
+          ['es-ES', ['Standard-B', 'Neural2-B', 'Polyglot-1']],
+        ]) {
+          for (const c of caras) crudas.push({ name: `${loc}-${c}`, languageCodes: [loc], ssmlGender: 'MALE' });
+        }
+        const lista = catalogo(crudas, {});
+
+        // NINGUNA ETIQUETA REPETIDA. Es la regla entera: dos filas que dicen lo
+        // mismo son una lista en la que no se puede elegir.
+        const etiquetas = lista.map((v) => v.etiqueta);
+        if (new Set(etiquetas).size !== etiquetas.length) {
+          const rep = etiquetas.filter((e, i) => etiquetas.indexOf(e) !== i);
+          fallos.push(`Hay ${rep.length} etiquetas repetidas en el catálogo de voces: «${rep[0]}».`);
+        }
+        // NI DOS VECES LA MISMA CARA EN LA MISMA REGIÓN: `es-US-Neural2-B` y
+        // `es-419-Neural2-B` son «Latino» las dos, o sea la misma voz para quien elige.
+        if (lista.filter((v) => /Latino/.test(v.etiqueta)).length !== 4) {
+          fallos.push(`Las latinas salen ${lista.filter((v) => /Latino/.test(v.etiqueta)).length} veces en vez de 4: es-US y es-419 se duplican.`);
+        }
+        // Y NO SE PIERDE NINGUNA REGIÓN por deduplicar de más.
+        for (const donde of ['España', 'México', 'Latino']) {
+          if (!etiquetas.some((e) => e.includes(donde))) fallos.push(`Deduplicar se ha llevado por delante ${donde}.`);
+        }
+        // El género constante NO va en la etiqueta: con el catálogo filtrado a
+        // masculina, ponerlo en todas las filas no distinguía nada.
+        if (etiquetas.some((e) => /masculina/.test(e))) {
+          fallos.push('La etiqueta repite el género en todas las filas: alarga y no distingue.');
+        }
+        // Sin filtro de género sí, porque entonces sí distingue.
+        const mixto = catalogo(
+          [
+            { name: 'es-ES-Standard-A', languageCodes: ['es-ES'], ssmlGender: 'FEMALE' },
+            { name: 'es-ES-Standard-B', languageCodes: ['es-ES'], ssmlGender: 'MALE' },
+          ],
+          { genero: '' },
+        );
+        if (!mixto.every((v) => /masculina|femenina/.test(v.etiqueta))) {
+          fallos.push('Con voces de los dos géneros, la etiqueta no dice cuál es cuál.');
+        }
+      }
       return fallos;
     },
     // El sabotaje quita la región de la etiqueta, que es justo lo que esta
     // invariante guarda. El de antes buscaba una plantilla en una sola línea y dejó
     // de encajar al reformatear: lo marcó `--romper` como ciega.
     romper: (ctx) =>
-      editando(ctx, 'api/_lib/proveedor.js', (t) =>
-        t.replace(/\$\{REGIONES_DE_VOZ\[reg\]\}/g, ''),
+      conFuncion(ctx, 'catalogoDeVoces', (voces, o) =>
+        // Como estaba: una fila por voz, con la región fuera de la etiqueta. Las
+        // latinas vuelven a salir dos veces diciendo exactamente lo mismo.
+        (voces || [])
+          .filter((v) => v.name.startsWith('es-'))
+          .map((v) => ({
+            nombre: v.name,
+            region: v.languageCodes?.[0] || '',
+            genero: 'masculina',
+            expresiva: false,
+            etiqueta: v.name.split('-').slice(2).join('-'),
+          })),
       ),
   },
 

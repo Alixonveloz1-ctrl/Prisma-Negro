@@ -647,7 +647,32 @@ export async function vocesDisponibles(idioma = 'es', expresivas = false, genero
   });
   const datos = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(`No se pudo leer el catálogo de voces: ${datos?.error?.message || r.status}`);
+  return catalogoDeVoces(datos.voices, { expresivas, genero });
+}
 
+/**
+ * EL CATÁLOGO, A PARTIR DE LO QUE DEVUELVE EL SERVICIO. Sin red: se puede probar.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Sale una lista grande de un montón de voces y la mayoría están repetidas,
+ *  tanto en las españolas como en las latinas.»
+ *
+ * Y era verdad, por dos motivos que estaban los dos en la etiqueta:
+ *
+ *   1. `es-US` y `es-419` se rotulaban IGUAL —«Latino»—, y el servicio publica
+ *      casi el mismo elenco bajo los dos códigos. Así que cada voz salía dos
+ *      veces con una etiqueta idéntica: `Neural2-B · Latino · masculina` y
+ *      `Neural2-B · Latino · masculina`. Imposible elegir entre ellas, e
+ *      imposible saber que eran dos.
+ *   2. El género iba en todas y el catálogo está filtrado a masculina, así que
+ *      `· masculina` no distinguía nada: era ruido en cada fila.
+ *
+ * La regla, que es la del §7.10 llevada hasta el final: DOS ENTRADAS CON LA MISMA
+ * ETIQUETA SON UN FALLO. Si la lista dice que dos voces son la misma región y la
+ * misma cara, es que son la misma voz para quien elige, y sobra una.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export function catalogoDeVoces(voces, { expresivas = false, genero = 'MALE' } = {}) {
   const GENEROS = { MALE: 'masculina', FEMALE: 'femenina', NEUTRAL: 'neutra' };
 
   const deGemini = expresivas
@@ -661,43 +686,58 @@ export async function vocesDisponibles(idioma = 'es', expresivas = false, genero
       }))
     : [];
 
-  return (datos.voices || [])
-    // §7.10: se listaron todas y salieron cien, la mayoría del idioma equivocado y
-    // con nombres idénticos a las buenas. Aquí se filtra por región Y por variante.
-    //
-    // Latinas Y de España: todas las de español. Fuera solo las expresivas de
-    // entrega variable, que en narración larga cambian de tono entre llamadas
-    // (§7.9) — y esas se pueden encender a mano.
-    .filter((v) => REGIONES_DE_VOZ[v.languageCodes?.[0]])
-    // El canal narra con voz masculina. Filtrar aquí y no en la pantalla evita que
-    // una voz descartada llegue a estar seleccionable por un descuido.
-    .filter((v) => !genero || v.ssmlGender === genero)
-    .filter((v) => expresivas || !ES_EXPRESIVA.test(v.name))
-    .map((v) => {
-      const reg = v.languageCodes?.[0] || '';
-      const variable = ES_EXPRESIVA.test(v.name);
-      return {
-        nombre: v.name,
-        region: reg,
-        genero: GENEROS[v.ssmlGender] || '',
-        // Que viaje marcada es lo que permite avisar en pantalla en vez de que se
-        // descubra oyendo el video montado con quince narradores distintos.
-        expresiva: variable,
-        // La etiqueta lleva la región y el género dentro: sin eso, dos voces
-        // distintas se ven idénticas en el desplegable.
-        etiqueta:
-          `${v.name.split('-').slice(2).join('-')} · ${REGIONES_DE_VOZ[reg]} · ` +
-          `${GENEROS[v.ssmlGender] || ''}${variable ? ' · expresiva' : ''}`,
-      };
-    })
-    .concat(deGemini)
-    // Las de entrega fija primero: son las que sirven para narrar quince minutos.
-    .sort(
-      (a, b) =>
-        Number(a.expresiva) - Number(b.expresiva) ||
-        a.genero.localeCompare(b.genero) ||
-        a.nombre.localeCompare(b.nombre),
-    );
+  // LA CARA de una voz: su nombre sin el prefijo de idioma. `es-US-Neural2-B` y
+  // `es-419-Neural2-B` tienen la misma cara, y como los dos códigos son «Latino»,
+  // son la misma voz para quien elige.
+  const caraDe = (nombre) => String(nombre || '').split('-').slice(2).join('-');
+
+  const vistas = new Set();
+  const salida = [];
+  for (const v of voces || []) {
+    const reg = v?.languageCodes?.[0] || '';
+    const region = REGIONES_DE_VOZ[reg];
+    if (!region) continue;
+    if (genero && v.ssmlGender !== genero) continue;
+    const variable = ES_EXPRESIVA.test(v.name);
+    if (!expresivas && variable) continue;
+
+    // Una sola por región y cara. Y por nombre, que el servicio también repite.
+    const cara = caraDe(v.name);
+    const huella = `${region}|${cara}|${v.ssmlGender}`;
+    if (vistas.has(huella) || vistas.has(v.name)) continue;
+    vistas.add(huella);
+    vistas.add(v.name);
+
+    salida.push({
+      nombre: v.name,
+      region: reg,
+      genero: GENEROS[v.ssmlGender] || '',
+      // Que viaje marcada es lo que permite avisar en pantalla en vez de que se
+      // descubra oyendo el video montado con quince narradores distintos.
+      expresiva: variable,
+      // La etiqueta lleva la cara y la región. El GÉNERO solo cuando hay varios:
+      // con el catálogo filtrado a masculina, ponerlo en todas no distinguía nada.
+      etiqueta:
+        `${cara} · ${region}` +
+        (genero ? '' : ` · ${GENEROS[v.ssmlGender] || ''}`) +
+        (variable ? ' · expresiva' : ''),
+    });
+  }
+
+  const todas = salida.concat(deGemini).sort(
+    (a, b) =>
+      Number(a.expresiva) - Number(b.expresiva) ||
+      a.region.localeCompare(b.region) ||
+      a.nombre.localeCompare(b.nombre),
+  );
+
+  // Y LA GARANTÍA, no la intención: si después de todo quedan dos etiquetas
+  // iguales, se les pone el nombre técnico detrás. Una lista con dos filas que
+  // dicen lo mismo es una lista en la que no se puede elegir.
+  const cuenta = new Map();
+  for (const v of todas) cuenta.set(v.etiqueta, (cuenta.get(v.etiqueta) || 0) + 1);
+  for (const v of todas) if (cuenta.get(v.etiqueta) > 1) v.etiqueta = `${v.etiqueta} · ${v.nombre}`;
+  return todas;
 }
 
 // ── Voz de Gemini (Vertex AI) ─────────────────────────────────────────────────
