@@ -2887,6 +2887,43 @@ export const invariantes = [
   },
 
   {
+    nombre: 'el-encargo-del-guion-esta-en-el-repositorio-y-manda',
+    dice: 'El documento que encarga esto —PLANPRISMANEGRO.md— NO ESTABA EN EL REPOSITORIO. Sus bloques literales del guion se copiaron al prompt una vez y después no había con qué comparar: el gancho derivó hasta abrir con «Eres Liam MacTiernan, y el 12 de octubre de 2024, en Port MacLeod…» —la fecha, el sitio y el nombre en la primera frase— y hubo que pedir el documento otra vez para verlo. Ahora el documento vive aquí y esta comprobación lee su §3 y exige que cada línea siga estando en el prompt del guion. Se puede añadir por encima; no se puede perder nada.',
+    comprobar(ctx) {
+      const { sistemaDelGuion } = ctx.fn;
+      const fallos = [];
+      const doc = ctx.fuentes.get('PLANPRISMANEGRO.md');
+      if (!doc) return ['PLANPRISMANEGRO.md no está en el repositorio: el guion no tiene contra qué compararse.'];
+
+      const bloque = doc.match(/### Bloques nuevos, texto literal\n+```\n([\s\S]*?)\n```/);
+      if (!bloque) return ['El §3 del encargo ya no trae los bloques literales del guion.'];
+
+      const lineas = bloque[1].split('\n').map((l) => l.trim()).filter(Boolean);
+      // Cuatro bloques, y los cuatro tienen que estar: si el documento cambia de
+      // forma y se queda con uno, la comprobación no debe adelgazar en silencio.
+      const titulos = lineas.filter((l) => /^EL |^LOS /.test(l));
+      if (titulos.length < 4) {
+        fallos.push(`El §3 del encargo trae ${titulos.length} bloques y tiene que traer cuatro.`);
+      }
+
+      const sistema = sistemaDelGuion();
+      for (const l of lineas) {
+        if (!sistema.includes(l)) fallos.push(`El encargo dice «${l}» y el prompt del guion ya no lo dice.`);
+      }
+      return fallos;
+    },
+    // Se rompe con la deriva de verdad: la línea que prohíbe dar el año y el sitio
+    // en el gancho desaparece del prompt. VA POR EL CONTEXTO porque la comprobación
+    // EJECUTA `sistemaDelGuion`.
+    romper: (ctx) =>
+      conFuncion(ctx, 'sistemaDelGuion', () =>
+        ctx.fn
+          .sistemaDelGuion()
+          .replace('No expliques todavía\nqué es, ni de qué año, ni dónde.', ''),
+      ),
+  },
+
+  {
     nombre: 'el-guion-tiene-oficio-y-la-licencia-trae-su-limite',
     dice: 'Las reglas del guion eran todas negativas y con puras prohibiciones sale un noticiero: datos correctos, uno detrás de otro, y nadie llega al minuto tres — falta decirle QUÉ HACER. Y la licencia de inventar tiene que venir con su límite: «invéntate el detalle» a secas es el fallo que este canal existe para evitar, porque un nombre que cambia a mitad destruye la pieza entera. Aquí hubo además un bloque contrario —«no inventes datos, fechas, cifras ni nombres»— del modo documental: con los dos puestos el guion recibía una orden y su contraria en el mismo sistema y hacía lo que le parecía.',
     comprobar(ctx) {

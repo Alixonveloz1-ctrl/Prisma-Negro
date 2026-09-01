@@ -40,7 +40,11 @@ export function leerFuentes() {
       /* la carpeta puede no existir todavía */
     }
   }
-  for (const suelto of ['index.html', 'package.json', 'vercel.json', '.env.example']) {
+  // PLANPRISMANEGRO.md no es documentación de acompañamiento: es el encargo, y una
+  // invariante comprueba que los bloques literales del guion siguen dentro del
+  // prompt. Estuvo fuera del repositorio y por eso el gancho pudo derivar sin que
+  // nadie lo notara — no había con qué comparar.
+  for (const suelto of ['index.html', 'package.json', 'vercel.json', '.env.example', 'PLANPRISMANEGRO.md']) {
     try {
       salida.set(suelto, readFileSync(join(RAIZ, suelto), 'utf8'));
     } catch {

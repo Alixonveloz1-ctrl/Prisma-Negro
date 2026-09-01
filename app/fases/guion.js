@@ -127,7 +127,8 @@ EL GANCHO — solo el primer acto, y son cuarenta segundos
 Empieza EN SEGUNDA PERSONA y dentro de la acción, antes de contextualizar nada.
 «Imagina esta escena. Te han contratado para talar unos robles viejos… retiras
 la madera podrida con las manos.» El espectador hace, no mira.
-Termina EXACTAMENTE en el instante del hallazgo y corta.
+Termina EXACTAMENTE en el instante del hallazgo y corta. No expliques todavía
+qué es, ni de qué año, ni dónde. Eso viene después de la cabecera.
 
 Y ESTAS TRES COSAS NO APARECEN EN EL GANCHO. Ninguna. Van después de la
 cabecera, en el acto siguiente:
