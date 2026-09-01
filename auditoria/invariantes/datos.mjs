@@ -4144,8 +4144,172 @@ export const invariantes = [
   },
 
   {
+    nombre: 'el-techo-no-premia-juntarlo-todo-en-una-toma',
+    dice: 'Una toma de CUARENTA Y NUEVE SEGUNDOS con dos párrafos enteros dentro: una imagen fija durante casi un minuto, que es lo contrario de lo que la regla de los ocho a dieciocho existe para conseguir. El castigo de pasarse del techo tenía una parte FIJA —«1e4 + el exceso al cuadrado»— que se pagaba por cada toma pasada. Cuando ningún reparto conseguía respetar el techo, dos tomas pasadas costaban dos veces esa parte fija y una sola costaba una, así que al segmentador le salía más barato meterlo TODO en una toma. Ahora el exceso se paga al cuadrado y sin parte fija: partir siempre sale más barato que acumular.',
+    comprobar(ctx) {
+      const { segmentar, verificarCobertura } = ctx.fn;
+      const fallos = [];
+
+      // El bloque real que lo destapó, con el techo que traía su proyecto. La
+      // primera frase no llega al suelo sin pasarse del techo, así que NINGÚN
+      // reparto lo respeta: es justo el caso en que el castigo fijo se rendía.
+      const guion =
+        '## Autoridades\n\n' +
+        'El rompeolas de la antigua procesadora SilverTide se transforma en una escena ' +
+        'del crimen sellada. Bajo un cielo plomizo que amenaza con lluvia, los agentes ' +
+        'establecen un perímetro de seguridad de doscientos metros y comienzan la ' +
+        'extracción. El proceso es lento, meticuloso.\n\n' +
+        'El ingeniero Liam MacTiernan, aún en el lugar, supervisa el trabajo de una ' +
+        'cuadrilla especializada que utiliza sierras de diamante para abrir una sección ' +
+        'rectangular en la parte superior del tetrápodo 402. La cámara endoscópica había ' +
+        'mostrado que el cuerpo estaba en posición fetal, encajado en el espacio de apenas ' +
+        'un metro cúbico. La filtración constante del agua de mar a través de las ' +
+        'microfisuras del hormigón había creado un ambiente único.';
+
+      const apretado = { segundosMinimo: 8, segundosObjetivo: 11, segundosMaximo: 16 };
+      const r = segmentar(guion, apretado);
+      if (!verificarCobertura(guion, r).ok) fallos.push('El reparto rompe la cobertura.');
+
+      const larga = Math.max(...r.tomas.map((t) => t.segundos));
+      // Con un techo imposible las tomas se pasan, pero POCO y repartido. Nunca
+      // una sola que se lo lleve todo.
+      if (larga > apretado.segundosMaximo * 1.5) {
+        fallos.push(
+          `Con el techo en ${apretado.segundosMaximo}s sale una toma de ${larga}s: ` +
+            'al segmentador le salió más barato juntarlo todo que partirlo.',
+        );
+      }
+      if (r.tomas.length < 3) {
+        fallos.push(`Cuarenta y nueve segundos de guion salen en ${r.tomas.length} toma(s).`);
+      }
+      // Y con el techo de verdad, ni eso: todas dentro.
+      const bien = segmentar(guion);
+      if (bien.tomas.some((t) => t.segundos > ctx.fn.SEGMENTACION.segundosMaximo)) {
+        fallos.push(`Con el techo normal alguna toma se pasa: ${bien.tomas.map((t) => t.segundos).join(', ')}`);
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: las tomas seguidas que ya se pasan del techo se funden
+    // en una, que es lo que el castigo fijo hacía preferir.
+    romper: (ctx) =>
+      conFuncion(ctx, 'segmentar', (guion, config) => {
+        const r = ctx.fn.segmentar(guion, config);
+        const techo = { ...ctx.fn.SEGMENTACION, ...config }.segundosMaximo;
+        const texto = String(guion ?? '');
+        const tomas = [];
+        for (const t of r.tomas) {
+          const previa = tomas[tomas.length - 1];
+          if (previa && previa.segundos > techo && t.segundos > techo && previa.escena === t.escena) {
+            previa.finEnGuion = t.finEnGuion;
+            previa.texto = texto.slice(previa.inicioEnGuion, t.finEnGuion);
+            previa.segundos = +(previa.texto.length / 14.5).toFixed(2);
+            continue;
+          }
+          tomas.push({ ...t });
+        }
+        return { ...r, tomas: tomas.map((t, i) => ({ ...t, i })) };
+      }),
+  },
+
+  {
+    nombre: 'el-suelo-y-el-techo-de-la-toma-no-se-guardan-en-el-proyecto',
+    dice: 'La regla de los ocho a dieciocho segundos no es una preferencia del proyecto, y se guardaba como si lo fuera. Un episodio empezado antes de la regla conservaba su techo de dieciséis —el normalizador lo respetaba porque estaba dentro del rango permitido— y con dieciséis salió una toma de cuarenta y nueve segundos. Lo que se guarda es el gusto del director, que es el objetivo; el suelo y el techo se aplican, no se leen.',
+    comprobar(ctx) {
+      const { normalizar, SEGMENTACION } = ctx.fn;
+      const fallos = [];
+
+      // Un proyecto de antes, con los números de antes.
+      const viejo = normalizar({
+        segmentacion: { segundosObjetivo: 11, segundosMaximo: 16, caracteresPorSegundo: 14.5 },
+      });
+      if (viejo.segmentacion.segundosMaximo !== SEGMENTACION.segundosMaximo) {
+        fallos.push(`Un proyecto viejo conserva su techo de ${viejo.segmentacion.segundosMaximo}s.`);
+      }
+      if (viejo.segmentacion.segundosMinimo !== SEGMENTACION.segundosMinimo) {
+        fallos.push(`Un proyecto viejo se queda sin suelo (${viejo.segmentacion.segundosMinimo}).`);
+      }
+      // Y uno saboteado a mano tampoco cuela.
+      const roto = normalizar({ segmentacion: { segundosMinimo: 1, segundosMaximo: 90 } });
+      if (roto.segmentacion.segundosMinimo !== SEGMENTACION.segundosMinimo) {
+        fallos.push(`Un suelo de 1 segundo se acepta (${roto.segmentacion.segundosMinimo}).`);
+      }
+      if (roto.segmentacion.segundosMaximo !== SEGMENTACION.segundosMaximo) {
+        fallos.push(`Un techo de 90 segundos se acepta (${roto.segmentacion.segundosMaximo}).`);
+      }
+
+      // El objetivo SÍ es del proyecto: es la palanca del director. Pero dentro.
+      if (normalizar({ segmentacion: { segundosObjetivo: 16 } }).segmentacion.segundosObjetivo !== 16) {
+        fallos.push('El objetivo deja de ser del proyecto: el director pierde la palanca de ritmo.');
+      }
+      const fuera = normalizar({ segmentacion: { segundosObjetivo: 29 } }).segmentacion.segundosObjetivo;
+      if (fuera > SEGMENTACION.segundosMaximo) {
+        fallos.push(`Un objetivo de 29s pasa entero (${fuera}): queda por encima del techo.`);
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: el techo del proyecto vale si cae dentro del rango.
+    romper: (ctx) =>
+      conFuncion(ctx, 'normalizar', (guardado) => {
+        const c = ctx.fn.normalizar(guardado);
+        const suyo = Number(guardado?.segmentacion?.segundosMaximo);
+        if (suyo >= 8 && suyo <= 40) c.segmentacion.segundosMaximo = suyo;
+        return c;
+      }),
+  },
+
+  {
+    nombre: 'lo-que-dice-el-testigo-se-narra-aunque-lleve-la-marca-delante',
+    dice: 'El encargo pone la marca «> » en una línea y la declaración debajo, en texto llano. El modelo escribe markdown, y en markdown una cita lleva «> » en TODAS sus líneas — que es lo que hizo, episodio entero. Con «toda línea que empieza por > es la ficha del hablante», la declaración ENTERA dejaba de narrarse: quince testimonios perdidos en un episodio sin un solo aviso, porque la cobertura seguía cuadrando —el texto estaba en un tramo, solo que en uno que no se lee—. Y encima la marca del hablante se corría al párrafo del narrador de debajo, así que el director ponía el plano del perito declarando sobre la voz del narrador. De una tanda de líneas «> » seguidas, la primera es la ficha y el resto es lo que dice.',
+    comprobar(ctx) {
+      const { segmentar, verificarCobertura } = ctx.fn;
+      const fallos = [];
+      const quien = 'El Equipo de Identificación Forense de la RCMP';
+      const dice = 'La humedad del bloque preservó los huesos, pero el tejido era papilla salina por la filtración del mar.';
+
+      // Los dos formatos: el del encargo y el que escribe el modelo.
+      for (const [como, guion] of [
+        ['la marca sola', `## Peritaje\n\nLos agentes acordonan la zona y esperan al forense.\n\n> ${quien}\n${dice}\n\nEl bloque se cortó esa misma tarde con sierras de diamante.`],
+        ['markdown entero', `## Peritaje\n\nLos agentes acordonan la zona y esperan al forense.\n\n> ${quien}\n> ${dice}\n\nEl bloque se cortó esa misma tarde con sierras de diamante.`],
+      ]) {
+        const r = segmentar(guion);
+        if (!verificarCobertura(guion, r).ok) fallos.push(`Con ${como} se rompe la cobertura.`);
+
+        const narrado = r.tomas.map((t) => t.texto).join(' ');
+        if (!narrado.includes('La humedad del bloque preservó')) {
+          fallos.push(`Con ${como}, lo que dice el testigo NO se narra: el testimonio se pierde entero.`);
+        }
+        if (narrado.includes(quien)) {
+          fallos.push(`Con ${como} se narra la ficha del hablante: se leería en voz alta en el documental.`);
+        }
+        const suya = r.tomas.find((t) => t.texto.includes('La humedad del bloque'));
+        if (suya && suya.testimonio !== quien) {
+          fallos.push(`Con ${como}, la toma del testimonio no sabe quién habla (${JSON.stringify(suya.testimonio)}).`);
+        }
+        // Y no se derrama sobre el narrador de debajo.
+        const despues = r.tomas.find((t) => t.texto.includes('sierras de diamante'));
+        if (despues?.testimonio) {
+          fallos.push(`Con ${como}, el testimonio alcanza al narrador: saldría el perito donde habla el narrador.`);
+        }
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: toda línea «> » es ficha del hablante, así que lo que
+    // dice el testigo no llega a ninguna toma.
+    romper: (ctx) =>
+      conFuncion(ctx, 'segmentar', (guion, config) => {
+        const r = ctx.fn.segmentar(guion, config);
+        const citadas = String(guion ?? '')
+          .split('\n')
+          .filter((l) => /^\s*>\s+\S/.test(l))
+          .map((l) => l.replace(/^\s*>\s*/, '').trim());
+        const tomas = r.tomas.filter((t) => !citadas.some((c) => c && t.texto.includes(c)));
+        return { ...r, tomas: tomas.map((t, i) => ({ ...t, i })) };
+      }),
+  },
+
+  {
     nombre: 'la-declaracion-de-ficcion-se-narra-y-va-la-primera',
-    dice: 'La declaración de ficción vivía SOLO en la descripción del vídeo, que es donde la ve quien la busca. El canal de referencia la dice en voz alta y es lo primero que se oye, antes incluso de «Imagina esta escena»: «Todo el contenido de este episodio fue producido y reconstruido por Crímenes Imperfectos, Expedientes X». Un caso inventado presentado como caso real es una mentira, y quien llega por una recomendación no despliega ninguna descripción. Nueve segundos narrados es la protección más barata que existe. Va compuesta en el código y no pedida al modelo, por lo mismo que la otra: una frase generada puede salir distinta, más suave, o no salir.',
+    dice: 'La declaración de ficción vivía SOLO en la descripción del vídeo, que es donde la ve quien la busca; narrada la oye todo el mundo. Estuvo al principio —es donde la pone el canal de referencia— y duró un episodio: «¿por qué está iniciando con ese mensaje diciendo que esto es ficción? Un mensaje, más bien, al final del vídeo, no al principio». Nueve segundos de aviso legal delante del gancho es lo único que hay entre el espectador y la acción, y el gancho es donde se gana o se pierde. Al final protege igual y no se paga con la apertura. Va en su propia escena: pegada al último párrafo se metería en la toma de la duda abierta, que existe para que se discuta en los comentarios.',
     comprobar(ctx) {
       const { conDeclaracionNarrada, DECLARACION_NARRADA, segmentar } = ctx.fn;
       const fallos = [];
@@ -4155,21 +4319,25 @@ export const invariantes = [
         fallos.push(`La declaración narrada no dice que es ficción: «${DECLARACION_NARRADA}»`);
       }
 
-      // 1 · Va DENTRO de la primera escena y por delante de toda la narración.
-      const guion = '## Gancho\nImagina esta escena. Te han contratado para talar robles.\n\n## El hallazgo\nLa denuncia entró a las nueve y diez de la mañana del martes.';
+      // 1 · Se narra, va la ÚLTIMA, y no delante del gancho.
+      const guion = '## Gancho\nImagina esta escena. Te han contratado para talar robles.\n\n## El cierre\nEl caso quedó cerrado. ¿Quién lo metió ahí dentro?';
       const con = conDeclaracionNarrada(guion);
       if (!con.includes(DECLARACION_NARRADA)) {
         fallos.push('El guion sale sin la declaración narrada: solo la vería quien despliegue la descripción.');
       }
-      if (con.indexOf(DECLARACION_NARRADA) > con.indexOf('Imagina esta escena')) {
-        fallos.push('La declaración va detrás del gancho: se oye cuando ya te han metido en la acción.');
+      if (con.indexOf(DECLARACION_NARRADA) < con.indexOf('Imagina esta escena')) {
+        fallos.push('La declaración va delante del gancho: nueve segundos de aviso legal antes de la acción.');
       }
-      // Fuera de la primera escena crearía una escena cero implícita, con su
-      // música y su dirección propias, para nueve segundos de aviso legal.
       const r = segmentar(con);
       const suya = r.tomas.find((t) => t.texto.includes(DECLARACION_NARRADA));
       if (!suya) fallos.push('La declaración no cae en ninguna toma: no se narraría.');
-      else if (suya.escena !== 0) fallos.push(`La declaración abre su propia escena (${suya.escena}).`);
+      else if (suya.i !== r.tomas.length - 1) {
+        fallos.push(`La declaración no es la última toma, es la ${suya.i} de ${r.tomas.length}.`);
+      }
+      // Y SOLA. Pegada a la duda abierta se la come: van en la misma imagen.
+      else if (/¿Qui[eé]n lo metió/.test(suya.texto)) {
+        fallos.push('La declaración comparte toma con la duda abierta: el aviso legal se come el cierre.');
+      }
 
       // 2 · Y no se pone dos veces cuando se reescribe un acto y el resto venía
       // guardado.

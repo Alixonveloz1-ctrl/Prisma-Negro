@@ -85,8 +85,42 @@ function tramos(guion) {
     // dirección: es lo que le dice al director que ahí va el plano del perito
     // declarando. En pantalla se ve a alguien hablando y se oye al narrador, que
     // es como funcionan los documentales de plataforma.
+    // ─────────────────────────────────────────────────────────────────────────
+    // SOLO LA PRIMERA LÍNEA «> » ES LA FICHA DEL QUE HABLA. LAS DEMÁS SE NARRAN.
+    //
+    // El encargo pone la marca en una línea y la declaración debajo, en texto
+    // llano. El modelo escribe markdown, y en markdown una cita lleva «> » en
+    // TODAS sus líneas — que es lo que hizo, episodio entero:
+    //
+    //     > El Equipo de Identificación Forense de la RCMP
+    //     > La humedad del bloque preservó los huesos, pero el tejido era papilla
+    //
+    // Con «toda línea que empieza por > es la ficha del hablante», la declaración
+    // ENTERA dejaba de narrarse. Quince testimonios perdidos en un episodio, sin
+    // un solo aviso: la cobertura seguía cuadrando —el texto estaba en un tramo,
+    // solo que en uno que no se lee— y encima la marca del hablante se corría al
+    // párrafo del narrador que venía detrás, así que el director ponía el plano
+    // del perito declarando sobre la voz del narrador.
+    //
+    // La regla nueva no elige entre los dos formatos: los acepta los dos. De una
+    // tanda de líneas «> » seguidas, la primera es la ficha y el resto es la
+    // declaración. El «> » de esas líneas es hueco, como la sangría.
+    // ─────────────────────────────────────────────────────────────────────────
     if (/^\s*>\s+\S/.test(contenido)) {
-      salida.push({ clase: 'testimonio', inicio: linea.inicio, fin: linea.fin });
+      const anterior = salida[salida.length - 1];
+      const siguen = anterior && (anterior.clase === 'testimonio' || anterior.clase === 'citado');
+      if (!siguen) {
+        salida.push({ clase: 'testimonio', inicio: linea.inicio, fin: linea.fin });
+        continue;
+      }
+      // Es la declaración: la marca «> » no se narra, lo de detrás sí.
+      const marca = contenido.match(/^\s*>\s*/)[0].length;
+      salida.push({ clase: 'citado', inicio: linea.inicio, fin: linea.inicio + marca });
+      const cola = contenido.match(/\s*$/)[0].length;
+      const ini = linea.inicio + marca;
+      const fin = linea.fin - cola;
+      for (const f of frases(guion, ini, fin)) salida.push(f);
+      if (cola) salida.push({ clase: 'hueco', inicio: fin, fin: linea.fin });
       continue;
     }
     if (!contenido.trim()) {
@@ -194,13 +228,34 @@ const segundosDe = (tr, c) => segundosEntre(tr, tr, c);
  *   - Bajar del suelo es lo más caro que puede pasar. Una toma es una imagen —y casi
  *     siempre un clip— que se paga POR UNIDAD: una toma de dos segundos cuesta lo
  *     mismo que una de dieciocho y aprovecha nueve veces menos.
- *   - Pasarse del techo es cien veces menos grave. Una toma larga de más es una
- *     imagen que se ve un rato largo; sigue costando una.
+ *   - Pasarse del techo es mucho menos grave. Una toma larga de más es una imagen
+ *     que se ve un rato largo; sigue costando una.
  *   - Y dentro de la regla, lo mejor es acercarse al objetivo.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * EL CASTIGO DEL TECHO NO PUEDE TENER PARTE FIJA, y esto salió caro.
+ *
+ * Era `1e4 + (d - techo)²`: una cantidad fija por CADA toma pasada, más el
+ * exceso. Con eso, cuando ningún reparto conseguía respetar el techo —un bloque
+ * cuya primera frase no llega al suelo sin pasarse del techo—, DOS tomas pasadas
+ * costaban dos veces la parte fija y UNA SOLA costaba una. Al segmentador le
+ * salía más barato meterlo todo en una toma.
+ *
+ * Y eso es exactamente lo que se vio en pantalla: una toma de CUARENTA Y NUEVE
+ * SEGUNDOS con dos párrafos enteros dentro. Una imagen fija durante casi un
+ * minuto, que es justo lo contrario de lo que la regla existe para conseguir.
+ *
+ * Ahora el exceso se paga al cuadrado y sin parte fija, así que partir siempre
+ * sale más barato que acumular: repartir 34 segundos de exceso entre tres tomas
+ * cuesta la novena parte que llevarlos en una sola.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
+const PESO_DEL_TECHO = 100;
+const PESO_DEL_SUELO = 1e6;
+
 function castigoDeDuracion(d, c) {
-  if (d < c.segundosMinimo) return 1e6 + (c.segundosMinimo - d) ** 2;
-  if (d > c.segundosMaximo) return 1e4 + (d - c.segundosMaximo) ** 2;
+  if (d < c.segundosMinimo) return PESO_DEL_SUELO + (c.segundosMinimo - d) ** 2;
+  if (d > c.segundosMaximo) return PESO_DEL_TECHO * (d - c.segundosMaximo) ** 2;
   return (d - c.segundosObjetivo) ** 2;
 }
 
@@ -329,7 +384,9 @@ export function segmentar(guion, config = {}) {
       continue;
     }
 
-    if (tr.clase === 'hueco') {
+    // El «> » que abre cada línea de una cita no se narra, y tampoco cuenta como
+    // pausa: la declaración sigue siendo del mismo testigo línea a línea.
+    if (tr.clase === 'hueco' || tr.clase === 'citado') {
       saltos += (texto.slice(tr.inicio, tr.fin).match(/\n/g) || []).length;
       if (saltos >= 2) hablando = '';
       continue;
@@ -420,15 +477,26 @@ export function tomasFueraDeRegla(resultado, config = {}) {
     duraBloque.set(b, (duraBloque.get(b) || 0) + t.segundos);
   }
 
-  // ¿Se puede partir esta toma dejando los DOS trozos por encima del suelo? Se mira
-  // sobre las frases de verdad —los tramos de narración que caen dentro de la
-  // toma—, porque un corte solo puede ir donde acaba una frase.
-  const partible = (t) => {
+  // ¿Había un reparto MEJOR que dejar esta toma como está?
+  //
+  // Se mide con el mismo castigo con el que reparte el segmentador, y no con «¿se
+  // puede partir?». La diferencia no es teórica: una toma de 18,07 segundos se
+  // puede partir en 8,1 y 9,9 —las dos dentro de la regla— y partirla sería peor,
+  // porque cambia siete centésimas de exceso por una imagen entera de más, que es
+  // justo el gasto que la regla existe para quitar. Preguntar «¿se puede?» marcaba
+  // esas como fallo y empujaba a arreglarlas gastando.
+  //
+  // Los cortes se prueban sobre las frases de verdad —los tramos de narración de
+  // dentro de la toma—, porque un corte solo puede ir donde acaba una frase.
+  const hayRepartoMejor = (t) => {
     const dentro = narracion.filter((f) => f.inicio >= t.inicioEnGuion && f.fin <= t.finEnGuion);
+    if (dentro.length < 2) return false;
+    const ultimo = dentro[dentro.length - 1];
+    const entera = castigoDeDuracion(segundosEntre(dentro[0], ultimo, c), c);
     for (let k = 1; k < dentro.length; k++) {
-      const antes = segundosEntre(dentro[0], dentro[k - 1], c);
-      const despues = segundosEntre(dentro[k], dentro[dentro.length - 1], c);
-      if (antes >= c.segundosMinimo && despues >= c.segundosMinimo) return true;
+      const antes = castigoDeDuracion(segundosEntre(dentro[0], dentro[k - 1], c), c);
+      const despues = castigoDeDuracion(segundosEntre(dentro[k], ultimo, c), c);
+      if (antes + despues < entera) return true;
     }
     return false;
   };
@@ -437,11 +505,11 @@ export function tomasFueraDeRegla(resultado, config = {}) {
     if (t.segundos < c.segundosMinimo && duraBloque.get(bloqueDe.get(t.i)) >= c.segundosMinimo) {
       fuera.push({ i: t.i, segundos: t.segundos, porque: 'por debajo del suelo teniendo bloque de sobra' });
     }
-    if (t.segundos > c.segundosMaximo && partible(t)) {
+    if (t.segundos > c.segundosMaximo && hayRepartoMejor(t)) {
       fuera.push({
         i: t.i,
         segundos: t.segundos,
-        porque: 'por encima del techo pudiéndose partir en dos que llegan al suelo',
+        porque: 'por encima del techo habiendo un reparto mejor',
       });
     }
   }

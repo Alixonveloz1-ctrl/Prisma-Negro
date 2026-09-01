@@ -320,17 +320,23 @@ export function normalizar(cruda) {
     [c.formato.ancho, c.formato.alto] = [c.formato.alto, c.formato.ancho];
   }
 
-  // El suelo de la toma no se negocia por debajo de ocho segundos: una imagen se
-  // paga entera aunque se vea dos segundos (ver la cabecera de comun/segmentar).
-  // Un proyecto viejo que traiga tres segundos de objetivo sube solo al llegar.
-  c.segmentacion.segundosMinimo = numero(c.segmentacion.segundosMinimo, 8, 20, 8);
-  c.segmentacion.segundosObjetivo = Math.max(
-    c.segmentacion.segundosMinimo,
-    numero(c.segmentacion.segundosObjetivo, 8, 30, 13),
-  );
-  c.segmentacion.segundosMaximo = Math.max(
-    c.segmentacion.segundosObjetivo,
-    numero(c.segmentacion.segundosMaximo, 8, 40, 18),
+  // EL SUELO Y EL TECHO SON LA REGLA, NO UNA PREFERENCIA, y por eso NO se leen del
+  // proyecto: se ponen. «Todas las tomas deben ser de entre ocho y dieciocho
+  // segundos» no admite que un proyecto viejo traiga otros números.
+  //
+  // Y esto no es cautela: un proyecto de antes conservaba su techo de dieciséis
+  // —porque el normalizador lo respetaba si estaba en rango— y con dieciséis salió
+  // una toma de CUARENTA Y NUEVE SEGUNDOS. Lo que se guarda es el gusto del
+  // director; la regla no se guarda, se aplica.
+  c.segmentacion.segundosMinimo = SEGMENTACION.segundosMinimo;
+  c.segmentacion.segundosMaximo = SEGMENTACION.segundosMaximo;
+  // El objetivo sí es del proyecto: es la palanca del director entre lento y ágil.
+  c.segmentacion.segundosObjetivo = Math.min(
+    c.segmentacion.segundosMaximo,
+    Math.max(
+      c.segmentacion.segundosMinimo,
+      numero(c.segmentacion.segundosObjetivo, 8, 30, SEGMENTACION.segundosObjetivo),
+    ),
   );
   c.segmentacion.caracteresPorSegundo = numero(c.segmentacion.caracteresPorSegundo, 8, 25, 14.5);
 

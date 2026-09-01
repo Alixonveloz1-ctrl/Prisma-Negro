@@ -406,12 +406,22 @@ añadir por encima; no se puede perder nada.
   título. El §3 se corrigió con esto, y la invariante que lo vigila usa el gancho
   transcrito de arriba como el caso que NO se debe marcar.
 
-- **§3 · La declaración de ficción se narra, y es lo primero que se oye.** Vivía
-  solo en la descripción del vídeo. La referencia la dice en voz alta antes que
-  nada: «Todo el contenido de este episodio fue producido y reconstruido por
-  Crímenes Imperfectos, Expedientes X». Quien llega por una recomendación no
-  despliega ninguna descripción, y nueve segundos narrados son la protección más
-  barata que existe. Se pega en el código, dentro de la primera escena.
+- **§3 · La declaración de ficción se narra, y va AL FINAL.** Vivía solo en la
+  descripción del vídeo. La referencia la dice en voz alta antes que nada, y así
+  se puso — y así duró un episodio: nueve segundos de aviso legal delante del
+  gancho es lo único que hay entre el espectador y la acción, y el gancho es donde
+  se gana o se pierde. Al final protege igual y no se paga con la apertura. Va en
+  su propia escena, `## Aviso`: pegada al último párrafo se metería dentro de la
+  toma de la duda abierta, que existe para que se discuta en los comentarios.
+
+- **§4 · Lo que dice el testigo se narra aunque lleve la marca delante.** El
+  encargo pone `> ` en la línea de la ficha y la declaración debajo en texto
+  llano; el modelo escribe markdown, donde una cita lleva `> ` en todas sus
+  líneas. Con la regla vieja la declaración entera dejaba de narrarse —quince
+  testimonios perdidos en un episodio, sin un aviso, porque la cobertura seguía
+  cuadrando— y la marca del hablante se corría al párrafo del narrador de debajo.
+  Ahora, de una tanda de líneas `> ` seguidas, la primera es la ficha y el resto
+  es lo que dice.
 
 - **El caso pasa en cualquier parte del mundo, y el país y la ciudad son
   CORRECTOS.** Lo inventado es el pueblo y el condado. La biblioteca permanente

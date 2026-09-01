@@ -171,12 +171,21 @@ const FORMATO = `
 FORMATO
 - Estructura con "## " los cambios de escena. El título de escena NO se narra.
 - Una línea que empieza por "> " declara quién habla en el testimonio que viene
-  debajo, y tampoco se narra.
+  debajo, y tampoco se narra. Lo que dice va DEBAJO, en su propio párrafo:
+      > Marcos Elizalde, capataz de la cuadrilla
+      No toqué madera. Metí la mano y no había nada.
+  Si pones "> " también en la declaración se entiende igual, pero la primera
+  línea de la tanda es siempre la ficha del que habla, nunca lo que dice.
 - Una línea en blanco es una PAUSA: úsala después de un dato duro, para dejarlo
   caer. No parte la toma, así que puedes usarla donde el oído la pida.
 - Escribe en PÁRRAFOS LARGOS, de tres o cuatro frases. Cada toma del montaje es
   una imagen que se paga entera: un párrafo de una frase suelta es una imagen
-  pagada para verse dos segundos.`;
+  pagada para verse dos segundos.
+- Y UN PÁRRAFO NO EMPIEZA REPITIENDO CÓMO ACABÓ EL ANTERIOR. Nada de «…un
+  historial particularmente tenso: Elias Vance. / Elias Vance, de 52 años,
+  capataz de…»: el nombre acaba de sonar, y en el montaje esos dos párrafos van
+  seguidos, muchas veces en la misma toma. Se dice una vez y se sigue: «de 52
+  años, era capataz de…».`;
 
 /** Las reglas del guion: el oficio, la licencia con su límite, y el formato. */
 export const sistemaDelGuion = () => SISTEMA + MATERIAL_CONSTRUIDO + '\n' + FORMATO;
@@ -370,32 +379,39 @@ export async function escribirGuion({
 export const contarPalabras = (t) => (String(t).trim().match(/\S+/g) || []).length;
 
 /**
- * LA DECLARACIÓN, NARRADA, ANTES QUE NADA.
+ * LA DECLARACIÓN, NARRADA, AL FINAL.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * El canal de referencia abre así, y es lo primero que se oye —antes incluso de
- * «Imagina esta escena»—. Aquí la declaración vivía solo en la descripción del
- * vídeo, que es donde la ve quien la busca; narrada la oye todo el mundo.
+ * Estuvo al principio —es donde la pone el canal de referencia, antes incluso de
+ * «Imagina esta escena»— y duró un episodio:
  *
- * Se pega AQUÍ y no se le pide al modelo, por lo mismo que la de la descripción:
- * una frase generada puede salir distinta, más suave, o no salir. Y se pega
- * DENTRO de la primera escena, no antes del primer «## »: fuera crearía una
- * escena cero implícita, con su música y su dirección propias, para nueve
- * segundos de aviso legal.
+ *   «¿Por qué está iniciando con ese mensaje diciendo que esto es ficción? Eso no
+ *    es necesario decirlo. Ya eso lo especificaremos en el canal, en la página, o
+ *    un mensaje, más bien, al final del vídeo, no al principio.»
+ *
+ * Y tiene razón en lo que cuesta: nueve segundos de aviso legal delante del
+ * gancho es lo único que hay entre el espectador y la acción, y el gancho es
+ * donde se gana o se pierde. Al final protege igual —se dice, queda dicho— y no
+ * se paga con la apertura.
+ *
+ * VA EN SU PROPIA ESCENA. Pegada al último párrafo se metería dentro de la toma
+ * de la duda abierta, que es la frase que existe para que se discuta en los
+ * comentarios: un aviso legal detrás, en la misma imagen, se la come. Con su
+ * «## » propio es una placa de cierre, que es lo que es.
+ *
+ * Se compone aquí y no se le pide al modelo, por lo mismo que la de la
+ * descripción: una frase generada puede salir distinta, más suave, o no salir.
  *
  * Idempotente: un guion que ya la trae —porque se reescribió un acto y el resto
  * venía guardado— no la recibe dos veces.
  * ─────────────────────────────────────────────────────────────────────────────
  */
+export const ESCENA_DEL_AVISO = 'Aviso';
+
 export function conDeclaracionNarrada(guion) {
   const t = String(guion || '');
   if (!t.trim() || t.includes(DECLARACION_NARRADA)) return t;
-
-  const cabecera = t.match(/^##[^\n]*\n/m);
-  if (!cabecera) return `${DECLARACION_NARRADA}\n\n${t.replace(/^\s+/, '')}`;
-
-  const corte = t.indexOf(cabecera[0]) + cabecera[0].length;
-  return `${t.slice(0, corte)}\n${DECLARACION_NARRADA}\n\n${t.slice(corte).replace(/^\s+/, '')}`;
+  return `${t.replace(/\s+$/, '')}\n\n## ${ESCENA_DEL_AVISO}\n\n${DECLARACION_NARRADA}\n`;
 }
 
 /**
