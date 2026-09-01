@@ -9,7 +9,9 @@
 //
 // Convenciones del texto plano, que la segmentación entiende:
 //   - Una línea que empieza por «## » abre una ESCENA (y su texto no se narra).
-//   - Una línea en blanco es una frontera dura entre tomas.
+//   - Una línea que empieza por «> » declara quién habla (y tampoco se narra).
+//   - Una línea en blanco es una pausa. NO parte la toma: partirla dejaba tomas de
+//     dos segundos, y una toma es una imagen pagada entera.
 
 import { llamar } from '../api.js';
 import { comoInstruccion } from './director.js';
@@ -161,8 +163,11 @@ FORMATO
 - Estructura con "## " los cambios de escena. El título de escena NO se narra.
 - Una línea que empieza por "> " declara quién habla en el testimonio que viene
   debajo, y tampoco se narra.
-- Separa con una línea en blanco los bloques que deben ir en tomas distintas. Esa
-  línea en blanco es una PAUSA: úsala después de un dato duro, para dejarlo caer.`;
+- Una línea en blanco es una PAUSA: úsala después de un dato duro, para dejarlo
+  caer. No parte la toma, así que puedes usarla donde el oído la pida.
+- Escribe en PÁRRAFOS LARGOS, de tres o cuatro frases. Cada toma del montaje es
+  una imagen que se paga entera: un párrafo de una frase suelta es una imagen
+  pagada para verse dos segundos.`;
 
 /** Las reglas del guion: el oficio, la licencia con su límite, y el formato. */
 export const sistemaDelGuion = () => SISTEMA + MATERIAL_CONSTRUIDO + '\n' + FORMATO;

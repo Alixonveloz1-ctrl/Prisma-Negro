@@ -16,11 +16,21 @@
 // afortunada: es que no hay otra cosa que pueda salir. La comprobación de después
 // está para cazar el día que alguien rompa esa propiedad.
 
+// LA REGLA DE LOS OCHO A DIECIOCHO SEGUNDOS (§4.3).
+//
+// Una toma es una imagen, y casi siempre también un clip de vídeo. Las dos se
+// pagan POR UNIDAD, no por segundo: una toma de dos segundos cuesta exactamente
+// lo mismo que una de dieciocho y aprovecha nueve veces menos. Un episodio
+// partido en tomas de dos y tres segundos gasta el triple, y encima parpadea.
+//
+// Por eso hay un SUELO, no solo un techo. Y por eso, cuando los dos no caben —una
+// frase sola que dura veinte segundos no se puede partir sin partir la frase—,
+// MANDA EL SUELO: una toma larga de más cuesta lo mismo que una de dieciocho; una
+// toma corta es una imagen pagada entera para verla dos segundos.
 export const PREDETERMINADO = {
-  // §8.5: la narración documental es más larga por toma y con menos cortes que la
-  // ficción. El objetivo de segundos por toma sube.
-  segundosObjetivo: 11,
-  segundosMaximo: 16,
+  segundosMinimo: 8,
+  segundosObjetivo: 13,
+  segundosMaximo: 18,
   // Velocidad de locución en caracteres por segundo. Es una ESTIMACIÓN, solo para
   // agrupar. La duración que manda en el montaje es la real, medida sobre el audio
   // generado (§4.5).
@@ -164,11 +174,84 @@ function enAbreviatura(guion, posPunto, limite) {
 }
 
 /**
+ * Segundos estimados de la toma que va desde la frase `a` hasta la frase `b`.
+ *
+ * Se mide el TRAMO ENTERO, de principio a fin, no la suma de las frases: entre una
+ * frase y la siguiente hay espacios y saltos de línea que acaban dentro del texto
+ * de la toma, y por tanto dentro de lo que se narra. Sumar frases da un número
+ * ligeramente menor, y ese medio segundo de diferencia era suficiente para que el
+ * reparto creyera que una toma cabía en el techo y saliera pasada.
+ */
+const segundosEntre = (a, b, c) => (b.fin - a.inicio) / c.caracteresPorSegundo;
+
+/** Segundos estimados de un tramo suelto. */
+const segundosDe = (tr, c) => segundosEntre(tr, tr, c);
+
+/**
+ * Lo que cuesta que una toma dure `d` segundos.
+ *
+ * Aquí está escrita la regla entera, y por eso está en UN solo sitio:
+ *   - Bajar del suelo es lo más caro que puede pasar. Una toma es una imagen —y casi
+ *     siempre un clip— que se paga POR UNIDAD: una toma de dos segundos cuesta lo
+ *     mismo que una de dieciocho y aprovecha nueve veces menos.
+ *   - Pasarse del techo es cien veces menos grave. Una toma larga de más es una
+ *     imagen que se ve un rato largo; sigue costando una.
+ *   - Y dentro de la regla, lo mejor es acercarse al objetivo.
+ */
+function castigoDeDuracion(d, c) {
+  if (d < c.segundosMinimo) return 1e6 + (c.segundosMinimo - d) ** 2;
+  if (d > c.segundosMaximo) return 1e4 + (d - c.segundosMaximo) ** 2;
+  return (d - c.segundosObjetivo) ** 2;
+}
+
+/**
+ * Reparte las frases de un bloque en tomas.
+ *
+ * NO SE VA LLENANDO Y CERRANDO. Eso —el método de toda la vida— deja siempre una
+ * cola: el último trozo del bloque es lo que sobró, y lo que sobra son dos
+ * segundos. De ahí salían las tomas de uno y dos segundos.
+ *
+ * Aquí se prueban TODOS los repartos posibles y gana el que menos castigo saca.
+ * Es programación dinámica sobre las frases del bloque —`mejor[j]` es el mejor
+ * reparto de las primeras `j` frases—, así que el resultado es el óptimo de verdad
+ * y no una aproximación que luego hay que remendar. Un bloque tiene decenas de
+ * frases, no miles: cuesta nada.
+ */
+function repartirEnTomas(frases, c) {
+  // La duración de las frases [i, j) es la de la toma que saldría de ellas.
+  const dura = (i, j) => segundosEntre(frases[i], frases[j - 1], c);
+  if (frases.length < 2 || dura(0, frases.length) <= c.segundosMaximo) return [frases];
+
+  const mejor = [0];
+  const desde = [0];
+  for (let j = 1; j <= frases.length; j++) {
+    mejor[j] = Infinity;
+    for (let i = 0; i < j; i++) {
+      const coste = mejor[i] + castigoDeDuracion(dura(i, j), c);
+      if (coste < mejor[j]) {
+        mejor[j] = coste;
+        desde[j] = i;
+      }
+    }
+  }
+
+  const partes = [];
+  for (let j = frases.length; j > 0; j = desde[j]) partes.unshift(frases.slice(desde[j], j));
+  return partes;
+}
+
+/**
  * Segmenta el guion en tomas.
  *
- * Agrupa frases consecutivas hasta acercarse al objetivo de segundos, sin cruzar
- * nunca un encabezado de escena ni una línea en blanco: un corte de párrafo es una
- * frontera dura, y el modelo de dirección lo agradece tanto como el oído.
+ * El guion se parte primero en BLOQUES —tramos de narración seguidos que comparten
+ * escena y hablante— y cada bloque se reparte en tomas de entre ocho y dieciocho
+ * segundos. Las fronteras duras son el encabezado de escena y la línea de
+ * testimonio: cruzarlas metería texto que no se narra dentro de una toma.
+ *
+ * La línea en blanco NO es una frontera dura. Lo fue, y por eso salían tomas de dos
+ * segundos: bastaba que el guion pusiera un párrafo de una frase corta para pagar
+ * una imagen entera por dos segundos de pantalla. Sigue siendo una pausa —el texto
+ * de la toma la conserva, y la locución la respeta— pero ya no obliga a cortar.
  */
 export function segmentar(guion, config = {}) {
   const c = { ...PREDETERMINADO, ...config };
@@ -185,38 +268,11 @@ export function segmentar(guion, config = {}) {
   }
 
   const lista = tramos(texto);
-  const tomas = [];
   const escenas = [];
+  // Bloques de narración seguida. Un bloque es lo que se reparte en tomas.
+  const bloques = [];
   let escenaActual = 0;
-  let acumulado = null;
-
-  const cerrar = () => {
-    if (!acumulado) return;
-    const t = texto.slice(acumulado.inicio, acumulado.fin);
-    tomas.push({
-      i: tomas.length,
-      escena: acumulado.escena,
-      texto: t,
-      // Quién habla, si esta toma es parte de un testimonio. Cadena vacía si no.
-      // Lo lee el director para poner el plano de quien declara, y de ahí sale la
-      // resolución contra la biblioteca por arquetipo.
-      testimonio: acumulado.testimonio || '',
-      // Estimación, solo para dimensionar. La real la mide el audio (§4.5).
-      segundos: Math.max(1.2, +(t.length / c.caracteresPorSegundo).toFixed(2)),
-      inicioEnGuion: acumulado.inicio,
-      finEnGuion: acumulado.fin,
-      plano: null,
-      audio: null,
-      imagen: null,
-      video: null,
-      reusa: null,
-      // §8.2: cada toma sabe de qué tipo es su imagen.
-      tipoImagen: 'generada',
-      // §8.1: cada toma conserva la referencia a la ficha que la respalda.
-      fichas: [],
-    });
-    acumulado = null;
-  };
+  let bloque = null;
 
   // Quién está hablando ahora mismo. Vale hasta la siguiente frontera dura —una
   // línea en blanco o un cambio de escena—, no solo para la primera toma: un
@@ -227,26 +283,31 @@ export function segmentar(guion, config = {}) {
 
   // SALTOS DE LÍNEA SEGUIDOS DESDE EL ÚLTIMO TEXTO NARRADO.
   //
-  // ─────────────────────────────────────────────────────────────────────────────
-  // La línea en blanco lleva desde el principio documentada como frontera dura
-  // —«Separa con una línea en blanco los bloques que deben ir en tomas distintas.
-  // Esa línea en blanco es una PAUSA»— y NO LO ERA. Tres párrafos separados por
-  // líneas en blanco salían en UNA sola toma.
+  // Dos saltos seguidos son una línea en blanco. Ya no cierra la toma —ver la
+  // cabecera de `segmentar`— pero sí cierra el TESTIMONIO: lo que va después de la
+  // línea en blanco lo dice otra vez el narrador, no el testigo. Y al cambiar el
+  // hablante cambia el bloque, así que la frontera del testimonio sigue entera.
   //
-  // El motivo: se buscaba `\n\s*\n` DENTRO de un tramo de hueco, y esos dos saltos
-  // nunca caen en el mismo tramo. El salto que cierra el párrafo es la cola de la
-  // línea anterior; la línea en blanco es otro tramo distinto. Cada uno traía un
-  // salto y la expresión no encajaba en ninguno.
-  //
-  // Así que el guion podía pedir la pausa donde quisiera y el segmentador la
-  // ignoraba siempre. Se contaban los saltos de todos los huecos SEGUIDOS, que es
-  // lo que de verdad significa «hay una línea en blanco de por medio».
-  // ─────────────────────────────────────────────────────────────────────────────
+  // Se cuentan los saltos de todos los huecos SEGUIDOS, no dentro de uno: el salto
+  // que cierra el párrafo es la cola de la línea anterior y la línea en blanco es
+  // otro tramo distinto, así que `\n\s*\n` no encaja nunca en un solo tramo.
   let saltos = 0;
+
+  // Abre el bloque al que pertenece la frase que viene, o devuelve el de ahora si
+  // sigue siendo el mismo. Escena y hablante forman su identidad.
+  const enBloque = () => {
+    if (!bloque || bloque.escena !== escenaActual || bloque.testimonio !== hablando) {
+      bloque = { escena: escenaActual, testimonio: hablando, frases: [] };
+      bloques.push(bloque);
+    }
+    return bloque;
+  };
 
   for (const tr of lista) {
     if (tr.clase === 'encabezado') {
-      cerrar();
+      // Frontera dura: el título de escena no se narra. Un bloque que la cruzara se
+      // llevaría el «## El hallazgo» dentro del texto de la toma.
+      bloque = null;
       hablando = '';
       saltos = 0;
       escenaActual = escenas.length;
@@ -260,21 +321,17 @@ export function segmentar(guion, config = {}) {
 
     if (tr.clase === 'testimonio') {
       // Frontera dura: lo de antes era del narrador y lo de después es de quien
-      // declara. Juntarlos en una toma pondría dos planos distintos en una.
-      cerrar();
+      // declara. Juntarlos en una toma pondría dos planos distintos en una, y la
+      // línea «> Marcos Elizalde» acabaría narrada en voz alta.
+      bloque = null;
       hablando = texto.slice(tr.inicio, tr.fin).replace(/^\s*>\s*/, '').trim();
       saltos = 0;
       continue;
     }
 
     if (tr.clase === 'hueco') {
-      // Dos saltos SEGUIDOS son una línea en blanco, y una línea en blanco cierra
-      // la toma en curso. Ver la cabecera de `saltos`.
       saltos += (texto.slice(tr.inicio, tr.fin).match(/\n/g) || []).length;
-      if (saltos >= 2) {
-        cerrar();
-        hablando = '';
-      }
+      if (saltos >= 2) hablando = '';
       continue;
     }
 
@@ -286,32 +343,109 @@ export function segmentar(guion, config = {}) {
     // Texto narrado: la cuenta de saltos vuelve a cero. Un salto solo —el que
     // parte una frase larga en dos líneas— no separa nada.
     saltos = 0;
-
-    const frase = texto.slice(tr.inicio, tr.fin);
-    const segFrase = frase.length / c.caracteresPorSegundo;
-
-    if (acumulado && acumulado.escena === escenaActual && acumulado.testimonio === hablando) {
-      const segActual = (acumulado.fin - acumulado.inicio) / c.caracteresPorSegundo;
-      // Se añade mientras no pase del máximo Y mientras no nos alejemos del
-      // objetivo más de lo que ya estamos.
-      const cabe =
-        segActual + segFrase <= c.segundosMaximo &&
-        Math.abs(segActual + segFrase - c.segundosObjetivo) <= Math.abs(segActual - c.segundosObjetivo);
-      if (cabe) {
-        // El acumulado se extiende hasta el final de esta frase. Todo lo que hay en
-        // medio (el espacio entre frases) queda dentro, que es lo que hace que la
-        // concatenación reproduzca el guion.
-        acumulado.fin = tr.fin;
-        continue;
-      }
-      cerrar();
-    }
-
-    acumulado = { inicio: tr.inicio, fin: tr.fin, escena: escenaActual, testimonio: hablando };
+    enBloque().frases.push(tr);
   }
-  cerrar();
+
+  const tomas = [];
+  for (const b of bloques) {
+    if (!b.frases.length) continue;
+    for (const parte of repartirEnTomas(b.frases, c)) {
+      const inicio = parte[0].inicio;
+      const fin = parte[parte.length - 1].fin;
+      // Todo lo que hay entre la primera y la última frase —el espacio entre
+      // frases, y ahora también la línea en blanco— queda dentro de la toma. Es lo
+      // que hace que la concatenación reproduzca el guion, y de paso conserva la
+      // pausa que el guion pidió.
+      const t = texto.slice(inicio, fin);
+      tomas.push({
+        i: tomas.length,
+        escena: b.escena,
+        texto: t,
+        // Quién habla, si esta toma es parte de un testimonio. Cadena vacía si no.
+        // Lo lee el director para poner el plano de quien declara, y de ahí sale la
+        // resolución contra la biblioteca por arquetipo.
+        testimonio: b.testimonio || '',
+        // Estimación, solo para dimensionar. La real la mide el audio (§4.5).
+        segundos: Math.max(1.2, +(t.length / c.caracteresPorSegundo).toFixed(2)),
+        inicioEnGuion: inicio,
+        finEnGuion: fin,
+        plano: null,
+        audio: null,
+        imagen: null,
+        video: null,
+        reusa: null,
+        // §8.2: cada toma sabe de qué tipo es su imagen.
+        tipoImagen: 'generada',
+        // §8.1: cada toma conserva la referencia a la ficha que la respalda.
+        fichas: [],
+      });
+    }
+  }
 
   return { tomas, escenas, tramos: lista };
+}
+
+/**
+ * Las tomas que se salen de la regla de los ocho a dieciocho segundos SIN excusa.
+ *
+ * Hay dos excusas legítimas, y solo dos. Las dos dicen lo mismo: que no existe un
+ * reparto mejor, no que el reparto no lo haya encontrado.
+ *   - Bajar del suelo cuando el bloque entero dura menos que el suelo. No hay
+ *     narración con la que llenar la toma, y alargarla exigiría cruzar una frontera
+ *     dura y narrar en voz alta un título de escena.
+ *   - Pasar del techo cuando la toma no se puede partir en dos trozos que lleguen
+ *     los dos al suelo. Partirla dejaría una toma corta, y una toma corta es peor.
+ * Cualquier otra cosa es un fallo del reparto, y sale aquí.
+ */
+export function tomasFueraDeRegla(resultado, config = {}) {
+  const c = { ...PREDETERMINADO, ...config };
+  const tomas = resultado?.tomas || [];
+  const narracion = (resultado?.tramos || []).filter((t) => t.clase === 'narracion');
+  const fuera = [];
+  // Un bloque son las tomas seguidas que comparten escena y hablante.
+  const bloqueDe = new Map();
+  let clave = null;
+  let n = -1;
+  for (const t of tomas) {
+    const suya = `${t.escena} ${t.testimonio || ''}`;
+    if (suya !== clave) {
+      clave = suya;
+      n++;
+    }
+    bloqueDe.set(t.i, n);
+  }
+  const duraBloque = new Map();
+  for (const t of tomas) {
+    const b = bloqueDe.get(t.i);
+    duraBloque.set(b, (duraBloque.get(b) || 0) + t.segundos);
+  }
+
+  // ¿Se puede partir esta toma dejando los DOS trozos por encima del suelo? Se mira
+  // sobre las frases de verdad —los tramos de narración que caen dentro de la
+  // toma—, porque un corte solo puede ir donde acaba una frase.
+  const partible = (t) => {
+    const dentro = narracion.filter((f) => f.inicio >= t.inicioEnGuion && f.fin <= t.finEnGuion);
+    for (let k = 1; k < dentro.length; k++) {
+      const antes = segundosEntre(dentro[0], dentro[k - 1], c);
+      const despues = segundosEntre(dentro[k], dentro[dentro.length - 1], c);
+      if (antes >= c.segundosMinimo && despues >= c.segundosMinimo) return true;
+    }
+    return false;
+  };
+
+  for (const t of tomas) {
+    if (t.segundos < c.segundosMinimo && duraBloque.get(bloqueDe.get(t.i)) >= c.segundosMinimo) {
+      fuera.push({ i: t.i, segundos: t.segundos, porque: 'por debajo del suelo teniendo bloque de sobra' });
+    }
+    if (t.segundos > c.segundosMaximo && partible(t)) {
+      fuera.push({
+        i: t.i,
+        segundos: t.segundos,
+        porque: 'por encima del techo pudiéndose partir en dos que llegan al suelo',
+      });
+    }
+  }
+  return fuera;
 }
 
 /**

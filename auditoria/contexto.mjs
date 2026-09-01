@@ -257,6 +257,8 @@ async function funcionesPuras() {
     admiteTamanoImagen: mod.admiteTamanoImagen,
     segmentar: seg.segmentar,
     verificarCobertura: seg.verificarCobertura,
+    tomasFueraDeRegla: seg.tomasFueraDeRegla,
+    SEGMENTACION: seg.PREDETERMINADO,
     tomaDelFotograma: cla.tomaDelFotograma,
     claveFotograma: cla.claveFotograma,
     claveClip: cla.claveClip,

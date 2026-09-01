@@ -320,10 +320,17 @@ export function normalizar(cruda) {
     [c.formato.ancho, c.formato.alto] = [c.formato.alto, c.formato.ancho];
   }
 
-  c.segmentacion.segundosObjetivo = numero(c.segmentacion.segundosObjetivo, 3, 30, 11);
+  // El suelo de la toma no se negocia por debajo de ocho segundos: una imagen se
+  // paga entera aunque se vea dos segundos (ver la cabecera de comun/segmentar).
+  // Un proyecto viejo que traiga tres segundos de objetivo sube solo al llegar.
+  c.segmentacion.segundosMinimo = numero(c.segmentacion.segundosMinimo, 8, 20, 8);
+  c.segmentacion.segundosObjetivo = Math.max(
+    c.segmentacion.segundosMinimo,
+    numero(c.segmentacion.segundosObjetivo, 8, 30, 13),
+  );
   c.segmentacion.segundosMaximo = Math.max(
     c.segmentacion.segundosObjetivo,
-    numero(c.segmentacion.segundosMaximo, 4, 40, 16),
+    numero(c.segmentacion.segundosMaximo, 8, 40, 18),
   );
   c.segmentacion.caracteresPorSegundo = numero(c.segmentacion.caracteresPorSegundo, 8, 25, 14.5);
 

@@ -373,26 +373,31 @@ export const invariantes = [
   },
 
   {
-    nombre: 'la-linea-en-blanco-y-el-testimonio-parten-la-toma',
-    dice: 'Dos fronteras duras del texto plano, y una llevaba rota desde el principio. La línea en blanco está documentada como PAUSA —«úsala después de un dato duro, para dejarlo caer»— y tres párrafos separados por líneas en blanco salían en UNA sola toma: se buscaba «\\n\\s*\\n» dentro de un tramo de hueco y esos dos saltos nunca caen en el mismo tramo. Así que el guion podía pedir la pausa donde quisiera y el segmentador la ignoraba siempre. La otra es la línea «> », que declara quién habla y NO se narra: si se narrara, el documental leería en voz alta «Marcos Elizalde, capataz de la cuadrilla» como si fuera una frase del guion.',
+    nombre: 'el-encabezado-y-el-testimonio-parten-la-toma',
+    dice: 'Las dos fronteras duras del texto plano son el encabezado «## » y la línea «> », y las dos existen porque su texto NO SE NARRA: una toma que cruzara cualquiera de ellas leería en voz alta «El hallazgo» o «Marcos Elizalde, capataz de la cuadrilla» como si fueran frases del guion. La línea «> » además marca las tomas que la siguen —un testimonio de tres frases sale en dos tomas y las dos son del mismo testigo— y deja de valer en la línea en blanco: lo de después lo dice otra vez el narrador.',
     comprobar(ctx) {
       const { segmentar, verificarCobertura } = ctx.fn;
       const fallos = [];
 
-      // 1 · La línea en blanco parte, y el salto simple no.
-      const parrafos = segmentar('Frase corta una.\n\nFrase corta dos.\n\nFrase corta tres.');
-      if (parrafos.tomas.length !== 3) {
-        fallos.push(
-          `Tres párrafos separados por líneas en blanco salen en ${parrafos.tomas.length} toma(s): ` +
-            'la pausa que pide el guion se pierde.',
-        );
-      }
+      // 1 · El salto de línea suelto no parte nada.
       const seguido = segmentar('Una frase que sigue\nen la línea de abajo, sin línea en blanco.');
       if (seguido.tomas.length !== 1) {
         fallos.push(`Un salto de línea suelto parte la toma en ${seguido.tomas.length}: partiría cualquier frase larga.`);
       }
 
-      // 2 · El testimonio: la línea no se narra, y marca las tomas que la siguen.
+      // 2 · El encabezado parte, aunque las dos escenas juntas cupieran de sobra en
+      // una sola toma. Si no partiera, el título iría dentro del texto narrado.
+      const escenas = segmentar('## El hallazgo\n\nFrase corta una.\n\n## La excavación\n\nFrase corta dos.');
+      if (escenas.tomas.length !== 2) {
+        fallos.push(
+          `Dos escenas de una frase salen en ${escenas.tomas.length} toma(s): el encabezado dejó de ser frontera.`,
+        );
+      }
+      if (escenas.tomas.some((t) => /##|El hallazgo|La excavación/.test(t.texto))) {
+        fallos.push('El título de escena se narra: el documental leería en voz alta el encabezado.');
+      }
+
+      // 3 · El testimonio: la línea no se narra, y marca las tomas que la siguen.
       const guion =
         '## El hallazgo\n\nLa denuncia entró a las nueve y diez.\n\n' +
         '> Marcos Elizalde, capataz de la cuadrilla\n' +
@@ -425,9 +430,9 @@ export const invariantes = [
       }
       return fallos;
     },
-    // Se rompe como estaba: ni la línea en blanco separaba —los dos saltos se
-    // buscaban dentro de un solo tramo de hueco, que es donde nunca están— ni la
-    // línea «> » significaba nada.
+    // Se rompe quitando las dos fronteras: las tomas seguidas de una misma escena se
+    // funden aunque entre ellas haya un encabezado o una línea de testimonio, y la
+    // marca de quién habla desaparece.
     //
     // VA POR EL CONTEXTO, y esta invariante nació ciega por hacerlo al revés: la
     // comprobación EJECUTA `segmentar`, así que un sabotaje sobre el texto fuente
@@ -439,13 +444,110 @@ export const invariantes = [
         const tomas = [];
         for (const t of r.tomas) {
           const previa = tomas[tomas.length - 1];
-          const hueco = previa ? texto.slice(previa.finEnGuion, t.inicioEnGuion) : 'x';
-          if (previa && !hueco.trim()) {
+          if (previa) {
             previa.finEnGuion = t.finEnGuion;
             previa.texto = texto.slice(previa.inicioEnGuion, t.finEnGuion);
             continue;
           }
           tomas.push({ ...t, testimonio: '' });
+        }
+        return { ...r, tomas: tomas.map((t, i) => ({ ...t, i })) };
+      }),
+  },
+
+  {
+    nombre: 'ninguna-toma-baja-de-ocho-segundos-teniendo-guion',
+    dice: 'La regla de los ocho a dieciocho segundos. Una toma es una imagen, y casi siempre también un clip: las dos se pagan POR UNIDAD, no por segundo, así que una toma de dos segundos cuesta lo mismo que una de dieciocho y aprovecha nueve veces menos. Salían a montones —la línea en blanco partía la toma, y un párrafo de una frase corta valía una imagen entera para verse dos segundos—, y un episodio de treinta minutos pedía doscientas tomas donde caben la mitad. Ahora el guion se parte primero en bloques y cada bloque se reparte en un número de tomas decidido ANTES de repartir: así no queda cola, que es de donde salían los dos segundos.',
+    comprobar(ctx) {
+      const { segmentar, verificarCobertura, tomasFueraDeRegla, SEGMENTACION } = ctx.fn;
+      const fallos = [];
+
+      // Un guion con lo que de verdad trae un guion: párrafos largos, párrafos de
+      // una sola frase corta, un testimonio y dos escenas.
+      const guion =
+        '## El aviso\n\n' +
+        'La llamada entró a las nueve y diez de la mañana. Una voz de hombre, tranquila, ' +
+        'casi administrativa. Dijo que había encontrado algo en el terreno de atrás.\n\n' +
+        'No dio su nombre.\n\n' +
+        '> Marcos Elizalde, capataz de la cuadrilla\n' +
+        'No toqué nada. Metí la mano en el hueco del roble y no había madera. Había tela. ' +
+        'Eso fue todo lo que dije por teléfono, y colgué.\n\n' +
+        '## La primera excavación\n\n' +
+        'Los peritos llegaron al día siguiente, con una furgoneta blanca y dos palas. El ' +
+        'terreno estaba blando por la lluvia de la semana anterior, y eso, dijeron después, ' +
+        'fue lo que salvó las pruebas. Un suelo seco habría triturado el tejido.\n\n' +
+        'A los cuarenta centímetros apareció el primer botón.\n\n' +
+        'Era de nácar. Cosido con hilo azul.\n\n' +
+        'El informe lo describe en dos líneas y no vuelve a mencionarlo en cuarenta páginas. ' +
+        'Esa omisión es lo primero que llama la atención de cualquiera que lea el expediente ' +
+        'hoy, porque el botón es la única pieza del caso que se puede fechar con exactitud. ' +
+        'Los peritos lo sabían. La fecha estaba impresa en el reverso, como en toda la ' +
+        'producción de aquella fábrica entre 1972 y 1978.\n\n' +
+        'Nadie la anotó.';
+
+      const r = segmentar(guion);
+      const c = verificarCobertura(guion, r);
+      if (!c.ok) fallos.push(`El reparto en tomas rompe la cobertura: ${c.detalle}`);
+
+      // 1 · Ninguna toma se sale de la regla sin excusa. Las excusas son dos y están
+      // en `tomasFueraDeRegla`: un bloque entero más corto que el suelo, y una frase
+      // sola más larga que el techo. Nada más.
+      for (const f of tomasFueraDeRegla(r)) {
+        fallos.push(`La toma ${f.i} dura ${f.segundos}s: ${f.porque}.`);
+      }
+
+      // 2 · Y en concreto: los párrafos de una frase corta ya no son tomas sueltas.
+      // «No dio su nombre» son 1,2 segundos y le cabe una imagen entera.
+      const suelta = r.tomas.find((t) => t.texto.trim() === 'No dio su nombre.');
+      if (suelta) {
+        fallos.push('«No dio su nombre.» sale en su propia toma: una imagen pagada para verse 1,2 segundos.');
+      }
+
+      // 3 · El suelo manda sobre el techo, pero el techo sigue existiendo: un bloque
+      // largo no puede salir en una sola toma eterna.
+      const largas = r.tomas.filter((t) => t.segundos > SEGMENTACION.segundosMaximo);
+      if (largas.length) {
+        fallos.push(`${largas.length} toma(s) pasan del techo de ${SEGMENTACION.segundosMaximo}s en un guion que se puede repartir.`);
+      }
+
+      // 4 · Y el reparto AHORRA: menos tomas son menos imágenes y menos clips, que es
+      // la razón entera de la regla. Este guion no puede pedir más de ocho.
+      if (r.tomas.length > 8) {
+        fallos.push(`Setenta y ocho segundos de guion salen en ${r.tomas.length} tomas: el reparto no está ahorrando nada.`);
+      }
+      return fallos;
+    },
+    // Se rompe volviendo a lo de antes: la línea en blanco parte la toma. Es
+    // exactamente el código que producía las tomas de un segundo.
+    //
+    // VA POR EL CONTEXTO: la comprobación EJECUTA `segmentar`.
+    romper: (ctx) =>
+      conFuncion(ctx, 'segmentar', (guion, config) => {
+        const r = ctx.fn.segmentar(guion, config);
+        const texto = String(guion ?? '');
+        const tomas = [];
+        for (const t of r.tomas) {
+          let desde = t.inicioEnGuion;
+          const partes = [];
+          const re = /\n[ \t]*\n/g;
+          let m;
+          while ((m = re.exec(t.texto)) !== null) {
+            const corte = t.inicioEnGuion + m.index;
+            partes.push([desde, corte]);
+            desde = t.inicioEnGuion + m.index + m[0].length;
+          }
+          partes.push([desde, t.finEnGuion]);
+          for (const [a, b] of partes) {
+            const trozo = texto.slice(a, b);
+            if (!trozo.trim()) continue;
+            tomas.push({
+              ...t,
+              texto: trozo,
+              inicioEnGuion: a,
+              finEnGuion: b,
+              segundos: Math.max(1.2, +(trozo.length / 14.5).toFixed(2)),
+            });
+          }
         }
         return { ...r, tomas: tomas.map((t, i) => ({ ...t, i })) };
       }),

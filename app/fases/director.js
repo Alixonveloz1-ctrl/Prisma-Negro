@@ -279,7 +279,7 @@ export async function dirigirPieza({ caso, fichas, minutos = 10, genero = null, 
         `mood, instruments y avoid ESCRITOS EN INGLÉS: el generador de música solo ` +
         `entiende inglés y rechaza la petición si ve español. Vocabulario musical ` +
         `concreto: «low sustained cello», «tape hiss», «no percussion».\n` +
-        `- ritmo: segundosPorToma (8-14) y proporcionMovimiento (0-0.3).\n` +
+        `- ritmo: segundosPorToma (10-18) y proporcionMovimiento (0-0.3).\n` +
         `- abierto: qué deja abierto este episodio A PROPÓSITO. Un hilo suelto que ` +
         `nadie explicó, un detalle que nunca cuadró. UNO O DOS, no cuatro. NO metas ` +
         `aquí la revelación ni la pista falsa: esas se cuentan enteras. Si no hay ` +
@@ -305,8 +305,12 @@ export async function dirigirPieza({ caso, fichas, minutos = 10, genero = null, 
     // El ritmo lo propone el director pero se acota aquí: §8.5 dice que en documental
     // los segundos por toma suben y la proporción de movimiento baja, y eso último
     // es la palanca del presupuesto (§4.7). El director no decide cuánto se gasta.
+    //
+    // El suelo son DIEZ segundos, no siete. Una toma es una imagen pagada entera:
+    // pedir tomas de siete segundos es pedir el doble de imágenes para el mismo
+    // episodio. El director elige entre lento y ágil, no entre caro y barato.
     ritmo: {
-      segundosPorToma: Math.min(16, Math.max(7, Number(t.ritmo?.segundosPorToma) || 11)),
+      segundosPorToma: Math.min(18, Math.max(10, Number(t.ritmo?.segundosPorToma) || 13)),
       proporcionMovimiento: Math.min(0.3, Math.max(0, Number(t.ritmo?.proporcionMovimiento) || 0.15)),
     },
     // Y LOS TRATAMIENTOS QUE YA ESTABAN GUARDADOS NO SE PIERDEN: los de antes
