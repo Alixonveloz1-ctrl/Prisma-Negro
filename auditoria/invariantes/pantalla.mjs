@@ -2013,4 +2013,84 @@ export const invariantes = [
         t.replace("  document.body.classList.toggle('formato-vertical', !!P.config.formato.vertical);\n", ''),
       ),
   },
+
+  {
+    nombre: 'se-ve-que-esta-hecho-que-falta-y-que-no-se-paga',
+    dice: '«No puedo ir mirando qué está hecho, qué falta, qué se puede reutilizar. Todo es muy genérico, no hay control de nada.» Y faltaba la cifra que más importa: CUÁNTO NO SE PAGA. Las tomas que heredan del archivo o que repiten un plano de este mismo caso desaparecen de la cuenta —`planificar` las excluye, y hace bien: no hay que generarlas—, así que de 204 tomas la pantalla ponía «60» sin decir si las otras 144 estaban hechas, sobraban o se habían perdido. Y sin dirección de arte el total salía CERO y la pastilla se quedaba EN BLANCO: un botón sin estado no dice «todavía no», dice «aquí no pasa nada».',
+    async comprobar(ctx) {
+      const { humoDeLaPantalla, proyectoYaEmpezado } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+      const fallos = [];
+
+      const conTomas = (dirigido) => {
+        const p = proyectoYaEmpezado();
+        p.piezas[0].tomas = Array.from({ length: 12 }, (_, i) => ({
+          i,
+          escena: i < 6 ? 0 : 1,
+          texto: `t${i}`,
+          segundos: 8,
+          audio: 'ok',
+          plano: dirigido ? { encuadre: 'x', lugar: 'y', luz: 'z', sujetos: [], descripcion: 'd' } : null,
+          heredado: dirigido && i < 4 ? `biblioteca/t00${i}/img` : null,
+          reusa: dirigido && i === 5 ? 4 : null,
+          imagen: dirigido && i >= 4 && i < 7 ? 'ok' : null,
+          movimiento: i < 6,
+          heredadoVid: dirigido && i < 3 ? `biblioteca/t00${i}/vid` : null,
+        }));
+        return { parche, proyecto: p };
+      };
+
+      const sin = await humoDeLaPantalla(conTomas(false));
+      const con = await humoDeLaPantalla(conTomas(true));
+      fallos.push(...sin.fallos, ...con.fallos);
+      const texto = (r) => r.textoDentro('desglose').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+
+      // ── 1 · LAS CUATRO FASES, CADA UNA CON SU LÍNEA ───────────────────────
+      for (const fase of ['Narración', 'Imágenes', 'Clips', 'Música']) {
+        if (!texto(con).includes(fase)) fallos.push(`El desglose no dice nada de ${fase}.`);
+      }
+
+      // ── 2 · UN CERO DICE POR QUÉ ──────────────────────────────────────────
+      // Sin dirección de arte no hay imágenes que planear, y eso NO puede salir
+      // como un hueco: es la diferencia entre «todavía no» y «aquí no pasa nada».
+      if (!/falta la dirección de arte/.test(texto(sin))) {
+        fallos.push('Sin dirección de arte, las imágenes no dicen por qué no hay nada que generar.');
+      }
+      if (/Imágenes\s*$/.test(texto(sin).split('Clips')[0].trim())) {
+        fallos.push('La fila de Imágenes se queda vacía en vez de decir qué falta.');
+      }
+
+      // ── 3 · Y SE DICE LO QUE NO SE PAGA ───────────────────────────────────
+      // Cuatro heredadas y una que repite plano: cinco imágenes que no se generan
+      // y que sin esto simplemente no aparecían en ninguna parte.
+      if (!/\+5 sin pagar/.test(texto(con))) {
+        fallos.push(`No se dice cuántas imágenes salen gratis del archivo: «${texto(con).slice(0, 120)}»`);
+      }
+      if (!/del archivo/.test(texto(con)) || !/repiten plano/.test(texto(con))) {
+        fallos.push('No se distingue lo que viene del archivo de lo que repite un plano del propio caso.');
+      }
+      if (!/\+4 sin pagar/.test(texto(con))) {
+        fallos.push('Los clips heredados no se cuentan: son lo más caro que se ahorra.');
+      }
+      // Y LO GRATIS NO CUENTA COMO PENDIENTE. Si contara, el número diría que hay
+      // que pagar por algo que ya está.
+      if (!/Imágenes 2\/7/.test(texto(con))) {
+        fallos.push(`Lo heredado se cuenta como pendiente: pediría pagar por lo que ya está. «${texto(con).slice(0, 90)}»`);
+      }
+
+      // ── 4 · Y LA PASTILLA DEL BOTÓN TAMPOCO SE QUEDA MUDA ─────────────────
+      const main = fuente(ctx, 'app/main.js');
+      if (!/pieza\(\)\.tomas\.length \? '—' : ''/.test(main)) {
+        fallos.push('Con tomas y sin nada que planear, la pastilla del botón se queda en blanco.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: sin desglose, solo las pastillas con su número suelto.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace('function pintarCuentasFase() {\n  pintarDesglose();', 'function pintarCuentasFase() {'),
+      ),
+  },
 ];

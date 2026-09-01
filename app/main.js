@@ -688,6 +688,85 @@ function cuentasDeFases() {
 }
 
 /**
+ * DE DÓNDE SALE CADA NÚMERO, Y QUÉ NO SE PAGA.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «No puedo ir mirando qué está hecho, qué falta, qué se puede reutilizar. Todo
+ *  es muy genérico, no hay control de nada.»
+ *
+ * Tenía razón, y una de las cifras que faltaba era la más importante: CUÁNTO NO
+ * SE PAGA. Las tomas que heredan del archivo o que repiten un plano de este mismo
+ * caso desaparecían de la cuenta —`planificar` las excluye, y hace bien: no hay
+ * que generarlas— así que de 204 tomas la pantalla decía «60» y no había forma de
+ * saber si las otras 144 estaban hechas, sobraban, o se habían perdido.
+ *
+ * Y peor: sin dirección de arte, `planificar` no puede planear nada y el total
+ * salía CERO, con lo que la pastilla se quedaba VACÍA. Un botón sin estado no
+ * dice «todavía no», dice «aquí no pasa nada».
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+function desgloseDeFases() {
+  const t = pieza().tomas;
+  const escenas = pieza().escenas;
+  const dirigidas = t.filter((x) => x.plano).length;
+  const [voz, imagenes, clips, musica] = cuentasDeFases();
+
+  const heredadasImg = t.filter((x) => x.plano && x.heredado).length;
+  const repitenImg = t.filter((x) => x.plano && !x.heredado && x.reusa !== null && x.reusa !== undefined).length;
+  const conClip = t.filter((x) => x.movimiento).length;
+  const heredadosVid = t.filter((x) => x.movimiento && x.heredadoVid).length;
+  const repitenVid = t.filter((x) => x.movimiento && !x.heredadoVid && x.reusa !== null && x.reusa !== undefined).length;
+
+  // `porque` explica un total de cero: sin él, «0/0» y «aún no se puede» se ven
+  // exactamente igual.
+  return [
+    { que: 'Narración', hechas: voz[2], total: voz[3], gratis: 0, porque: t.length ? '' : 'parte el guion en tomas primero' },
+    {
+      que: 'Imágenes',
+      hechas: imagenes[2],
+      total: imagenes[3],
+      gratis: heredadasImg + repitenImg,
+      detalle: [
+        heredadasImg ? `${heredadasImg} del archivo` : '',
+        repitenImg ? `${repitenImg} repiten plano` : '',
+      ].filter(Boolean).join(' · '),
+      porque: dirigidas ? '' : 'falta la dirección de arte',
+    },
+    {
+      que: 'Clips',
+      hechas: clips[2],
+      total: clips[3],
+      gratis: heredadosVid + repitenVid,
+      detalle: [
+        heredadosVid ? `${heredadosVid} del archivo` : '',
+        repitenVid ? `${repitenVid} repiten plano` : '',
+      ].filter(Boolean).join(' · '),
+      porque: !dirigidas ? 'falta la dirección de arte' : conClip ? '' : 'ninguna toma lleva clip',
+    },
+    { que: 'Música', hechas: musica[2], total: musica[3], gratis: 0, porque: escenas.length ? '' : 'sin escenas' },
+  ];
+}
+
+function pintarDesglose() {
+  const caja = $('desglose');
+  if (!caja) return;
+  caja.className = 'desglose';
+  caja.innerHTML = desgloseDeFases()
+    .map((f) => {
+      const listo = f.total > 0 && f.hechas === f.total;
+      const cifra = f.total
+        ? `<span class="n ${listo ? 'ok' : f.hechas ? 'falta' : ''}">${f.hechas}/${f.total}</span>` +
+          (listo ? '' : ` <span class="gratis">faltan ${f.total - f.hechas}</span>`)
+        : `<span class="porque">${escapar(f.porque || 'nada que generar')}</span>`;
+      const gratis = f.gratis
+        ? `<span class="gratis">+${f.gratis} sin pagar${f.detalle ? ` (${escapar(f.detalle)})` : ''}</span>`
+        : '';
+      return `<div class="f"><b>${f.que}</b>${cifra}${gratis}</div>`;
+    })
+    .join('');
+}
+
+/**
  * El estado de cada fase, EN SU PROPIO BOTÓN.
  *
  * «No sé qué está generado y qué no» — y era verdad: el estado existía pero solo
@@ -696,10 +775,13 @@ function cuentasDeFases() {
  * de gastar, sin apretar nada.
  */
 function pintarCuentasFase() {
+  pintarDesglose();
   for (const [id, , hechas, total] of cuentasDeFases()) {
     const el = $(id);
     if (!el) continue;
-    el.textContent = total ? `${hechas}/${total}` : '';
+    // Un total de cero NO se deja en blanco: un botón sin estado no dice
+    // «todavía no», dice «aquí no pasa nada». Ver `desgloseDeFases`.
+    el.textContent = total ? `${hechas}/${total}` : pieza().tomas.length ? '—' : '';
     el.classList.toggle('lista', total > 0 && hechas === total);
     el.classList.toggle('a-medias', total > 0 && hechas > 0 && hechas < total);
   }
