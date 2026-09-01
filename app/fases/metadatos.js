@@ -226,6 +226,29 @@ export const DECLARACION_DE_FICCION =
   'están generadas y las personas que se ven son intérpretes de una dramatización.';
 
 /**
+ * LA DECLARACIÓN QUE SE NARRA, y va antes que nada.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * La de arriba va en la descripción, y eso es lo que se creía suficiente. El canal
+ * de referencia hace algo más, y es lo PRIMERO que se oye en el vídeo, antes
+ * incluso de «Imagina esta escena»:
+ *
+ *   «Todo el contenido de este episodio fue producido y reconstruido por
+ *    Crímenes Imperfectos, Expedientes X.»
+ *
+ * Una descripción se despliega; una línea narrada la oye todo el mundo, incluido
+ * quien llega por una recomendación y no lee nada. Es la protección más barata que
+ * existe y dura nueve segundos.
+ *
+ * Va compuesta aquí, en el código, por el mismo motivo que la otra: una frase
+ * generada puede salir distinta, más suave, o no salir.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export const DECLARACION_NARRADA =
+  'Todo el contenido de este episodio fue producido y reconstruido por Prisma ' +
+  'Negro. El caso, las personas y los lugares son obra de ficción.';
+
+/**
  * ¿Es ficción? SIEMPRE, y la función se queda para que la afirmación tenga un
  * sitio y una invariante que la vigile. El canal no tiene otro modo: si algún día
  * lo tuviera, esto es lo primero que habría que volver a mirar.

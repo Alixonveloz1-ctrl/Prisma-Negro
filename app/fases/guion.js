@@ -19,6 +19,9 @@ import { comoInstruccion } from './director.js';
 // construidas— y componer la lista aquí acabaría con dos formatos distintos y una
 // fase leyendo «fuente: undefined».
 import { comoLista } from './investigacion.js';
+// La declaración se compone en el código, no se le pide al modelo: una frase
+// generada puede salir distinta, más suave, o no salir.
+import { DECLARACION_NARRADA } from './metadatos.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // «No es un noticiero, es un documental, pero tiene que ser entretenido.»
@@ -123,23 +126,28 @@ Cada ficha viene con su ROL entre paréntesis —victima, sospechoso, testigo,
 objeto, lugar, fecha, pistafalsa, revelacion—: eso te dice qué papel juega en el
 caso y en qué bloque toca sacarla. La revelación no se adelanta.
 
-EL GANCHO — solo el primer acto, y son cuarenta segundos
-Empieza EN SEGUNDA PERSONA y dentro de la acción, antes de contextualizar nada.
-«Imagina esta escena. Te han contratado para talar unos robles viejos… retiras
-la madera podrida con las manos.» El espectador hace, no mira.
-Termina EXACTAMENTE en el instante del hallazgo y corta. No expliques todavía
-qué es, ni de qué año, ni dónde. Eso viene después de la cabecera.
+EL GANCHO — solo el primer acto, y son cuarenta segundos. Tiene dos partes.
+LA ACCIÓN. Empieza EN SEGUNDA PERSONA y dentro de ella, antes de contextualizar
+nada. «Imagina esta escena. Te han contratado para talar unos robles viejos…
+retiras la madera podrida con las manos.» El espectador hace, no mira. Aquí no
+va NADA de ficha: ni el nombre de quien hace, ni el sitio por su nombre, ni la
+fecha. Lo que va es lo que se toca, lo que se oye, lo que pesa.
+EL REMATE. Llega al instante del hallazgo y ahí, en una o dos frases, sueltas
+QUÉ es y EN QUÉ AÑO fue, sin nada más: «dentro del árbol hay una persona, un
+hallazgo tan inesperado como real que en 2007 conmocionó a todo un condado».
+El día y el mes no; el sitio por su nombre tampoco. Eso viene después de la
+cabecera. Y cierras anunciando el título del episodio.
 
-Y ESTAS TRES COSAS NO APARECEN EN EL GANCHO. Ninguna. Van después de la
-cabecera, en el acto siguiente:
-  · LA FECHA. Ni el año, ni el día, ni el mes. Nada de «el 12 de octubre de
-    2024»: quien mira no sabe todavía que esto pasó en una fecha concreta.
-  · EL SITIO por su nombre. Nada de «en Port MacLeod». Estás EN un rompeolas,
-    no en un rompeolas que se llama de alguna manera.
+DE LO QUE VA EN EL REMATE, NADA SE ADELANTA A LA ACCIÓN:
   · EL NOMBRE de quien hace. Nada de «Eres Liam MacTiernan». Eres el que está
     ahí, y punto. El nombre llega cuando ya importe quién es.
-Lo que SÍ va: lo que se toca, lo que se oye, lo que pesa, lo que huele. El
-gancho es una acción, no una ficha.
+  · EL SITIO por su nombre. Nada de «en Port MacLeod». Estás EN un rompeolas,
+    no en un rompeolas que se llama de alguna manera. Y tampoco va en el remate:
+    ahí caben «un condado», «una ciudad del norte», no el nombre.
+  · EL DÍA Y EL MES. Nunca, ni en la acción ni en el remate. «El 12 de octubre
+    de 2024» es ficha; «en 2024» es la escala que el remate necesita.
+El año, y solo el año, va en el remate. Antes de eso el gancho es una acción, no
+una ficha.
 
 LOS TESTIMONIOS
 Cada dos o tres minutos entra alguien: quien encontró el cuerpo, el perito, el
@@ -343,7 +351,7 @@ export async function escribirGuion({
     alAvanzar?.(n + 1, actos.length);
   }
 
-  const guion = partes.join('\n\n');
+  const guion = conDeclaracionNarrada(partes.join('\n\n'));
   const salieron = contarPalabras(guion);
 
   // Un guion que no llega ni de lejos a lo pedido no es «un guion corto»: es un
@@ -362,6 +370,35 @@ export async function escribirGuion({
 export const contarPalabras = (t) => (String(t).trim().match(/\S+/g) || []).length;
 
 /**
+ * LA DECLARACIÓN, NARRADA, ANTES QUE NADA.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * El canal de referencia abre así, y es lo primero que se oye —antes incluso de
+ * «Imagina esta escena»—. Aquí la declaración vivía solo en la descripción del
+ * vídeo, que es donde la ve quien la busca; narrada la oye todo el mundo.
+ *
+ * Se pega AQUÍ y no se le pide al modelo, por lo mismo que la de la descripción:
+ * una frase generada puede salir distinta, más suave, o no salir. Y se pega
+ * DENTRO de la primera escena, no antes del primer «## »: fuera crearía una
+ * escena cero implícita, con su música y su dirección propias, para nueve
+ * segundos de aviso legal.
+ *
+ * Idempotente: un guion que ya la trae —porque se reescribió un acto y el resto
+ * venía guardado— no la recibe dos veces.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export function conDeclaracionNarrada(guion) {
+  const t = String(guion || '');
+  if (!t.trim() || t.includes(DECLARACION_NARRADA)) return t;
+
+  const cabecera = t.match(/^##[^\n]*\n/m);
+  if (!cabecera) return `${DECLARACION_NARRADA}\n\n${t.replace(/^\s+/, '')}`;
+
+  const corte = t.indexOf(cabecera[0]) + cabecera[0].length;
+  return `${t.slice(0, corte)}\n${DECLARACION_NARRADA}\n\n${t.slice(corte).replace(/^\s+/, '')}`;
+}
+
+/**
  * QUÉ ADELANTA EL GANCHO QUE NO DEBERÍA.
  *
  * ─────────────────────────────────────────────────────────────────────────────
@@ -375,17 +412,61 @@ export const contarPalabras = (t) => (String(t).trim().match(/\S+/g) || []).leng
  * 2024, en Port MacLeod…»— que es exactamente la ficha que el gancho existe para
  * NO dar.
  *
+ * EL AÑO ES LA EXCEPCIÓN, y se supo leyendo el gancho real del canal:
+ *
+ *   «Imagina esta escena. Has sido contratado por una empresa privada para talar
+ *    varios árboles antiguos… Lo retiras con las manos. Y entonces llega el
+ *    horror. Dentro del árbol hay una persona, un hallazgo tan inesperado como
+ *    real QUE EN 2007 conmocionó a todo un condado.»
+ *
+ * El año va, y el remate lo necesita: es la escala. Lo que no va es el día y el
+ * mes —eso es ficha— ni el sitio por su nombre: «todo un condado», no «el condado
+ * de Mercer». Así que el año se mide POR DÓNDE CAE. En la acción es la ficha que
+ * el gancho existe para no dar; en la última frase es el remate.
+ *
  * Una regla en el encargo es una petición, no una garantía. Esto la mide.
  * ─────────────────────────────────────────────────────────────────────────────
  */
+const MESES = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'setiembre', 'octubre', 'noviembre', 'diciembre',
+];
+
+// En locución los números van con letra, así que la fecha llega escrita.
+const DIAS_CON_LETRA = [
+  'uno', 'primero', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho',
+  'nueve', 'diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciséis',
+  'dieciseis', 'diecisiete', 'dieciocho', 'diecinueve', 'veinte', 'veintiuno',
+  'veintidós', 'veintidos', 'veintitrés', 'veintitres', 'veinticuatro',
+  'veinticinco', 'veintiséis', 'veintiseis', 'veintisiete', 'veintiocho',
+  'veintinueve', 'treinta', 'treinta y uno',
+];
+
 export function loQueAdelantaElGancho(guion, caso = null) {
   const primero = String(guion || '').split(/^## /m).filter((x) => x.trim())[0] || '';
   const texto = primero.split('\n').slice(1).join(' ');
   const salida = [];
 
-  // La fecha: un año de cuatro cifras o un «12 de octubre».
-  const fecha = texto.match(/\b(?:1[5-9]|20)\d{2}\b|\b\d{1,2} de [a-záéíóúñ]+\b/i);
-  if (fecha) salida.push({ que: 'la fecha', dice: fecha[0] });
+  // El día y el mes no van nunca: «el 12 de octubre» es ficha, esté donde esté.
+  //
+  // Anclado al NOMBRE DEL MES, y con los días escritos con letra. Buscar «\d+ de
+  // <palabra>» marcaba «3 de los trabajadores» como si fuera una fecha, y se le
+  // escapaba «el doce de octubre» — que es justo como lo escribe un narrador,
+  // porque en locución los números van con letra.
+  const diaYMes = texto.match(
+    new RegExp(
+      `\\b(?:\\d{1,2}|${DIAS_CON_LETRA.join('|')})\\s+de\\s+(?:${MESES.join('|')})\\b`,
+      'i',
+    ),
+  );
+  if (diaYMes) salida.push({ que: 'la fecha', dice: diaYMes[0] });
+
+  // El año solo vale en el remate. Se mide dónde cae: lo que hay ANTES de la
+  // última frase es la acción, y ahí un año es la ficha que no toca dar todavía.
+  const frases = texto.match(/[^.?!…]+[.?!…]+/g) || [texto];
+  const laAccion = frases.slice(0, -1).join(' ');
+  const anio = laAccion.match(/\b(?:1[5-9]|20)\d{2}\b/);
+  if (anio) salida.push({ que: 'el año, y todavía va dentro de la acción', dice: anio[0] });
 
   // El sitio por su nombre, con los del caso: es lo único que sabe cómo se llama.
   for (const sitio of [caso?.ciudad, caso?.pais].filter(Boolean)) {

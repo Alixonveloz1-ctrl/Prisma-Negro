@@ -168,12 +168,17 @@ fecha o una edad se escriben una vez y no cambian en todo el episodio. Un
 detalle inventado que choca con otro anterior no es color, es lo único que
 destruye la pieza entera.
 
-EL GANCHO — solo el primer acto, y son cuarenta segundos
-Empieza EN SEGUNDA PERSONA y dentro de la acción, antes de contextualizar nada.
-«Imagina esta escena. Te han contratado para talar unos robles viejos… retiras
-la madera podrida con las manos.» El espectador hace, no mira.
-Termina EXACTAMENTE en el instante del hallazgo y corta. No expliques todavía
-qué es, ni de qué año, ni dónde. Eso viene después de la cabecera.
+EL GANCHO — solo el primer acto, y son cuarenta segundos. Tiene dos partes.
+LA ACCIÓN. Empieza EN SEGUNDA PERSONA y dentro de ella, antes de contextualizar
+nada. «Imagina esta escena. Te han contratado para talar unos robles viejos…
+retiras la madera podrida con las manos.» El espectador hace, no mira. Aquí no
+va NADA de ficha: ni el nombre de quien hace, ni el sitio por su nombre, ni la
+fecha. Lo que va es lo que se toca, lo que se oye, lo que pesa.
+EL REMATE. Llega al instante del hallazgo y ahí, en una o dos frases, sueltas
+QUÉ es y EN QUÉ AÑO fue, sin nada más: «dentro del árbol hay una persona, un
+hallazgo tan inesperado como real que en 2007 conmocionó a todo un condado».
+El día y el mes no; el sitio por su nombre tampoco. Eso viene después de la
+cabecera. Y cierras anunciando el título del episodio.
 
 LOS TESTIMONIOS
 Cada dos o tres minutos entra alguien: quien encontró el cuerpo, el perito, el
@@ -381,6 +386,32 @@ añadir por encima; no se puede perder nada.
   comprobaba: tres de cuatro guiones seguidos abrieron con «Eres Liam MacTiernan, y
   el 12 de octubre de 2024, en Port MacLeod…». Ahora se comprueba sobre el guion
   escrito y la pantalla avisa.
+
+- **§3 · CORRECCIÓN, y sale de la referencia.** Este documento decía que el gancho
+  corta en el hallazgo sin explicar «qué es, ni de qué año, ni dónde». El canal no
+  hace eso. Su gancho de *El hombre del árbol*, transcrito entero:
+
+  > Imagina esta escena. Has sido contratado por una empresa privada para talar
+  > varios árboles antiguos que representan un peligro por su estado de deterioro.
+  > Todo parece un trabajo rutinario, hasta que al terminar de cortar uno de los
+  > enormes robles, notas una extraña cavidad en el tronco. Hay un trozo de madera
+  > podrida cubriendo el interior. Lo retiras con las manos. Y entonces llega el
+  > horror. Dentro del árbol hay una persona, un hallazgo tan inesperado como real
+  > **que en 2007** conmocionó a todo un condado. Hoy en nuestro canal de YouTube
+  > Crímenes Imperfectos, y en exclusiva para ustedes, **el hombre del árbol**.
+
+  El gancho tiene dos partes. **La acción** no lleva nada de ficha —ni nombre, ni
+  sitio, ni fecha— y eso el documento lo tenía bien. **El remate** sí: dice qué se
+  encontró, da el año —solo el año, nunca el día y el mes— y cierra anunciando el
+  título. El §3 se corrigió con esto, y la invariante que lo vigila usa el gancho
+  transcrito de arriba como el caso que NO se debe marcar.
+
+- **§3 · La declaración de ficción se narra, y es lo primero que se oye.** Vivía
+  solo en la descripción del vídeo. La referencia la dice en voz alta antes que
+  nada: «Todo el contenido de este episodio fue producido y reconstruido por
+  Crímenes Imperfectos, Expedientes X». Quien llega por una recomendación no
+  despliega ninguna descripción, y nueve segundos narrados son la protección más
+  barata que existe. Se pega en el código, dentro de la primera escena.
 
 - **El caso pasa en cualquier parte del mundo, y el país y la ciudad son
   CORRECTOS.** Lo inventado es el pueblo y el condado. La biblioteca permanente

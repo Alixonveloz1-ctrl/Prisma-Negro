@@ -2912,15 +2912,27 @@ export const invariantes = [
       }
       return fallos;
     },
-    // Se rompe con la deriva de verdad: la línea que prohíbe dar el año y el sitio
-    // en el gancho desaparece del prompt. VA POR EL CONTEXTO porque la comprobación
-    // EJECUTA `sistemaDelGuion`.
+    // Se rompe con la deriva de verdad: una línea del encargo desaparece del
+    // prompt. VA POR EL CONTEXTO porque la comprobación EJECUTA `sistemaDelGuion`.
+    //
+    // Y SE COMPRUEBA QUE EL SABOTAJE MUERDE. Este mismo sabotaje se quedó ciego el
+    // día que se reescribió el bloque del gancho: quitaba una frase que ya no
+    // existía, `replace` no encontraba nada, y la invariante pasaba como es lógico.
+    // `editando` revienta en ese caso desde hace tiempo; `conFuncion` no puede
+    // saberlo, así que lo comprueba quien lo escribe.
     romper: (ctx) =>
-      conFuncion(ctx, 'sistemaDelGuion', () =>
-        ctx.fn
-          .sistemaDelGuion()
-          .replace('No expliques todavía\nqué es, ni de qué año, ni dónde.', ''),
-      ),
+      conFuncion(ctx, 'sistemaDelGuion', () => {
+        const entero = ctx.fn.sistemaDelGuion();
+        const roto = entero.replace('El día y el mes no; el sitio por su nombre tampoco.', '');
+        if (roto === entero) {
+          throw new Error(
+            'El sabotaje de «el-encargo-del-guion-esta-en-el-repositorio-y-manda» ya no ' +
+              'encaja: la frase que quitaba no está en el prompt. Apúntalo a una línea ' +
+              'que sí esté en el §3 del encargo.',
+          );
+        }
+        return roto;
+      }),
   },
 
   {
@@ -4132,8 +4144,55 @@ export const invariantes = [
   },
 
   {
+    nombre: 'la-declaracion-de-ficcion-se-narra-y-va-la-primera',
+    dice: 'La declaración de ficción vivía SOLO en la descripción del vídeo, que es donde la ve quien la busca. El canal de referencia la dice en voz alta y es lo primero que se oye, antes incluso de «Imagina esta escena»: «Todo el contenido de este episodio fue producido y reconstruido por Crímenes Imperfectos, Expedientes X». Un caso inventado presentado como caso real es una mentira, y quien llega por una recomendación no despliega ninguna descripción. Nueve segundos narrados es la protección más barata que existe. Va compuesta en el código y no pedida al modelo, por lo mismo que la otra: una frase generada puede salir distinta, más suave, o no salir.',
+    comprobar(ctx) {
+      const { conDeclaracionNarrada, DECLARACION_NARRADA, segmentar } = ctx.fn;
+      const fallos = [];
+      const gui = fuente(ctx, 'app/fases/guion.js');
+
+      if (!/ficci[oó]n/i.test(DECLARACION_NARRADA)) {
+        fallos.push(`La declaración narrada no dice que es ficción: «${DECLARACION_NARRADA}»`);
+      }
+
+      // 1 · Va DENTRO de la primera escena y por delante de toda la narración.
+      const guion = '## Gancho\nImagina esta escena. Te han contratado para talar robles.\n\n## El hallazgo\nLa denuncia entró a las nueve y diez de la mañana del martes.';
+      const con = conDeclaracionNarrada(guion);
+      if (!con.includes(DECLARACION_NARRADA)) {
+        fallos.push('El guion sale sin la declaración narrada: solo la vería quien despliegue la descripción.');
+      }
+      if (con.indexOf(DECLARACION_NARRADA) > con.indexOf('Imagina esta escena')) {
+        fallos.push('La declaración va detrás del gancho: se oye cuando ya te han metido en la acción.');
+      }
+      // Fuera de la primera escena crearía una escena cero implícita, con su
+      // música y su dirección propias, para nueve segundos de aviso legal.
+      const r = segmentar(con);
+      const suya = r.tomas.find((t) => t.texto.includes(DECLARACION_NARRADA));
+      if (!suya) fallos.push('La declaración no cae en ninguna toma: no se narraría.');
+      else if (suya.escena !== 0) fallos.push(`La declaración abre su propia escena (${suya.escena}).`);
+
+      // 2 · Y no se pone dos veces cuando se reescribe un acto y el resto venía
+      // guardado.
+      if (conDeclaracionNarrada(con) !== con) {
+        fallos.push('Volver a pasar el guion añade la declaración otra vez.');
+      }
+
+      // 3 · La compone el código, no el modelo.
+      if (!/const guion = conDeclaracionNarrada\(/.test(gui)) {
+        fallos.push('El guion terminado no pasa por conDeclaracionNarrada: la declaración depende de que alguien se acuerde.');
+      }
+      if (new RegExp(DECLARACION_NARRADA.slice(0, 40)).test(gui.replace(/export const[\s\S]*?;\n/, ''))) {
+        fallos.push('La declaración se le pide al modelo: puede salir distinta, más suave, o no salir.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: la declaración solo en la descripción.
+    romper: (ctx) => conFuncion(ctx, 'conDeclaracionNarrada', (g) => g),
+  },
+
+  {
     nombre: 'el-gancho-no-adelanta-la-fecha-el-sitio-ni-el-nombre',
-    dice: '«La forma en la que se narra al principio no abre como el archivo que te compartí.» Y la regla llevaba escrita desde el principio, en el propio encargo del guion: «termina exactamente en el instante del hallazgo y corta; no expliques todavía qué es, ni de qué año, ni dónde». Lo que faltaba era que alguien la comprobara. De cuatro guiones seguidos, TRES abrieron con «Eres Liam MacTiernan, y el 12 de octubre de 2024, en Port MacLeod…»: la fecha, el sitio y el nombre del protagonista en la primera frase, que es exactamente la ficha que el gancho existe para no dar. El gancho es una acción —lo que se toca, lo que se oye, lo que pesa—, no una ficha.',
+    dice: '«La forma en la que se narra al principio no abre como el archivo que te compartí.» De cuatro guiones seguidos, TRES abrieron con «Eres Liam MacTiernan, y el 12 de octubre de 2024, en Port MacLeod…»: la fecha, el sitio y el nombre del protagonista en la primera frase, que es exactamente la ficha que el gancho existe para no dar. Y EL AÑO ES LA EXCEPCIÓN, que se supo leyendo el gancho real del canal —«Dentro del árbol hay una persona, un hallazgo tan inesperado como real QUE EN 2007 conmocionó a todo un condado»—: el año va, pero en el remate, porque es la escala que el remate necesita. Lo que no va nunca es el día y el mes, ni el sitio por su nombre, ni el nombre de quien hace. Así que el año se mide POR DÓNDE CAE: en la acción es ficha, en la última frase es el remate.',
     comprobar(ctx) {
       const { loQueAdelantaElGancho } = ctx.fn;
       const gui = fuente(ctx, 'app/fases/guion.js');
@@ -4144,8 +4203,11 @@ export const invariantes = [
 
       // ── 1 · CAZA LAS TRES, una por una ────────────────────────────────────
       for (const [que, texto] of [
-        ['la fecha', 'Es el 12 de octubre de 2024 y el viento te azota la cara.'],
-        ['la fecha', 'Corría el año 2024 cuando apoyaste la sonda contra el bloque.'],
+        ['la fecha', 'Es el 12 de octubre de 2024 y el viento te azota. Retiras la madera.'],
+        // Con letra, que es como lo escribe un narrador: en locución los números
+        // van con letra y la fecha llegaba escrita, colándose entera.
+        ['la fecha', 'Es el doce de octubre y el viento te azota. Retiras la madera.'],
+        ['el año, y todavía va dentro de la acción', 'Corría el año 2024 cuando apoyaste la sonda. Retiras la madera.'],
         ['el sitio', 'El aire de Port MacLeod te azota el rostro mientras caminas.'],
         ['el nombre', 'Eres Liam MacTiernan y el viento te azota la cara.'],
       ]) {
@@ -4155,9 +4217,31 @@ export const invariantes = [
       }
       // Las tres juntas, que es como salieron de verdad.
       const suyo = con('Eres Liam MacTiernan, y el 12 de octubre de 2024, el viento del Atlántico te azota la cara. Son las tres y diecisiete en Port MacLeod.');
-      if (suyo.length !== 3) fallos.push(`El gancho real adelantaba tres cosas y se detectan ${suyo.length}.`);
+      if (suyo.length !== 4) {
+        fallos.push(`El gancho real adelantaba la fecha, el año, el sitio y el nombre, y se detectan ${suyo.length}.`);
+      }
 
       // ── 2 · Y NO MARCA EL QUE ESTÁ BIEN ───────────────────────────────────
+      // EL GANCHO REAL DEL CANAL, transcrito. Es la prueba de que la regla del
+      // año está donde tiene que estar: si esto se marcara, la medida estaría
+      // enseñando a escribir peor que la referencia que se copia.
+      const referencia =
+        'Imagina esta escena. Has sido contratado por una empresa privada para talar ' +
+        'varios árboles antiguos que representan un peligro por su estado de deterioro. ' +
+        'Todo parece un trabajo rutinario, hasta que al terminar de cortar uno de los ' +
+        'enormes robles, notas una extraña cavidad en el tronco. Hay un trozo de madera ' +
+        'podrida cubriendo el interior. Lo retiras con las manos. Y entonces llega el ' +
+        'horror. Dentro del árbol hay una persona, un hallazgo tan inesperado como real ' +
+        'que en 2007 conmocionó a todo un condado.';
+      if (con(referencia).length) {
+        fallos.push(`Se marca el gancho real del canal: ${JSON.stringify(con(referencia))}`);
+      }
+      // Y «3 de los trabajadores» no es una fecha. Buscar «número + de + palabra»
+      // marcaba esto y se le escapaba «el doce de octubre», las dos a la vez.
+      if (con('Uno de los tres trabajadores retira la madera con las manos.').length) {
+        fallos.push('Se marca «uno de los tres trabajadores» como si fuera una fecha.');
+      }
+
       // La mitad del valor: una medida que marca los ganchos buenos enseña a
       // estropearlos. Este es el cuarto, el único que cumplía.
       const bueno = 'Escuchas el pitido rítmico, monótono, de tu equipo de sónar. Es el pulso constante de tu jornada, un sonido que te ha acompañado durante los últimos doscientos bloques de hormigón.';
@@ -4184,9 +4268,11 @@ export const invariantes = [
 
       // ── 4 · Y ESTÁ ESCRITO EN EL ENCARGO, no solo comprobado ──────────────
       for (const [qué, re] of [
-        ['que no va la fecha', /LA FECHA\. Ni el año/],
+        ['que no van el día ni el mes', /EL DÍA Y EL MES\. Nunca/],
         ['que no va el sitio por su nombre', /EL SITIO por su nombre/],
         ['que no va el nombre de quien hace', /EL NOMBRE de quien hace/],
+        ['que el año va en el remate', /El año, y solo el año, va en el remate/],
+        ['que el gancho tiene acción y remate', /EL REMATE\. Llega al instante del hallazgo/],
       ]) {
         if (!re.test(gui)) fallos.push(`El encargo del gancho no dice ${qué}.`);
       }
