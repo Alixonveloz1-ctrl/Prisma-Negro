@@ -190,8 +190,8 @@ export function abrirPieza(proyecto, { caso = null, titulo = '', vieneDe = null 
       // Heredar el tratamiento entero era heredar la premisa, el hilo y los actos:
       // darle a «Guion» sin más habría escrito otra vez la primera parte. Lo que
       // pasa a la continuación es lo que la hace parecer la misma serie —paleta,
-      // luz, música, ritmo— y las cautelas legales, que son del caso y no de la
-      // pieza. Lo narrativo se queda vacío y hay que dirigirlo.
+      // luz, música, ritmo— y lo que el caso deja abierto, que es del caso y no de
+      // la pieza. Lo narrativo se queda vacío y hay que dirigirlo.
       z.tratamiento = padre.tratamiento
         ? {
             ...padre.tratamiento,

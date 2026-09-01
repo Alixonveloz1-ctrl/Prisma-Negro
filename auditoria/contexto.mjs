@@ -205,6 +205,7 @@ async function funcionesPuras() {
     escribirGuion: gui.escribirGuion,
     sistemaDelGuion: gui.sistemaDelGuion,
     dirigir: dir.dirigir,
+    abiertoDe: (await import('../app/fases/director.js')).abiertoDe,
     heredables: img.heredables,
     tomasDeBiblioteca: bib.tomasDeBiblioteca,
     sincronizarBiblioteca: bib.sincronizarBiblioteca,

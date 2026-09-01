@@ -278,7 +278,7 @@ export function proyectoYaEmpezado() {
           identidadVisual: { paleta: 'x', luz: 'y', textura: 'z', encuadrePreferido: 'w', queEvitar: 'v' },
           musica: { atmosfera: 'cuerdas graves', instrumentacion: 'violonchelo', queEvitar: 'percusión' },
           ritmo: { segundosPorToma: 11, proporcionMovimiento: 0.15 },
-          cuidado: ['no se puede afirmar x'],
+          abierto: ['un detalle que nadie explicó'],
           hecho: 1,
         },
       },

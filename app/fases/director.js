@@ -83,9 +83,12 @@ const ESQUEMA = {
       properties: { segundosPorToma: { type: 'number' }, proporcionMovimiento: { type: 'number' } },
       required: ['segundosPorToma', 'proporcionMovimiento'],
     },
-    cuidado: { type: 'array', items: { type: 'string' } },
+    // LO QUE EL EPISODIO DEJA ABIERTO A PROPÓSITO. Se llamaba `cuidado` y era una
+    // lista de cautelas legales heredada del modo de casos reales: en un caso
+    // inventado no protege a nadie y bloqueaba la revelación. Ver el SISTEMA.
+    abierto: { type: 'array', items: { type: 'string' } },
   },
-  required: ['premisa', 'hilo', 'tono', 'aperturaEnFrio', 'cierre', 'estructura', 'identidadVisual', 'musica', 'ritmo', 'cuidado'],
+  required: ['premisa', 'hilo', 'tono', 'aperturaEnFrio', 'cierre', 'estructura', 'identidadVisual', 'musica', 'ritmo', 'abierto'],
 };
 
 const SISTEMA = `Eres director de documentales de investigación. Misterio, crimen
@@ -149,16 +152,28 @@ La música va DEBAJO de una voz en off, siempre. Pides lecho, no melodía: si ti
 tema reconocible compite con la narración y no hay mezcla que lo arregle.
 
 DÓNDE ESTÁ LA LÍNEA, y esto no se negocia
-Trabajas con hechos reales y personas reales.
-- Lo probado se afirma. Lo denunciado se atribuye a quien lo denunció. Lo que solo
-  circula se cuenta como lo que es, o no se cuenta.
-- Una sentencia absolutoria pesa más que veinte titulares. Si el material dice que no
-  se probó, el documental dice que no se probó, aunque sea menos jugoso.
-- No insinúas por montaje lo que no puedes afirmar por texto. Poner una imagen
-  siniestra debajo de un nombre es acusar sin firmar.
-- Con víctimas y con familias: los hechos, no el morbo. Nada de recrear el daño.
-- Si el caso está abierto o hay personas vivas señaladas, esa cautela va en la lista
-  de «cuidado» y el guion la respeta.
+El caso NO OCURRIÓ. Ni el caso, ni las personas, ni el pueblo, ni la comisaría.
+Es ficción documental declarada: suena a expediente porque está construido como un
+expediente, no porque haya pasado. No hay a quién difamar y no hay nada que
+desmentir, así que aquí no hay cautela legal ninguna.
+
+Lo que sí hay es UN REGISTRO, y ese registro es medio género:
+- El género es la CONTENCIÓN. «El ADN lo situaba a doscientos metros, nada más» pesa
+  más que «era él». Se cuenta lo que el material sostiene y se deja ver el hueco.
+- Lo que no está probado DENTRO del caso se atribuye a quien lo dijo, o se cuenta
+  como lo que es: una sospecha, un rumor, una línea de investigación.
+- Con la víctima y su familia: los hechos, no el morbo. Nada de recrear el daño. Esto
+  no es cautela legal, es que el morbo abarata la pieza.
+
+Y LO QUE SÍ SE AFIRMA, porque es el episodio:
+- El caso TIENE solución y el documental LA CUENTA. La revelación del último acto se
+  dice entera y sin escurrirse: quién fue, cómo se supo, qué lo destapó. Un caso
+  inventado que no se resuelve no es contención, es una pieza sin final.
+- La pista falsa se desmonta EXPLÍCITAMENTE: se dice que a ese no fue, y por qué se
+  creyó que sí. Ese es el giro, y callarlo lo tira.
+- Lo único que se queda abierto es lo que TÚ decidas dejar abierto, a propósito, y va
+  en la lista «abierto» — un hilo suelto, un detalle que nadie explicó nunca. Uno o
+  dos, no cuatro: un final abierto es un final; cuatro es no haber contado nada.
 
 CÓMO TERMINA
 Sin moraleja, sin «y tú qué opinas», sin lección. Cierras devolviendo el detalle del
@@ -192,7 +207,13 @@ export async function dirigirPieza({ caso, fichas, minutos = 10, genero = null, 
       instruccion:
         `CASO: ${caso.titulo}\n` +
         `${caso.sinopsis}\n` +
-        `Cuándo: ${caso.cuando} · Dónde: ${caso.donde}\n\n` +
+        `Cuándo: ${caso.cuando} · Dónde: ${caso.donde}\n` +
+        // EL PAÍS Y LA CIUDAD. El director no los veía —solo la frase de `donde`—
+        // y de él cuelgan el tono, los oficios y los nombres propios de todo el
+        // episodio.
+        (caso.pais ? `País: ${caso.pais}${caso.ciudad ? ` · Ciudad: ${caso.ciudad}` : ''}` +
+          `${caso.region ? ` · ${caso.region}` : ''} — REALES.\n` : '') +
+        `\n` +
         (genero
           ? `GÉNERO: ${genero.nombre}. ${genero.resumen}\n` +
             `Motivos visuales que vuelven en este género: ${genero.motivos.join('; ')}.\n\n`
@@ -259,8 +280,10 @@ export async function dirigirPieza({ caso, fichas, minutos = 10, genero = null, 
         `entiende inglés y rechaza la petición si ve español. Vocabulario musical ` +
         `concreto: «low sustained cello», «tape hiss», «no percussion».\n` +
         `- ritmo: segundosPorToma (8-14) y proporcionMovimiento (0-0.3).\n` +
-        `- cuidado: qué NO se puede afirmar en este caso concreto, por lo que dice el ` +
-        `material. Una entrada por cada cosa.\n\n` +
+        `- abierto: qué deja abierto este episodio A PROPÓSITO. Un hilo suelto que ` +
+        `nadie explicó, un detalle que nunca cuadró. UNO O DOS, no cuatro. NO metas ` +
+        `aquí la revelación ni la pista falsa: esas se cuentan enteras. Si no hay ` +
+        `nada que merezca quedarse abierto, lista vacía.\n\n` +
         `Responde ÚNICAMENTE con el objeto JSON.`,
       esquema: ESQUEMA,
       temperatura: 0.8,
@@ -286,9 +309,26 @@ export async function dirigirPieza({ caso, fichas, minutos = 10, genero = null, 
       segundosPorToma: Math.min(16, Math.max(7, Number(t.ritmo?.segundosPorToma) || 11)),
       proporcionMovimiento: Math.min(0.3, Math.max(0, Number(t.ritmo?.proporcionMovimiento) || 0.15)),
     },
-    cuidado: Array.isArray(t.cuidado) ? t.cuidado : [],
+    // Y LOS TRATAMIENTOS QUE YA ESTABAN GUARDADOS NO SE PIERDEN: los de antes
+    // llevan la lista en `cuidado`, con la redacción vieja. Se leen igual —el
+    // episodio que ya estaba dirigido sigue abriéndose— y al volver a dirigir se
+    // rehace con la redacción de ahora.
+    abierto: Array.isArray(t.abierto) ? t.abierto : Array.isArray(t.cuidado) ? t.cuidado : [],
     hecho: Date.now(),
   };
+}
+
+/**
+ * Lo que este episodio deja abierto, venga del campo de ahora o del de antes.
+ *
+ * UN SOLO SITIO donde se resuelve el nombre. Estaba resuelto solo al leer la
+ * respuesta del director, así que un tratamiento YA GUARDADO —con la lista en
+ * `cuidado`— la enseñaba en pantalla y la perdía al bajar al guion: el mismo dato
+ * existiendo o no según quién preguntara.
+ */
+export function abiertoDe(tr) {
+  const l = Array.isArray(tr?.abierto) ? tr.abierto : Array.isArray(tr?.cuidado) ? tr.cuidado : [];
+  return l.filter(Boolean);
 }
 
 /**
@@ -316,7 +356,13 @@ export function comoInstruccion(tr, { para = 'guion' } = {}) {
       tr.estructura
         .map((a) => `${a.acto}. ${a.titulo} (${a.minutos} min) — ${a.funcion}\n   ${a.contenido}`)
         .join('\n') +
-      (tr.cuidado.length ? `\n\nCUIDADO, no se puede afirmar:\n${tr.cuidado.map((c) => `- ${c}`).join('\n')}` : '')
+      // LO QUE SE DEJA ABIERTO, no «lo que no se puede afirmar». Con la redacción
+      // vieja el guion se guardaba la revelación —el desenlace del caso— por una
+      // cautela legal que no protegía a nadie.
+      (abiertoDe(tr).length
+        ? `\n\nESTO SE QUEDA ABIERTO a propósito, no lo resuelvas:\n${abiertoDe(tr).map((c) => `- ${c}`).join('\n')}` +
+          `\nTodo lo demás SÍ se cuenta, la revelación la primera.`
+        : '')
     );
   }
 

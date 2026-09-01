@@ -1075,13 +1075,16 @@ export const invariantes = [
             premisa: 'P1', hilo: 'H1', aperturaEnFrio: 'A1', cierre: 'C1',
             estructura: [{ acto: 1, titulo: 'Uno', minutos: 5 }],
             identidadVisual: { paleta: 'ámbar' }, musica: { atmosfera: 'cuerdas' },
-            ritmo: { segundosPorToma: 11, proporcionMovimiento: 0.15 }, cuidado: ['no afirmar X'],
+            ritmo: { segundosPorToma: 11, proporcionMovimiento: 0.15 }, abierto: ['un hilo suelto'],
           },
         }],
       });
       const c = estado.abrirPieza(P, { vieneDe: 'p01' });
       if (c.tratamiento.identidadVisual?.paleta !== 'ámbar') fallos.push('La continuación no hereda la paleta: no parecerá la misma serie.');
-      if (!c.tratamiento.cuidado?.length) fallos.push('La continuación pierde las cautelas legales, que son del caso.');
+      // Lo que el caso deja abierto es del CASO, así que la continuación lo hereda.
+      // Esto miraba `cuidado`, el nombre viejo: al renombrarse el campo la
+      // comprobación se habría quedado pasando sobre un campo muerto.
+      if (!c.tratamiento.abierto?.length) fallos.push('La continuación pierde lo que el caso deja abierto.');
       if (c.tratamiento.premisa || c.tratamiento.estructura.length) {
         fallos.push('La continuación hereda la historia del padre: escribiría la primera parte otra vez.');
       }
@@ -1114,7 +1117,7 @@ export const invariantes = [
             premisa: 'P1', hilo: 'H1', aperturaEnFrio: 'A1', cierre: 'C1',
             estructura: [{ acto: 1, titulo: 'Uno', minutos: 5 }],
             identidadVisual: { paleta: 'ámbar' }, musica: { atmosfera: 'cuerdas' },
-            ritmo: { segundosPorToma: 11, proporcionMovimiento: 0.15 }, cuidado: ['no afirmar X'],
+            ritmo: { segundosPorToma: 11, proporcionMovimiento: 0.15 }, abierto: ['un hilo suelto'],
           },
         }],
       });
@@ -3545,5 +3548,137 @@ export const invariantes = [
     },
     // Se rompe como estaba: las fechas se copian tal cual, futuro incluido.
     romper: (ctx) => conFuncion(ctx, 'enderezarFechas', (caso) => ({ ...caso })),
+  },
+
+  {
+    nombre: 'el-director-sabe-que-el-caso-es-inventado-y-cuenta-el-final',
+    dice: '«¿Está correcto ese mensaje de que no se pueden afirmar esas cosas cuando es un caso inventado?» No lo estaba. El director arrancaba con «DÓNDE ESTÁ LA LÍNEA, y esto no se negocia: trabajas con hechos reales y personas reales» —la regla con la redacción más fuerte de todo el encargo, montada sobre una premisa falsa— y de ahí salía en pantalla «no se puede afirmar que Elias Vance mató a nadie». Elias Vance no existe: no hay a quién difamar. Y era peor que inútil, porque se peleaba con el propio diseño del caso: el expediente tiene la obligación de producir «el culpable real» y «la tecnología que lo resuelve», y el director le prohibía al guion contarlo. La herramienta construía el desenlace y luego se prohibía a sí misma decirlo. Lo que sobrevive es la CONTENCIÓN, que es el registro del género; lo que se va es la cautela legal, que no protegía a nadie.',
+    comprobar(ctx) {
+      const dir = fuente(ctx, 'app/fases/director.js');
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      // ── 1 · LA PREMISA FALSA NO ESTÁ ──────────────────────────────────────
+      if (/Trabajas con hechos reales y personas reales/.test(dir)) {
+        fallos.push('El director sigue creyendo que trabaja con hechos y personas reales.');
+      }
+      for (const [qué, re] of [
+        ['que el caso no ocurrió', /El caso NO OCURRI[OÓ]/],
+        ['que no hay cautela legal que aplicar', /no hay cautela legal|no hay a qui[eé]n difamar/i],
+      ]) {
+        if (!re.test(dir)) fallos.push(`El encargo del director no dice ${qué}.`);
+      }
+      // Y las cautelas de caso real, fuera: una sentencia absolutoria no existe en
+      // un caso que nadie juzgó.
+      if (/sentencia absolutoria pesa m[aá]s que veinte titulares/.test(dir)) {
+        fallos.push('Sigue la regla de la sentencia absolutoria: en un caso inventado no hay sentencia.');
+      }
+
+      // ── 2 · PERO LA CONTENCIÓN SE QUEDA ───────────────────────────────────
+      // Es lo que hace que suene a documental. Quitarla con la premisa falsa
+      // habría cambiado un fallo por otro peor.
+      if (!/CONTENCI[OÓ]N/.test(dir)) {
+        fallos.push('Se ha ido también la contención: sin ella el episodio suena a novela, no a expediente.');
+      }
+      if (!/los hechos, no el morbo/i.test(dir)) {
+        fallos.push('Se ha perdido la regla del morbo con la víctima y su familia.');
+      }
+
+      // ── 3 · Y LA REVELACIÓN SE CUENTA ─────────────────────────────────────
+      // El corazón del arreglo: un caso inventado que no se resuelve no es
+      // contención, es una pieza sin final.
+      for (const [qué, re] of [
+        ['que el caso tiene solución y se cuenta', /El caso TIENE soluci[oó]n y el documental LA CUENTA/],
+        ['que la pista falsa se desmonta a la vista', /pista falsa se desmonta EXPL[IÍ]CITAMENTE/],
+      ]) {
+        if (!re.test(dir)) fallos.push(`El director no tiene dicho ${qué}.`);
+      }
+      // Lo que baja al guion dice que lo demás SÍ se cuenta. Sin esa línea, una
+      // lista de «esto queda abierto» se lee como permiso para no cerrar nada.
+      if (!/Todo lo dem[aá]s S[IÍ] se cuenta/.test(dir)) {
+        fallos.push('Al guion no se le dice que todo lo que no está en la lista sí se cuenta.');
+      }
+      if (/CUIDADO, no se puede afirmar/.test(dir)) {
+        fallos.push('El guion sigue recibiendo la lista como «no se puede afirmar».');
+      }
+
+      // ── 4 · EL CAMPO DICE LO QUE ES, Y LO VIEJO NO SE PIERDE ──────────────
+      // Esto es lo que protege un episodio ya dirigido: su tratamiento lleva la
+      // lista en `cuidado` y tiene que seguir abriéndose.
+      if (!/abierto: \{ type: 'array'/.test(dir)) fallos.push('El tratamiento no declara qué deja abierto.');
+      if (!/Array\.isArray\(t\.abierto\)[\s\S]{0,80}t\.cuidado/.test(dir)) {
+        fallos.push('Un tratamiento ya dirigido pierde su lista al renombrarse el campo: se pierde trabajo pagado.');
+      }
+      // Y UN SOLO SITIO RESUELVE EL NOMBRE. Con la caída al campo viejo escrita
+      // solo en un lado, un episodio ya dirigido enseñaba su lista en pantalla y
+      // la perdía al bajar al guion: el mismo dato existiendo o no según quién
+      // preguntara.
+      const abierto = ctx.fn.abiertoDe;
+      if (typeof abierto !== 'function') fallos.push('No hay un lector único de lo que se deja abierto.');
+      else {
+        if (abierto({ abierto: ['a'] })[0] !== 'a') fallos.push('El lector no ve el campo de ahora.');
+        if (abierto({ cuidado: ['b'] })[0] !== 'b') {
+          fallos.push('El lector no ve el campo de antes: un episodio ya dirigido pierde su lista.');
+        }
+        if (abierto({}).length || abierto().length) fallos.push('El lector inventa entradas donde no hay ninguna.');
+      }
+      if (!/abiertoDe\(tr\)/.test(dir)) fallos.push('El texto que baja a las fases no pasa por el lector único.');
+      // Y la pantalla, igual: lee el nuevo y cae al viejo.
+      if (!/tr\.abierto \?\? tr\.cuidado/.test(main)) {
+        fallos.push('La pantalla no enseña la lista de un episodio dirigido antes del cambio.');
+      }
+      // EL RÓTULO QUE SE PINTA, no la palabra en el archivo: el comentario que
+      // explica este fallo cita el rótulo viejo, y una comprobación que se caza a
+      // sí misma obliga a borrar la explicación para que pase.
+      if (/<b>Cuidado en este caso:<\/b>/.test(main)) {
+        fallos.push('La pantalla sigue rotulándolo «Cuidado»: dice que hay un riesgo legal donde no lo hay.');
+      }
+      if (!/<b>Se queda abierto a prop[oó]sito:<\/b>/.test(main)) {
+        fallos.push('La pantalla no dice que esa lista es lo que se deja abierto a propósito.');
+      }
+
+      // ── 5 · Y EL DIRECTOR SABE EN QUÉ PAÍS PASA ───────────────────────────
+      // Veía `donde` y nada más, así que el país real del caso no llegaba a quien
+      // decide el tono, los oficios y los nombres propios.
+      if (!/País: \$\{caso\.pais\}/.test(dir)) {
+        fallos.push('El director no ve el país del caso: decide el episodio sin saber dónde pasa.');
+      }
+
+      // ── 6 · Y EL SITIO SE PUEDE ESCRIBIR A MANO ───────────────────────────
+      // «No me gustaría perder ese caso.» Un caso propuesto antes de que el caso
+      // llevara país no lo trae, y la única forma de recuperarlo sería
+      // regenerarlo, o sea perderlo. Se escribe, y toca el caso y nada más.
+      const html = fuente(ctx, 'index.html');
+      for (const id of ['caso-pais', 'caso-ciudad']) {
+        if (!new RegExp(`id="${id}"`).test(html)) {
+          fallos.push(`No hay dónde escribir «${id}»: un caso sin país solo se arregla regenerándolo.`);
+        }
+      }
+      const i = main.indexOf('async function ponerSitioDelCaso');
+      const cuerpo = i < 0 ? '' : main.slice(i, main.indexOf('\n}\n', i));
+      if (!cuerpo) fallos.push('No hay forma de guardar el sitio escrito a mano.');
+      else {
+        // NO TOCA NADA MÁS. Rehacer las fichas o el tratamiento al escribir el país
+        // sería perder el trabajo que se quería salvar.
+        for (const qué of ['fichas', 'tratamiento', 'tomas', 'guion']) {
+          if (new RegExp(`z\\.${qué}\\s*=`).test(cuerpo)) {
+            fallos.push(`Escribir el país toca «${qué}»: se perdería el caso que se quería conservar.`);
+          }
+        }
+        if (!/z\.caso = \{/.test(cuerpo) || !/pais:/.test(cuerpo) || !/ciudad:/.test(cuerpo)) {
+          fallos.push('Escribir el sitio no lo guarda en el caso.');
+        }
+        if (!/guardar\(\)/.test(cuerpo)) fallos.push('El sitio escrito a mano no se guarda: se pierde al recargar.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: el director creyéndose que esto es periodismo.
+    romper: (ctx) =>
+      editando(ctx, 'app/fases/director.js', (t) =>
+        t.replace(
+          'El caso NO OCURRIÓ.',
+          'Trabajas con hechos reales y personas reales. No ocurrió.',
+        ),
+      ),
   },
 ];

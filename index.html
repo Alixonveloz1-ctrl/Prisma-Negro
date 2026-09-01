@@ -663,6 +663,24 @@ nav.abajo button svg{width:22px;height:22px}
         <div class="panel">
           <h2>Caso elegido <span class="cuenta" id="cuenta-fichas"></span></h2>
           <div id="caso-elegido"></div>
+
+          <!-- DÓNDE PASA, A MANO.
+               De estos dos campos cuelga el mundo de TODAS las imágenes del
+               episodio: los coches, las matrículas, los uniformes, por qué lado va
+               el volante. Se pueden escribir porque un caso propuesto antes de que
+               esto existiera no los trae, y regenerarlo para recuperarlos sería
+               perder el caso — que es justo lo que no se puede pedir. También sirve
+               para corregir al generador cuando se equivoca de sitio. -->
+          <div class="rejilla-filtros">
+            <label>País (real)
+              <input id="caso-pais" type="text" placeholder="Canadá" autocomplete="off">
+            </label>
+            <label>Ciudad (real)
+              <input id="caso-ciudad" type="text" placeholder="Halifax" autocomplete="off">
+            </label>
+          </div>
+          <p class="nota chica" id="nota-mundo"></p>
+
           <div class="fila-btn" style="margin-top:14px">
             <button class="btn primario" id="b-fichas">Buscar fichas</button>
             <button class="btn fantasma" id="b-mas-fichas">Buscar más</button>

@@ -931,6 +931,30 @@ function pintarCasoElegido() {
       `</div>`
     : '<p class="nota">Todavía no has elegido un caso. Ve a Inicio y busca casos.</p>';
   $('cuenta-fichas').textContent = pieza().fichas.length ? `${pieza().fichas.length} fichas` : '';
+
+  // DÓNDE PASA, EDITABLE. Un caso propuesto antes de que el caso llevara país no
+  // lo trae, y regenerarlo para recuperarlo sería perder el caso.
+  $('caso-pais').value = c?.pais || '';
+  $('caso-ciudad').value = c?.ciudad || '';
+  $('nota-mundo').textContent = !c
+    ? ''
+    : c.pais
+      ? `Las imágenes de este episodio se generan como ${c.ciudad ? `${c.ciudad}, ` : ''}${c.pais}.`
+      : 'Sin país, las imágenes salen de un sitio indefinido: ni los coches ni los uniformes ' +
+        'sabrán de dónde son. Escríbelo y se arregla sin tocar el caso.';
+}
+
+/** Guarda el sitio escrito a mano. Toca el caso y nada más: las fichas se quedan. */
+async function ponerSitioDelCaso() {
+  const z = pieza();
+  if (!z.caso) return;
+  z.caso = {
+    ...z.caso,
+    pais: $('caso-pais').value.trim(),
+    ciudad: $('caso-ciudad').value.trim(),
+  };
+  await guardar();
+  pintarCasoElegido();
 }
 
 // ── Paso 2: fichas y guion ────────────────────────────────────────────────────
@@ -1100,9 +1124,17 @@ function pintarTratamiento() {
       (tr.identidadVisual
         ? `<p class="nota chica" style="margin-top:9px">${escapar(tr.identidadVisual.paleta)} · ${escapar(tr.identidadVisual.luz)}</p>`
         : '') +
-      (tr.cuidado?.length
-        ? `<div class="aviso" style="margin-top:10px"><b>Cuidado en este caso:</b>` +
-          tr.cuidado.map((c) => `<span class="comoarreglar">· ${escapar(c)}</span>`).join('') +
+      // LO QUE EL EPISODIO DEJA ABIERTO A PROPÓSITO.
+      //
+      // Decía «Cuidado en este caso: no se puede afirmar que Elias Vance mató a
+      // nadie». Elias Vance no existe: no había a quién difamar. Era una lista de
+      // cautelas legales del modo de casos reales, y encima le prohibía al guion
+      // contar la revelación, que es el episodio entero.
+      //
+      // `cuidado` se sigue leyendo para no perder los tratamientos ya dirigidos.
+      ((tr.abierto ?? tr.cuidado)?.length
+        ? `<div class="aviso" style="margin-top:10px"><b>Se queda abierto a propósito:</b>` +
+          (tr.abierto ?? tr.cuidado).map((c) => `<span class="comoarreglar">· ${escapar(c)}</span>`).join('') +
           `</div>`
         : '') +
       `</div>`
@@ -3973,6 +4005,12 @@ $('musica-volumen').addEventListener('input', (e) => ($('v-musica-volumen').text
 // guardar, se probaría la velocidad con una voz que no la admite y parecería que
 // el deslizador está roto.
 $('voz')?.addEventListener('change', () => pintarLimitesDeVoz());
+
+// El sitio del caso, escrito a mano. Al salir del campo, no en cada tecla: guardar
+// por pulsación son cien escrituras del proyecto entero por «Canadá».
+for (const id of ['caso-pais', 'caso-ciudad']) {
+  $(id)?.addEventListener('change', () => ponerSitioDelCaso().catch((e) => avisar('investigacion', e.message, 'malo')));
+}
 // Recargar el catálogo al momento: si hubiera que guardar ajustes primero, parecería
 // que el interruptor no hace nada.
 $('expresivas').addEventListener('change', async (e) => {
