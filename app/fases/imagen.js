@@ -119,7 +119,28 @@ export function heredables(tomas, piezasAnteriores, reparto = null) {
     });
   };
 
+  // EL FORMATO SE MIRA AQUÍ DENTRO, no solo en quien llama.
+  //
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Una imagen del otro formato no se pone con barras: el montaje agranda hasta
+  // llenar y recorta, así que una vertical en un episodio horizontal pierde dos
+  // tercios del alto y una horizontal en uno vertical pierde dos tercios del
+  // ancho. Heredarla no ahorra: estropea.
+  //
+  // Quien llama ya filtra —le pasa la biblioteca de su formato y las piezas de su
+  // formato—, y aun así se comprueba aquí. La protección que vive solo en quien
+  // llama se rompe el día que aparece un tercer sitio que llama, y ese fallo
+  // —dos caminos, uno protegido— ya se ha pagado cuatro veces en este proyecto.
+  //
+  // Sin formato pedido no se filtra nada: es lo que permite seguir preguntando
+  // «¿qué hay?» sin tener que saber en qué formato se está.
+  // ─────────────────────────────────────────────────────────────────────────────
+  const suyo = reparto?.aspecto || '';
+  const deOtroFormato = (z) =>
+    !!suyo && String(z?.aspecto || suyo) !== suyo;
+
   for (const z of piezasAnteriores) {
+    if (deOtroFormato(z)) continue;
     for (const t of z.tomas || []) {
       if (!t.plano) continue;
       guardar(porArquetipo, String(t.personaje || t.plano?.personaje || '').trim().toLowerCase(), z, t);

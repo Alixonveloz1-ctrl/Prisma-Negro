@@ -362,6 +362,19 @@ const aspectoDeLaPieza = (z) =>
   z?.esBiblioteca ? bibliotecaFase.aspectoPieza(z) : String(z?.aspecto || aspectoDelCanal());
 
 /**
+ * SELLA LA PIEZA CON EL FORMATO EN EL QUE SE ESTÁ GENERANDO.
+ *
+ * Se hace al generar la primera imagen y no antes: en ese momento el formato es un
+ * HECHO —se acaba de pedir una imagen con él— y no una suposición sobre un
+ * episodio que todavía no ha gastado nada. Una vez sellado no cambia: cambiar el
+ * canal de formato no convierte lo ya pagado.
+ */
+function sellarFormato(z) {
+  if (!z || z.esBiblioteca || z.aspecto) return;
+  z.aspecto = aspectoDelCanal();
+}
+
+/**
  * Guarda una imagen del episodio en el archivo del canal.
  *
  * No copia ni regenera nada: la entrada APUNTA al material que ya está pagado, con
@@ -1846,6 +1859,7 @@ async function asegurarDireccion() {
 const guardaToma = async (nueva) => {
   const k = pieza().tomas.findIndex((x) => x.i === nueva.i);
   if (k >= 0) pieza().tomas[k] = nueva;
+  if (nueva?.imagen === 'ok') sellarFormato(pieza());
   archivarSiEsGenerica(nueva);
   await guardar();
   pintarTomas();
@@ -4072,7 +4086,9 @@ function ordenDeEpisodios() {
  * episodios seguidos.
  */
 function contextoDeReparto(z) {
-  return { historial: P.reparto, orden: ordenDeEpisodios(), pieza: z.id };
+  // Y EL FORMATO, para que `heredables` lo compruebe por su cuenta en vez de
+  // fiarse de que quien la llame haya filtrado bien.
+  return { historial: P.reparto, orden: ordenDeEpisodios(), pieza: z.id, aspecto: aspectoDeLaPieza(z) };
 }
 
 /** Anota qué persona y qué versión le tocaron a este episodio. */

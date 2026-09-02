@@ -349,6 +349,14 @@ function piezaVacia(id, titulo) {
     // material que se puede reutilizar en vez de volver a pagarlo.
     vieneDe: null,
     guion: '',
+    // EN QUÉ FORMATO SE GENERÓ EL MATERIAL DE ESTA PIEZA.
+    //
+    // Vacío hasta que se genera la primera imagen: ahí se sella con el formato del
+    // canal en ese momento, que es un hecho y no una suposición. Sin esto, la
+    // reutilización entre episodios da por hecho que todos están en el formato de
+    // hoy, y el día que haya un episodio vertical le ofrecería sus imágenes a uno
+    // horizontal — que es lo mismo que ya pasó con la biblioteca.
+    aspecto: '',
     tomas: [],
     escenas: [],
     metadatos: null,
@@ -363,8 +371,11 @@ function sanearPieza(bruto, n, proyecto) {
   const z = { ...piezaVacia(idPieza(n + 1), ''), ...(bruto || {}) };
   // La biblioteca es una pieza, pero no se monta nunca y su id no es `pNN`.
   z.esBiblioteca = z.esBiblioteca === true;
-  // El formato de una biblioteca. Las que ya existen no lo traen y son 9:16.
+  // El formato. La biblioteca siempre lo tiene —las que ya existen son 9:16—; un
+  // episodio solo cuando ya ha generado material, y hasta entonces queda vacío: no
+  // se adivina el formato de un episodio que todavía no ha generado nada.
   if (z.esBiblioteca) z.aspecto = z.aspecto === '16:9' ? '16:9' : '9:16';
+  else z.aspecto = z.aspecto === '16:9' || z.aspecto === '9:16' ? z.aspecto : '';
   z.guion = String(z.guion || '');
   z.tomas = Array.isArray(z.tomas) ? z.tomas.map((t, i) => sanearToma(t, i, proyecto)) : [];
   z.escenas = Array.isArray(z.escenas) ? z.escenas : [];

@@ -4158,6 +4158,78 @@ export const invariantes = [
   },
 
   {
+    nombre: 'un-episodio-sabe-en-que-formato-se-genero-y-no-hereda-de-otro',
+    dice: '«El episodio debería saber en qué formato se generó.» No lo sabía: nadie se lo escribía nunca, así que la reutilización entre episodios daba por hecho que TODOS estaban en el formato de hoy. Hoy no molesta porque solo hay uno; el día que haya un episodio vertical y se trabaje en horizontal, el botón de reutilizar le ofrecería sus imágenes — y el montaje no pone barras, agranda y recorta, así que se perdería el tercio central. Ahora la pieza se sella con el formato AL GENERAR SU PRIMERA IMAGEN, que es cuando el formato es un hecho y no una suposición sobre un episodio que todavía no ha gastado nada. Y `heredables` comprueba el formato POR SU CUENTA en vez de fiarse de quien la llama: la protección que vive solo en quien llama se rompe el día que aparece un tercer sitio que llama, y eso ya se ha pagado cuatro veces aquí.',
+    comprobar(ctx) {
+      const { heredables, sanear } = ctx.fn;
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      // 1 · LA PIEZA GUARDA SU FORMATO, y una que no lo tiene no se lo inventa.
+      const p = sanear({
+        id: 'proy',
+        config: { formato: { vertical: false } },
+        piezas: [{ id: 'p01', aspecto: '9:16' }, { id: 'p02' }],
+      });
+      if (p.piezas[0].aspecto !== '9:16') {
+        fallos.push(`Una pieza pierde el formato en el que se generó (${JSON.stringify(p.piezas[0].aspecto)}).`);
+      }
+      if (p.piezas[1].aspecto) {
+        fallos.push(
+          `Una pieza sin material se inventa un formato (${JSON.stringify(p.piezas[1].aspecto)}): ` +
+            'todavía no ha generado nada con el que decirlo.',
+        );
+      }
+
+      // 2 · Y SE SELLA AL GENERAR, no antes ni a mano.
+      if (!/function sellarFormato\(/.test(main)) fallos.push('Nadie sella el formato de la pieza.');
+      if (!/if \(nueva\?\.imagen === 'ok'\) sellarFormato\(pieza\(\)\);/.test(main)) {
+        fallos.push('El formato no se sella al generar una imagen: la pieza nunca llega a saber en cuál se hizo.');
+      }
+      if (!/if \(!z \|\| z\.esBiblioteca \|\| z\.aspecto\) return;/.test(main)) {
+        fallos.push('Sellar el formato pisa el que ya tuviera: cambiar de formato convertiría lo ya pagado.');
+      }
+
+      // 3 · `heredables` LO COMPRUEBA ELLA MISMA.
+      const vertical = {
+        id: 'p09',
+        aspecto: '9:16',
+        titulo: 'uno viejo, vertical',
+        tomas: [{
+          i: 0, recurso: 'carretera-noche', variante: 'v1', imagen: 'ok',
+          plano: { lugar: 'la carretera', encuadre: 'general', luz: 'noche', recurso: 'carretera-noche' },
+        }],
+      };
+      const toma = {
+        i: 0, recurso: 'carretera-noche', imagen: null,
+        plano: { lugar: 'x', encuadre: 'y', luz: 'z', recurso: 'carretera-noche', descripcion: 'd' },
+      };
+      if (heredables([toma], [vertical], { pieza: 'p1', aspecto: '16:9' }).length) {
+        fallos.push('Un episodio horizontal hereda de uno vertical: se vería el tercio central y nada más.');
+      }
+      if (!heredables([toma], [vertical], { pieza: 'p1', aspecto: '9:16' }).length) {
+        fallos.push('Un episodio vertical NO hereda de uno vertical: se dejaría de ahorrar donde sí se debe.');
+      }
+      // Sin formato pedido no se filtra: se puede seguir preguntando «¿qué hay?».
+      if (!heredables([toma], [vertical], { pieza: 'p1' }).length) {
+        fallos.push('Sin pedir formato ya no se puede preguntar qué material hay.');
+      }
+
+      // 4 · Y QUIEN LA LLAMA SE LO PASA. Sin esto, el filtro de dentro no se usa
+      // nunca y esta invariante estaría comprobando código muerto.
+      if (!/aspecto: aspectoDeLaPieza\(z\)/.test(main)) {
+        fallos.push('El contexto de reparto no lleva el formato: `heredables` no tendría con qué filtrar.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: `heredables` no mira el formato de quien dona.
+    romper: (ctx) =>
+      conFuncion(ctx, 'heredables', (tomas, anteriores, reparto) =>
+        ctx.fn.heredables(tomas, anteriores, { ...(reparto || {}), aspecto: '' }),
+      ),
+  },
+
+  {
     nombre: 'cada-formato-tiene-su-biblioteca-y-no-se-pisan',
     dice: 'La biblioteca entera —141 imágenes y sus clips— se generó en 9:16 antes de caer en que el canal es de vídeo largo y va en 16:9. El montaje NO pone barras: agranda hasta llenar el ancho y recorta el centro, así que una imagen vertical en un episodio horizontal pierde dos tercios del alto, y nada avisaba porque una entrada del archivo no guardaba en qué formato se generó. Peor: las claves del material salen del id de la pieza —`biblioteca/t000/img`—, así que generar el catálogo en 16:9 habría escrito ENCIMA de las verticales ya pagadas. Ahora hay una biblioteca por formato, con su propio id, y un episodio solo hereda de la suya.',
     comprobar(ctx) {
