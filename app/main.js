@@ -137,18 +137,119 @@ const colaInvestiga = new Cola({
  * usa. Es el mismo fallo que el aviso del guion: dos caminos, uno protegido.
  *
  * Se conserva por TEXTO: una toma cuyo texto no cambió se queda con su audio, su
- * imagen y su clip. Si el texto cambió, su narración ya no vale y se regenera —
- * eso sí es correcto.
+ * imagen y su clip.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Y POR TEXTO EXACTO NO BASTABA, que es lo que dejó un episodio entero atascado.
+ *
+ * Cuando cambian las REGLAS de la segmentación —no el guion, las reglas— ninguna
+ * toma nueva tiene el texto de ninguna vieja: donde había tres párrafos sueltos
+ * ahora hay una toma que los junta. Con el emparejamiento por texto exacto, volver
+ * a partir el guion tiraba el episodio entero a la basura, así que no se podía
+ * volver a partir, así que las tomas de cuarenta y nueve segundos se quedaban ahí
+ * por mucho que se arreglara el segmentador. Tres rondas de «arreglado» sin que
+ * cambiara nada en pantalla.
+ *
+ * Ahora se empareja por SOLAPE en el guion: la toma nueva hereda de la vieja con
+ * la que comparte más texto. Y se distingue qué se puede heredar:
+ *   · Texto idéntico → todo, también la voz.
+ *   · Solapa pero el texto cambió → LO VISUAL sí, la voz no. Una imagen ilustra un
+ *     trozo del guion y ese trozo sigue estando ahí; la voz es un corte de onda en
+ *     unos límites concretos, y esos límites ya no existen.
  * ─────────────────────────────────────────────────────────────────────────────
  */
+// Lo que sobrevive a un reparto nuevo cuando el texto cambió pero se solapa. La
+// lista está aquí, con nombre, para que una invariante la pueda comprobar: cada
+// campo que falte es material pagado que se tira.
+const LO_VISUAL_SE_HEREDA = [
+  'plano', 'imagen', 'video', 'tipoImagen', 'movimiento', 'respiro',
+  'heredado', 'heredadoVid', 'variante', 'personaje', 'recurso', 'motivo',
+  'versionImagen', 'versionClip', 'fichas',
+];
+
+/**
+ * Las tomas, con su sitio en el guion puesto aunque no lo traigan.
+ *
+ * Los proyectos guardados ANTES de que la lista blanca nombrara `inicioEnGuion`
+ * vienen sin él, y son justo los que hay que rescatar: los partidos con las reglas
+ * viejas. Se reconstruye buscando el texto de cada toma hacia delante — el reparto
+ * cubre el guion en orden, así que buscar desde donde acabó la anterior no puede
+ * encontrar la de otra parte.
+ */
+function conSitioEnElGuion(tomas, guion) {
+  let cursor = 0;
+  return tomas.map((t) => {
+    if (Number.isInteger(t.inicioEnGuion) && Number.isInteger(t.finEnGuion)) {
+      cursor = t.finEnGuion;
+      return t;
+    }
+    const texto = String(t.texto || '');
+    const inicio = texto ? guion.indexOf(texto, cursor) : -1;
+    if (inicio < 0) return t;
+    cursor = inicio + texto.length;
+    return { ...t, inicioEnGuion: inicio, finEnGuion: cursor };
+  });
+}
+
 function repartirConservando(z, r) {
-  const antes = new Map((z.tomas || []).map((t) => [t.texto, t]));
-  z.tomas = r.tomas.map((t) => {
-    const viejo = antes.get(t.texto);
-    return viejo ? { ...t, ...viejo, i: t.i, escena: t.escena } : t;
+  const viejas = conSitioEnElGuion(z.tomas || [], z.guion || '');
+  const solape = (a, b) =>
+    Math.max(0, Math.min(a.finEnGuion, b.finEnGuion) - Math.max(a.inicioEnGuion, b.inicioEnGuion));
+
+  // De qué toma vieja viene cada toma nueva, para poder rehacer los `reusa`.
+  const donante = new Map();
+  let intactas = 0;
+  let visuales = 0;
+
+  const tomas = r.tomas.map((t) => {
+    let mejor = null;
+    let mayor = 0;
+    for (const v of viejas) {
+      const s = solape(t, v);
+      if (s > mayor) {
+        mayor = s;
+        mejor = v;
+      }
+    }
+    if (!mejor) return t;
+    donante.set(mejor.i, t.i);
+
+    if (mejor.texto === t.texto) {
+      intactas++;
+      // El texto es el mismo: todo vale. Pero la posición y el índice son los
+      // NUEVOS — si mandara la vieja, la toma apuntaría a un trozo de guion que ya
+      // no es el suyo.
+      return { ...mejor, ...t, plano: mejor.plano, audio: mejor.audio };
+    }
+
+    const heredado = {};
+    for (const campo of LO_VISUAL_SE_HEREDA) {
+      if (mejor[campo] !== undefined && mejor[campo] !== null) heredado[campo] = mejor[campo];
+    }
+    if (Object.keys(heredado).length) visuales++;
+    // `audio` NO entra: se cortó en unos límites que ya no existen.
+    return { ...t, ...heredado };
+  });
+
+  // LOS `reusa` SE REESCRIBEN O SE CAEN. Apuntan a un índice de toma, y al volver
+  // a partir el guion los índices se mueven: un `reusa: 12` conservado tal cual
+  // apuntaría a una toma que ahora cuenta otra cosa.
+  z.tomas = tomas.map((t) => {
+    if (!Number.isInteger(t.reusa)) return t;
+    const nuevo = donante.get(t.reusa);
+    return nuevo !== undefined && nuevo !== t.i ? { ...t, reusa: nuevo } : { ...t, reusa: null };
   });
   z.escenas = r.escenas;
-  return z.tomas.filter((t) => antes.has(t.texto)).length;
+  return { intactas, visuales, total: z.tomas.length };
+}
+
+/** Lo que sobrevivió a un reparto, en palabras. Ver `repartirConservando`. */
+function loSalvado(s) {
+  if (!s || (!s.intactas && !s.visuales)) return 'No había nada generado que conservar.';
+  const partes = [];
+  if (s.intactas) partes.push(`${s.intactas} conservan todo lo que tenían`);
+  if (s.visuales) partes.push(`${s.visuales} conservan su plano y su imagen, pero su voz hay que rehacerla`);
+  return `De ${s.total} tomas, ${partes.join(' y ')}.`;
 }
 
 function avisoDeGuion(donde, texto, extra = '') {
@@ -740,6 +841,41 @@ function cuentasDeFases() {
  * dice «todavía no», dice «aquí no pasa nada».
  * ─────────────────────────────────────────────────────────────────────────────
  */
+/**
+ * ¿Las tomas de esta pieza son las que saldrían de partir el guion AHORA?
+ *
+ * Devuelve 0 si sí, y el número de tomas que saldrían si no. Se compara por los
+ * LÍMITES en el guion, no por el texto: es la pregunta exacta —«¿este reparto
+ * sigue siendo el reparto?»— y la contesta igual si lo que cambió fue el guion,
+ * la configuración o las reglas del segmentador.
+ *
+ * Se memoriza por guion + configuración: se llama en cada repintado.
+ */
+let repartoMirado = { firma: '', caducadas: 0 };
+
+function tomasCaducadas(z) {
+  const guion = String(z?.guion || '');
+  if (!guion.trim() || !z?.tomas?.length) return 0;
+  const c = P.config.segmentacion;
+  const firma = `${z.id}·${guion.length}·${z.tomas.length}·${c.segundosMinimo}·${c.segundosObjetivo}·${c.segundosMaximo}·${c.caracteresPorSegundo}`;
+  if (repartoMirado.firma === firma) return repartoMirado.caducadas;
+
+  let caducadas = 0;
+  try {
+    const r = segmentarVerificado(guion, c);
+    // Se compara por el TEXTO de cada toma, no por sus límites: los límites pueden
+    // faltar en un proyecto guardado hace tiempo y el texto no falta nunca.
+    const forma = (l) => l.map((t) => String(t.texto || '')).join(' ');
+    caducadas = forma(r.tomas) === forma(z.tomas) ? 0 : r.tomas.length;
+  } catch {
+    // Un guion que ni siquiera se puede partir no es un reparto caducado: es otro
+    // problema, y lo dice su propio botón.
+    caducadas = 0;
+  }
+  repartoMirado = { firma, caducadas };
+  return caducadas;
+}
+
 function desgloseDeFases() {
   const t = pieza().tomas;
   const escenas = pieza().escenas;
@@ -752,9 +888,38 @@ function desgloseDeFases() {
   const heredadosVid = t.filter((x) => x.movimiento && x.heredadoVid).length;
   const repitenVid = t.filter((x) => x.movimiento && !x.heredadoVid && x.reusa !== null && x.reusa !== undefined).length;
 
+  // LAS TOMAS CADUCADAS, LO PRIMERO DE TODO.
+  //
+  // ─────────────────────────────────────────────────────────────────────────────
+  // «No entiendo qué es lo que estás arreglando, nada se arregla de lo que hace.
+  //  Ya redirigí todo prácticamente, igual siguen los mismos errores.»
+  //
+  // Y era verdad. Volver a dirigir NO vuelve a partir el guion: sus tomas seguían
+  // siendo las de antes de arreglar el segmentador, con dos párrafos dentro y
+  // cuarenta y nueve segundos de duración, y en la pantalla no había ni una
+  // palabra que lo dijera. Se puede arreglar el segmentador diez veces seguidas
+  // sin que cambie una sola toma de un episodio ya partido.
+  //
+  // Una toma fuera de 8-18 segundos SIN EXCUSA es la firma de un reparto viejo, y
+  // aquí sale la primera con el botón que lo arregla al lado.
+  // ─────────────────────────────────────────────────────────────────────────────
+  const caducadas = tomasCaducadas(pieza());
+
   // `porque` explica un total de cero: sin él, «0/0» y «aún no se puede» se ven
   // exactamente igual.
   return [
+    ...(caducadas
+      ? [{
+          que: 'Tomas caducadas',
+          hechas: 0,
+          total: t.length,
+          gratis: 0,
+          detalle: `partirlo ahora daría ${caducadas} tomas, no ${t.length}`,
+          ancla: 'lista-voz',
+          falta: 'Volver a partir',
+          hacer: 'b-segmentar',
+        }]
+      : []),
     { que: 'Narración', hechas: voz[2], total: voz[3], gratis: 0, ancla: 'lista-voz',
       porque: t.length ? '' : 'parte el guion en tomas primero' },
     {
@@ -1420,12 +1585,7 @@ accion(
     // Iba a la caja del paso 2 mientras el progreso escribía en la del 3, así que
     // arriba ponía «terminado» y abajo seguía poniendo «escribiendo el acto 4 de
     // 4…» para siempre. Un aviso que no se limpia solo es un aviso que miente.
-    avisoDeGuion(
-      'paso3',
-      texto,
-      ` ${r.tomas.length} tomas y ${r.escenas.length} escenas` +
-        (salvadas ? `, y ${salvadas} conservan lo que ya tenían generado.` : '.'),
-    );
+    avisoDeGuion('paso3', texto, ` ${r.tomas.length} tomas y ${r.escenas.length} escenas. ${loSalvado(salvadas)}`);
   },
   'paso3',
 );
@@ -1479,13 +1639,13 @@ accion(
     const r = segmentarVerificado(pieza().guion, P.config.segmentacion);
 
     // Por la misma función que el otro camino: ver `repartirConservando`.
-    repartirConservando(pieza(), r);
+    const salvadas = repartirConservando(pieza(), r);
     await guardar();
     pintarTodo();
     avisar(
       'guion',
       `${r.tomas.length} tomas en ${r.escenas.length} escenas. Cobertura exacta: ` +
-        `${r.cobertura.caracteres} caracteres, sin perder ni duplicar nada.`,
+        `${r.cobertura.caracteres} caracteres, sin perder ni duplicar nada. ${loSalvado(salvadas)}`,
       'bueno',
     );
   },

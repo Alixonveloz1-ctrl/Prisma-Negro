@@ -195,9 +195,7 @@ export function heredables(tomas, piezasAnteriores, reparto = null) {
   // cuatro peritos distintos. Dentro de un episodio la persona es la misma; lo
   // que rota es de un episodio al siguiente.
   const elegidas = new Map();
-  const elegir = (mapa, clave) => {
-    if (!clave || !mapa.has(clave)) return null;
-    const marca = `${mapa === porArquetipo ? 'personaje' : 'recurso'}:${clave}`;
+  const primeraDe = (mapa, clave, marca) => {
     if (elegidas.has(marca)) return elegidas.get(marca);
     const v = elegirVariante({
       clave: marca,
@@ -207,6 +205,45 @@ export function heredables(tomas, piezasAnteriores, reparto = null) {
       pieza: reparto?.pieza || '',
     });
     elegidas.set(marca, v);
+    return v;
+  };
+
+  // UNA PERSONA POR EPISODIO; UN SITIO, NO.
+  //
+  // ─────────────────────────────────────────────────────────────────────────────
+  // «Se siguen generando imágenes cuatro veces seguidas, la misma imagen, y el
+  //  diálogo de esa imagen ni siquiera tiene nada que ver con lo que está
+  //  narrando.»
+  //
+  // Las dos claves de catálogo se resolvían igual: se elegía UNA versión para todo
+  // el episodio y se la ponía a todas las tomas que pidieran esa clave. Para el
+  // perito es lo correcto —dentro de un episodio la persona es la misma— y para un
+  // sitio es exactamente el fallo: seis tomas que contaban seis cosas distintas
+  // —la tarjeta micro-SD, los contactos de cobre, el escáner girando— acababan con
+  // LA MISMA FOTOGRAFÍA, y encima teniendo tres versiones guardadas sin usar.
+  // Reproducido: seis tomas, una sola clave.
+  //
+  // Ahora cada PLANO DISTINTO que pide el mismo recurso se lleva una versión
+  // distinta, en orden y dando la vuelta. Dos tomas del mismo plano sí comparten
+  // versión: eso es un plano repetido a propósito, que es otra cosa.
+  // ─────────────────────────────────────────────────────────────────────────────
+  const porPlano = new Map();
+  const elegirPersona = (clave) => {
+    if (!clave || !porArquetipo.has(clave)) return null;
+    return primeraDe(porArquetipo, clave, `personaje:${clave}`);
+  };
+  const elegirSitio = (clave, huella) => {
+    if (!clave || !porRecurso.has(clave)) return null;
+    const marca = `recurso:${clave}`;
+    const lista = porRecurso.get(clave);
+    const primera = primeraDe(porRecurso, clave, marca);
+    if (!primera) return null;
+    if (!porPlano.has(marca)) porPlano.set(marca, new Map());
+    const vistos = porPlano.get(marca);
+    if (vistos.has(huella)) return vistos.get(huella);
+    const desde = Math.max(0, lista.indexOf(primera));
+    const v = lista[(desde + vistos.size) % lista.length];
+    vistos.set(huella, v);
     return v;
   };
 
@@ -220,24 +257,66 @@ export function heredables(tomas, piezasAnteriores, reparto = null) {
     // haya redactado el lugar en este episodio. Es la resolución que de verdad
     // ahorra, porque no depende de que dos textos coincidan.
     const dela =
-      elegir(porArquetipo, String(t.personaje || t.plano?.personaje || '').trim().toLowerCase()) ||
-      elegir(porRecurso, String(t.recurso || t.plano?.recurso || '').trim().toLowerCase());
+      elegirPersona(String(t.personaje || t.plano?.personaje || '').trim().toLowerCase()) ||
+      elegirSitio(String(t.recurso || t.plano?.recurso || '').trim().toLowerCase(), huellaLarga(t));
 
     if (!t.heredadoVid && t.video !== 'ok') {
       const c = dela?.vid ? { ...dela, clave: dela.vid } : clips.get(k);
-      if (c) salida.push({ i: t.i, de: c, tipo: 'vid' });
+      if (c) salida.push({ i: t.i, de: c, tipo: 'vid', huella: huellaLarga(t) });
     }
     if (!t.heredado && t.imagen !== 'ok') {
       const g = dela?.img ? { ...dela, clave: dela.img } : imagenes.get(k);
-      if (g) salida.push({ i: t.i, de: g, tipo: 'img' });
+      if (g) salida.push({ i: t.i, de: g, tipo: 'img', huella: huellaLarga(t) });
     }
   }
 
+  // Y LA RED DE SEGURIDAD: NADA HEREDADO CAE EN DOS TOMAS SEGUIDAS.
+  //
+  // La rotación de arriba arregla el caso normal, pero no todos: un recurso con una
+  // sola versión guardada, o dos tomas seguidas que casan por la huella del plano
+  // —que solo mira lugar, encuadre y luz, no lo que se cuenta—, vuelven a poner la
+  // misma imagen dos veces seguidas.
+  //
+  // Dos tomas seguidas con LA MISMA huella sí la comparten: es un plano repetido a
+  // propósito, y el montaje las funde en un solo plano. Lo que se corta es la misma
+  // imagen ilustrando dos cosas distintas. La toma que se queda sin heredar se
+  // genera, y sí, eso se paga: una imagen correcta pagada vale más que una gratis
+  // que no tiene nada que ver con lo que se está narrando.
+  const quitar = new Set();
+  for (const tipo of ['img', 'vid']) {
+    const suyas = salida.filter((x) => x.tipo === tipo).sort((a, b) => a.i - b.i);
+    for (let n = 1; n < suyas.length; n++) {
+      const previa = suyas[n - 1];
+      const x = suyas[n];
+      if (x.i !== previa.i + 1) continue;
+      if (x.de.clave !== previa.de.clave) continue;
+      if (x.huella && x.huella === previa.huella) continue;
+      quitar.add(x);
+    }
+  }
+  const limpia = salida.filter((x) => !quitar.has(x));
+  limpia.repetidasEvitadas = quitar.size;
+
   // Lo elegido se devuelve aparte para que quien llama lo ANOTE en el registro:
   // sin anotarlo, el episodio siguiente no sabría a quién no puede repetir.
-  salida.reparto = Object.fromEntries([...elegidas].filter(([, v]) => v).map(([m, v]) => [m, v.id]));
-  return salida;
+  limpia.reparto = Object.fromEntries([...elegidas].filter(([, v]) => v).map(([m, v]) => [m, v.id]));
+  return limpia;
 }
+
+/**
+ * La huella LARGA: lo que de verdad distingue una toma de otra a los ojos.
+ *
+ * `huellaDePlano` solo mira lugar, encuadre y luz, y eso es a propósito —es lo que
+ * permite reconocer el mismo plano redactado de dos maneras—. Pero para decidir si
+ * dos tomas seguidas pueden compartir imagen hace falta lo contrario: mirar QUÉ SE
+ * VE. Dos tomas en el mismo laboratorio, una del microscopio y otra de la tarjeta
+ * corroída, tienen la misma huella corta y no son el mismo plano.
+ */
+const huellaLarga = (t) =>
+  [t.plano?.lugar, t.plano?.encuadre, t.plano?.luz, t.plano?.descripcion, (t.plano?.sujetos || []).join('|')]
+    .map((x) => String(x || '').trim().toLowerCase())
+    .filter(Boolean)
+    .join(' · ');
 
 const huellaDePlano = (t) =>
   [t.plano?.lugar, t.plano?.encuadre, t.plano?.luz]

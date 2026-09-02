@@ -4144,6 +4144,117 @@ export const invariantes = [
   },
 
   {
+    nombre: 'la-misma-imagen-del-archivo-no-cae-en-dos-tomas-seguidas',
+    dice: 'La misma imagen en cuatro tomas seguidas, y contando cada una otra cosa: la tarjeta micro-SD, los contactos de cobre, el escáner girando trescientos sesenta grados — las tres con la misma fotografía de una mujer con una carpeta. Las dos claves de catálogo se resolvían igual: se elegía UNA versión para todo el episodio y se le ponía a todas las tomas que pidieran esa clave. Para el perito es lo correcto —dentro de un episodio la persona es la misma— y para un sitio es exactamente el fallo, porque un sitio no es una persona. Encima había tres versiones guardadas sin usar. Ahora cada plano distinto que pide el mismo recurso se lleva una versión distinta, y ninguna imagen heredada cae en dos tomas seguidas que no sean el mismo plano.',
+    comprobar(ctx) {
+      const { heredables } = ctx.fn;
+      const fallos = [];
+      const reparto = { historial: {}, orden: [], pieza: 'ep' };
+
+      const conVersiones = (n) => ({
+        id: 'biblioteca',
+        titulo: 'Archivo',
+        tomas: Array.from({ length: n }, (_, k) => ({
+          i: k,
+          recurso: 'laboratorio forense',
+          variante: `v${k + 1}`,
+          imagen: 'ok',
+          video: 'ok',
+          plano: { lugar: `laboratorio ${k}`, encuadre: `enc ${k}`, luz: `luz ${k}`, recurso: 'laboratorio forense' },
+        })),
+      });
+
+      // Seis tomas seguidas del mismo recurso, contando seis cosas distintas.
+      const seis = Array.from({ length: 6 }, (_, i) => ({
+        i,
+        recurso: 'laboratorio forense',
+        imagen: null,
+        video: null,
+        plano: {
+          lugar: `sitio ${i}`, encuadre: `encuadre ${i}`, luz: `luz ${i}`,
+          recurso: 'laboratorio forense', descripcion: `lo que se ve en la toma ${i}`,
+        },
+      }));
+
+      // 1 · Con tres versiones guardadas, se usan las tres y ninguna se repite seguida.
+      const tres = heredables(seis, [conVersiones(3)], reparto).filter((x) => x.tipo === 'img');
+      const distintas = new Set(tres.map((x) => x.de.clave)).size;
+      if (distintas < 3) {
+        fallos.push(
+          `Seis tomas del mismo recurso salen con ${distintas} imagen(es) distinta(s) ` +
+            'teniendo tres guardadas: la biblioteca se usa a un tercio.',
+        );
+      }
+      for (let n = 1; n < tres.length; n++) {
+        if (tres[n].i === tres[n - 1].i + 1 && tres[n].de.clave === tres[n - 1].de.clave) {
+          fallos.push(`Las tomas ${tres[n - 1].i} y ${tres[n].i} van seguidas con la misma imagen.`);
+        }
+      }
+
+      // 2 · Con UNA sola versión, no se reparte la misma cuatro veces: se hereda una
+      // y las demás se generan. Una imagen correcta pagada vale más que una gratis
+      // que no tiene nada que ver con lo que se narra.
+      const una = heredables(seis, [conVersiones(1)], reparto).filter((x) => x.tipo === 'img');
+      const seguidas = una.filter((x, n) => n && x.i === una[n - 1].i + 1 && x.de.clave === una[n - 1].de.clave);
+      if (seguidas.length) {
+        fallos.push(`Con una sola versión guardada, ${seguidas.length} tomas seguidas comparten imagen.`);
+      }
+
+      // 3 · Y LO QUE SÍ SE COMPARTE SE COMPARTE. Dos tomas seguidas con el MISMO
+      // plano son un plano repetido a propósito —el montaje las funde en uno— y
+      // tienen que seguir heredando las dos: si no, esto ahorra dejando de ahorrar.
+      const mismoPlano = { lugar: 'el mismo sitio', encuadre: 'el mismo', luz: 'la misma', recurso: 'laboratorio forense', descripcion: 'lo mismo' };
+      const gemelas = [0, 1].map((i) => ({ i, recurso: 'laboratorio forense', imagen: null, video: null, plano: { ...mismoPlano } }));
+      const dos = heredables(gemelas, [conVersiones(3)], reparto).filter((x) => x.tipo === 'img');
+      if (dos.length !== 2) {
+        fallos.push(`Dos tomas seguidas del MISMO plano heredan ${dos.length}: se deja de ahorrar donde sí se debe.`);
+      } else if (dos[0].de.clave !== dos[1].de.clave) {
+        fallos.push('Dos tomas seguidas del mismo plano reciben imágenes distintas: eran el mismo plano.');
+      }
+
+      // 4 · La persona SÍ es una por episodio: la cara del perito no cambia a mitad.
+      const perito = Array.from({ length: 4 }, (_, i) => ({
+        i: i * 2,
+        personaje: 'perito forense',
+        imagen: null,
+        video: null,
+        plano: { lugar: `sitio ${i}`, encuadre: `enc ${i}`, luz: `luz ${i}`, personaje: 'perito forense', descripcion: `declara ${i}` },
+      }));
+      const elenco = {
+        id: 'biblioteca',
+        titulo: 'Archivo',
+        tomas: [0, 1, 2].map((k) => ({
+          i: k, personaje: 'perito forense', variante: `p${k}`, imagen: 'ok',
+          plano: { lugar: 'laboratorio', encuadre: `e${k}`, luz: 'fria', personaje: 'perito forense' },
+        })),
+      };
+      const caras = new Set(
+        heredables(perito, [elenco], reparto).filter((x) => x.tipo === 'img').map((x) => x.de.clave),
+      );
+      if (caras.size > 1) {
+        fallos.push(`El perito cambia de cara dentro del episodio: ${caras.size} caras distintas.`);
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: una sola versión por clave para todo el episodio, sin
+    // mirar si dos tomas seguidas acaban con la misma imagen.
+    //
+    // VA POR EL CONTEXTO: la comprobación EJECUTA `heredables`.
+    romper: (ctx) =>
+      conFuncion(ctx, 'heredables', (tomas, anteriores, reparto) => {
+        const r = ctx.fn.heredables(tomas, anteriores, reparto);
+        const primera = new Map();
+        const salida = r.map((x) => {
+          const clave = `${x.tipo}·${tomas.find((t) => t.i === x.i)?.recurso || ''}`;
+          if (!primera.has(clave)) primera.set(clave, x.de);
+          return { ...x, de: primera.get(clave) };
+        });
+        salida.reparto = r.reparto;
+        return salida;
+      }),
+  },
+
+  {
     nombre: 'el-techo-no-premia-juntarlo-todo-en-una-toma',
     dice: 'Una toma de CUARENTA Y NUEVE SEGUNDOS con dos párrafos enteros dentro: una imagen fija durante casi un minuto, que es lo contrario de lo que la regla de los ocho a dieciocho existe para conseguir. El castigo de pasarse del techo tenía una parte FIJA —«1e4 + el exceso al cuadrado»— que se pagaba por cada toma pasada. Cuando ningún reparto conseguía respetar el techo, dos tomas pasadas costaban dos veces esa parte fija y una sola costaba una, así que al segmentador le salía más barato meterlo TODO en una toma. Ahora el exceso se paga al cuadrado y sin parte fija: partir siempre sale más barato que acumular.',
     comprobar(ctx) {

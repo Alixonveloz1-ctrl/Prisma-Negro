@@ -2128,8 +2128,19 @@ export const invariantes = [
       //  uno conservaba: el otro hacía `tomas = r.tomas` a secas y dejaba
       //  doscientas cuatro locuciones pagadas sin enlazar con nada. Se cuentan,
       //  como el aviso: «hay al menos uno» ya falló una vez por esto mismo.
-      const reparten = (main.match(/segmentarVerificado\(/g) || []).length;
-      const conservan = (main.match(/repartirConservando\(/g) || []).length - 1; // menos su definición
+      //
+      // EL MIRÓN NO CUENTA, y su exclusión va con candado. `tomasCaducadas` parte
+      // el guion SOLO para comparar el reparto de ahora con el guardado —es lo que
+      // avisa de que las tomas son de un reparto viejo— y no escribe ni una toma.
+      // Contarlo como camino daría un fallo falso; excluirlo sin comprobar que de
+      // verdad no escribe abriría un agujero por el que cabe el fallo de verdad.
+      const miron = /\n {0,2}function tomasCaducadas\([\s\S]*?\n}\n/.exec(main)?.[0] || '';
+      if (miron && /\.tomas\s*=[^=]/.test(miron)) {
+        fallos.push('`tomasCaducadas` escribe tomas: entonces no es un mirón y tiene que conservar lo pagado.');
+      }
+      const escribiendo = miron ? main.replace(miron, '\n') : main;
+      const reparten = (escribiendo.match(/segmentarVerificado\(/g) || []).length;
+      const conservan = (escribiendo.match(/repartirConservando\(/g) || []).length - 1; // menos su definición
       if (!reparten) fallos.push('No se encuentra dónde se reparte el guion en tomas.');
       else if (conservan < reparten) {
         fallos.push(`${reparten} caminos reparten el guion y solo ${conservan} conservan lo pagado.`);
@@ -2148,6 +2159,114 @@ export const invariantes = [
     romper: (ctx) =>
       editando(ctx, 'app/main.js', (t) =>
         t.replace('function pintarCuentasFase() {\n  pintarDesglose();', 'function pintarCuentasFase() {'),
+      ),
+  },
+
+  {
+    nombre: 'un-reparto-caducado-se-ve-y-se-arregla-sin-perder-lo-pagado',
+    dice: '«No entiendo qué es lo que estás arreglando, nada se arregla de lo que hace. Ya redirigí todo prácticamente, igual siguen los mismos errores.» Y era verdad: volver a dirigir NO vuelve a partir el guion, así que un episodio partido con las reglas viejas se queda con sus tomas de cuarenta y nueve segundos por mucho que se arregle el segmentador — y en pantalla no había ni una palabra que lo dijera. Tres rondas de «arreglado» sin que cambiara una sola toma. Encima volver a partir emparejaba por TEXTO EXACTO, y cuando cambian las reglas ninguna toma nueva tiene el texto de ninguna vieja: volver a partir tiraba el episodio entero, así que no se podía volver a partir. Ahora el desglose canta el reparto caducado con su botón, y el reparto nuevo hereda por SOLAPE en el guion lo visual ya pagado.',
+    async comprobar(ctx) {
+      const { humoDeLaPantalla, proyectoYaEmpezado } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+      const fallos = [];
+
+      // Un guion de párrafos cortos partido CON LAS REGLAS VIEJAS: un párrafo, una
+      // toma. Es exactamente la forma del episodio que se quedó atascado.
+      const parrafos = [
+        'La llamada entró a las nueve y diez de la mañana, con una voz tranquila.',
+        'No dio su nombre.',
+        'Dijo que había encontrado algo en el terreno de atrás, entre los robles.',
+        'El roble se taló esa misma tarde y nadie preguntó por qué lo hicieron.',
+        'A los cuarenta centímetros apareció el primer botón, cosido con hilo azul.',
+      ];
+      const guion = `## El aviso\n\n${parrafos.join('\n\n')}`;
+      const viejo = () => {
+        const p = proyectoYaEmpezado();
+        const z = p.piezas[0];
+        z.guion = guion;
+        let cursor = guion.indexOf(parrafos[0]);
+        z.tomas = parrafos.map((texto, i) => {
+          const inicio = guion.indexOf(texto, cursor);
+          cursor = inicio + texto.length;
+          return {
+            i, escena: 0, texto,
+            segundos: +(texto.length / 14.5).toFixed(2),
+            inicioEnGuion: inicio, finEnGuion: cursor,
+            plano: { encuadre: 'general', lugar: 'el bosque', luz: 'amanecer', sujetos: [], descripcion: `lo de la toma ${i}` },
+            tipoImagen: 'reconstruccion',
+            imagen: 'ok', audio: 'ok', video: null, movimiento: false, reusa: null, fichas: [0],
+          };
+        });
+        z.escenas = [{ n: 0, titulo: 'El aviso', inicioEnGuion: 0 }];
+        return p;
+      };
+
+      // ── 1 · LA PANTALLA LO CANTA ──────────────────────────────────────────
+      const antes = await humoDeLaPantalla({ parche, proyecto: viejo() });
+      fallos.push(...antes.fallos);
+      const desglose = antes.textoDentro('desglose');
+      if (!/caducad/i.test(desglose)) {
+        fallos.push(
+          'Con las tomas de un reparto viejo, el desglose no dice nada: se puede arreglar el ' +
+            'segmentador diez veces sin que cambie una sola toma y sin enterarse.',
+        );
+      }
+      // El desglose se pinta con `innerHTML`, así que sus botones se miran en el
+      // HTML: `botonesDe` solo ve los que la aplicación cuelga con appendChild.
+      if (!/<button[^>]*>Volver a partir<\/button>/.test(desglose)) {
+        fallos.push('El desglose avisa del reparto caducado pero no ofrece arreglarlo.');
+      }
+      // Y el botón tiene que llevar AL SITIO, no a mirar una lista.
+      const main0 = fuente(ctx, 'app/main.js');
+      if (!/que: 'Tomas caducadas'[\s\S]{0,400}hacer: 'b-segmentar'/.test(main0)) {
+        fallos.push('El botón del reparto caducado no vuelve a partir el guion: solo lleva a mirar.');
+      }
+
+      // ── 2 · Y AL ARREGLARLO NO SE PIERDE LO PAGADO ────────────────────────
+      const tras = await humoDeLaPantalla({ parche, proyecto: viejo(), pulsa: ['b-segmentar'] });
+      fallos.push(...tras.fallos);
+      const dijo = tras.textoDentro('aviso-guion');
+      if (!/tomas/.test(dijo)) {
+        fallos.push(`Partir en tomas no dice cómo quedó: «${dijo.slice(0, 90)}»`);
+      }
+      if (!/conservan su plano y su imagen/.test(dijo)) {
+        fallos.push(
+          `Volver a partir no conserva lo visual pagado: «${dijo.slice(0, 160)}». Con las reglas ` +
+            'nuevas ningún texto coincide, así que emparejar por texto exacto tira el episodio entero.',
+        );
+      }
+      // Y una vez partido, ya no está caducado: si siguiera diciéndolo, el aviso
+      // sería ruido y se aprendería a ignorarlo.
+      if (/caducad/i.test(tras.textoDentro('desglose'))) {
+        fallos.push('Después de volver a partir el desglose sigue diciendo que el reparto está caducado.');
+      }
+
+      // ── 3 · EL PRESERVADOR NOMBRA LO QUE SALVA ────────────────────────────
+      // La lista está en el código con nombre para poder mirarla: cada campo que
+      // falte de ahí es material pagado que se tira sin que nadie lo note.
+      const main = fuente(ctx, 'app/main.js');
+      const lista = /const LO_VISUAL_SE_HEREDA = \[([\s\S]*?)\];/.exec(main)?.[1] || '';
+      for (const campo of ['plano', 'imagen', 'video', 'heredado', 'heredadoVid', 'movimiento']) {
+        if (!new RegExp(`'${campo}'`).test(lista)) {
+          fallos.push(`«${campo}» no sobrevive a un reparto nuevo: es material pagado que se tira.`);
+        }
+      }
+      // Y la voz NO: se cortó en unos límites que ya no existen.
+      if (/'audio'/.test(lista)) {
+        fallos.push('La voz se conserva al cambiar los límites de la toma: sonaría cortada por otro sitio.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: emparejando por texto exacto. Cuando cambian las reglas
+    // del reparto no coincide ni una, y el episodio entero se queda sin nada.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace(
+          '    if (mejor.texto === t.texto) {',
+          '    if (mejor.texto !== t.texto) return t;\n    if (mejor.texto === t.texto) {',
+        ),
       ),
   },
 ];

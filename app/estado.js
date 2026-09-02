@@ -376,6 +376,24 @@ function sanearToma(bruto, i, proyecto) {
     // estimación, y el modelo de datos lo dice: `medida` es el campo que manda.
     segundos: Number(t.segundos) || 0,
     medida: t.medida === true,
+    // DÓNDE EMPIEZA Y DÓNDE ACABA DENTRO DEL GUION.
+    //
+    // ─────────────────────────────────────────────────────────────────────────
+    // El segmentador los pone en cada toma y `sanearToma` los tiraba: esta lista
+    // es blanca, y lo que no está aquí se borra en CADA carga del proyecto.
+    //
+    // Sin ellos, una toma guardada no sabe de qué trozo del guion salió, y eso
+    // rompe dos cosas caras: no se puede saber si el reparto guardado sigue
+    // siendo el que saldría de partir el guion hoy —que es lo que avisa de las
+    // tomas caducadas—, y al volver a partir no hay forma de heredar el plano y
+    // la imagen ya pagados más que por texto EXACTO, que no coincide nunca
+    // cuando lo que cambió fueron las reglas del reparto.
+    //
+    // Es el mismo fallo que `heredado`: un campo que el código pone, la lista
+    // blanca no nombra, y desaparece en silencio al recargar.
+    // ─────────────────────────────────────────────────────────────────────────
+    inicioEnGuion: Number.isInteger(t.inicioEnGuion) ? t.inicioEnGuion : null,
+    finEnGuion: Number.isInteger(t.finEnGuion) ? t.finEnGuion : null,
     // La ficha de dirección: encuadre, movimiento de cámara, lugar, luz, quién sale.
     plano: t.plano || null,
     // Estado de cada pieza generada.
