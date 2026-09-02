@@ -1516,8 +1516,17 @@ export const invariantes = [
       // Se busca en TODAS las piezas del proyecto menos esta.
       const i = main.indexOf("'b-reutilizar',");
       const cuerpo = main.slice(i, main.indexOf('\nfunction ', i));
-      if (!/P\.piezas\.filter\(\(x\) => x\.id !== z\.id\)/.test(cuerpo)) {
+      // Se mira que salga de TODAS las piezas y que lo único que excluya sea ella
+      // misma. Antes se exigía la expresión letra por letra, y eso convertía
+      // cualquier condición añadida —filtrar por formato, por ejemplo— en un fallo
+      // falso. Lo que esta invariante defiende es el ALCANCE, no la redacción.
+      if (!/P\.piezas\.filter\(/.test(cuerpo) || !/x\.id !== z\.id/.test(cuerpo)) {
         fallos.push('La reutilización solo mira los casos de los que este desciende.');
+      }
+      // Anclado a la LLAMADA, no a la palabra: el comentario que hay ahí explica
+      // por qué NO se usa la ascendencia, y buscarla suelta cazaba ese comentario.
+      if (/ascendencia\(/.test(cuerpo)) {
+        fallos.push('La reutilización vuelve a limitarse a la ascendencia: fuera queda el banco que la hace viable.');
       }
       if (/estado\.ascendencia\(P, z\);\s*\n\s*if \(!padres\.length\)/.test(cuerpo)) {
         fallos.push('Sigue exigiendo que esta pieza sea continuación de otra.');
@@ -1529,9 +1538,13 @@ export const invariantes = [
       }
       return fallos;
     },
+    // Se rompe volviendo a limitarlo a la ascendencia, que es como estaba.
     romper: (ctx) =>
       editando(ctx, 'app/main.js', (t) =>
-        t.replace('const otras = P.piezas.filter((x) => x.id !== z.id);', 'const otras = estado.ascendencia(P, z);'),
+        t.replace(
+          'const otras = P.piezas.filter((x) => x.id !== z.id && aspectoDeLaPieza(x) === suAspecto);',
+          'const otras = estado.ascendencia(P, z);',
+        ),
       ),
   },
 
@@ -3897,7 +3910,8 @@ export const invariantes = [
         }
         if (enCatalogo.aprobada !== true) fallos.push('Lo guardado entra sin visto bueno: no podría pasar a clip.');
       }
-      const z = sincronizarBiblioteca({ tomas: [] }, [e]);
+      // Con su formato: una entrada solo entra en la biblioteca de su formato.
+      const z = sincronizarBiblioteca({ tomas: [] }, [e], '16:9');
       const tras = z.tomas.find((t) => t.clave === e.clave);
       if (!tras || tras.imagen !== 'ok') fallos.push('Sincronizar el archivo se lleva por delante lo guardado.');
       // Y el índice de lo de fábrica NO se mueve al añadir: si se moviera, todo lo
@@ -4141,6 +4155,78 @@ export const invariantes = [
     },
     // Se rompe como estaba: la duración más cercana a la toma.
     romper: (ctx) => conFuncion(ctx, 'duracionQueSePide', () => 4),
+  },
+
+  {
+    nombre: 'cada-formato-tiene-su-biblioteca-y-no-se-pisan',
+    dice: 'La biblioteca entera —141 imágenes y sus clips— se generó en 9:16 antes de caer en que el canal es de vídeo largo y va en 16:9. El montaje NO pone barras: agranda hasta llenar el ancho y recorta el centro, así que una imagen vertical en un episodio horizontal pierde dos tercios del alto, y nada avisaba porque una entrada del archivo no guardaba en qué formato se generó. Peor: las claves del material salen del id de la pieza —`biblioteca/t000/img`—, así que generar el catálogo en 16:9 habría escrito ENCIMA de las verticales ya pagadas. Ahora hay una biblioteca por formato, con su propio id, y un episodio solo hereda de la suya.',
+    comprobar(ctx) {
+      const { sincronizarBiblioteca, sincronizarEnSitio, entradaDeArchivo, idBiblioteca, aspectoPieza } = ctx.fn;
+      const fallos = [];
+
+      // 1 · DOS BIBLIOTECAS, DOS SITIOS. Es lo que impide que una pise a la otra.
+      const vertical = sincronizarBiblioteca({ tomas: [] }, [], '9:16');
+      const ancha = sincronizarBiblioteca({ tomas: [] }, [], '16:9');
+      if (vertical.id === ancha.id) {
+        fallos.push(`Las dos bibliotecas comparten id (${vertical.id}): la de 16:9 escribiría encima de la de 9:16.`);
+      }
+      // Y la vertical conserva el id de siempre: sus imágenes ya están guardadas
+      // ahí y en el almacén no hay renombrar.
+      if (vertical.id !== 'biblioteca') {
+        fallos.push(`La biblioteca vertical cambia de id a «${vertical.id}»: sus 141 imágenes dejarían de encontrarse.`);
+      }
+      if (idBiblioteca('16:9') === idBiblioteca('9:16')) {
+        fallos.push('`idBiblioteca` da el mismo sitio para los dos formatos.');
+      }
+
+      // 2 · SIN FORMATO PEDIDO, NO SE CONVIERTE NADA. Sincronizar es poner al día
+      // una biblioteca, no cambiarla de formato por descuido.
+      if (aspectoPieza(sincronizarBiblioteca(vertical, [])) !== '9:16') {
+        fallos.push('Sincronizar sin pedir formato convierte la biblioteca: la vertical pasaría a apuntar a otro sitio.');
+      }
+
+      // 3 · Y LAS DOS CONVIVEN EN EL PROYECTO. Cambiar el canal a 16:9 no puede
+      // hacer desaparecer las ciento veintiséis verticales ya pagadas.
+      const piezas = [];
+      sincronizarEnSitio(piezas, [], '9:16');
+      sincronizarEnSitio(piezas, [], '16:9');
+      const bibliotecas = piezas.filter((z) => z.esBiblioteca);
+      if (bibliotecas.length !== 2) {
+        fallos.push(`Con los dos formatos quedan ${bibliotecas.length} biblioteca(s): una se llevó a la otra por delante.`);
+      }
+      // Y volver a sincronizar la de 9:16 no toca la de 16:9.
+      sincronizarEnSitio(piezas, [], '9:16');
+      if (piezas.filter((z) => z.esBiblioteca).length !== 2) {
+        fallos.push('Sincronizar una biblioteca se lleva la del otro formato.');
+      }
+
+      // 4 · UNA ENTRADA GUARDADA SABE DE QUÉ FORMATO ES, y solo entra en la suya.
+      const toma = {
+        i: 0,
+        imagen: 'ok',
+        personaje: 'perito forense',
+        plano: { lugar: 'el laboratorio', encuadre: 'medio', luz: 'fria', personaje: 'perito forense', descripcion: 'x' },
+      };
+      const enAncha = entradaDeArchivo(toma, { pieza: 'p01', tomas: [toma], propios: [], aspecto: '16:9' });
+      if (enAncha.aspecto !== '16:9') {
+        fallos.push(`Una entrada guardada no dice su formato (${JSON.stringify(enAncha.aspecto)}).`);
+      }
+      const dentro = (z) => (z.tomas || []).some((t) => t.clave === enAncha.clave);
+      if (!dentro(sincronizarBiblioteca({ tomas: [] }, [enAncha], '16:9'))) {
+        fallos.push('Una entrada de 16:9 no entra en la biblioteca de 16:9.');
+      }
+      if (dentro(sincronizarBiblioteca({ tomas: [] }, [enAncha], '9:16'))) {
+        fallos.push('Una entrada de 16:9 entra en la biblioteca vertical: se recortaría al centro sin avisar.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: un solo id de biblioteca para todos los formatos, que
+    // es lo que habría escrito la de 16:9 encima de las 141 verticales.
+    romper: (ctx) =>
+      conFuncion(ctx, 'sincronizarBiblioteca', (pieza, propios, aspecto) => ({
+        ...ctx.fn.sincronizarBiblioteca(pieza, propios, aspecto),
+        id: 'biblioteca',
+      })),
   },
 
   {

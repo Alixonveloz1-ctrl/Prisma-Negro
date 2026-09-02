@@ -607,6 +607,9 @@ export const invariantes = [
           id: ID_BIBLIOTECA,
           titulo: 'Biblioteca del canal',
           esBiblioteca: true,
+          // Del formato del canal: hay una biblioteca por formato y la pantalla
+          // enseña la del formato en el que se está trabajando.
+          aspecto: '16:9',
           escenas: [{ n: 0, titulo: 'Recursos' }, { n: 1, titulo: 'Reparto' }],
           tomas: [
             // Un sitio ya generado y sin mirar; un perito aprobado; otro generado y

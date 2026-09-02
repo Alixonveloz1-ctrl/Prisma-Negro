@@ -81,6 +81,39 @@ export const SEGUNDOS_DE_CLIP = 8;
 /** La pieza de la biblioteca se llama así y no cambia nunca. */
 export const ID_BIBLIOTECA = 'biblioteca';
 
+/**
+ * UNA BIBLIOTECA POR FORMATO, y basta con darle otro id a la pieza.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Las claves del material salen del id de la pieza —`biblioteca/t000/img`—, así
+ * que dos ids son dos bibliotecas, guardadas en sitios distintos, sin tocar la
+ * gramática de claves ni una sola llamada.
+ *
+ * Hace falta porque el montaje NO pone barras: agranda hasta llenar el ancho y
+ * recorta el centro. Una imagen vertical en un episodio horizontal pierde dos
+ * tercios del alto. Y sin ids separados, generar el catálogo en 16:9 escribiría
+ * encima de las 141 imágenes verticales ya pagadas.
+ *
+ * EL 9:16 NO LLEVA SUFIJO. Sus imágenes ya están guardadas en `biblioteca/…` y en
+ * el almacén no hay renombrar: ponerles sufijo ahora sería tirarlas.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export const idBiblioteca = (aspecto) => (aspecto === '16:9' ? `${ID_BIBLIOTECA}-16x9` : ID_BIBLIOTECA);
+
+/** El formato de un proyecto, en la forma en que lo entienden las claves. */
+export const aspectoDe = (config) => (config?.formato?.vertical ? '9:16' : '16:9');
+
+/**
+ * El formato de lo que ya está guardado.
+ *
+ * Sin campo, 9:16: TODO lo que existe hoy —las 141 del catálogo y las guardadas
+ * desde un episodio— se generó antes de que este campo existiera y antes de pasar
+ * el canal a 16:9. Es una suposición, y por eso se escribe aquí y no escondida en
+ * un `|| '9:16'` suelto por ahí.
+ */
+export const aspectoPieza = (z) => (z?.aspecto === '16:9' ? '16:9' : '9:16');
+export const aspectoDeEntrada = (p) => (p?.aspecto === '16:9' ? '16:9' : '9:16');
+
 /** `perito` + `v3` → `personaje:perito:v3`. La clave que ata una toma a su entrada. */
 export const claveDePersona = (arquetipo, variante) => `personaje:${arquetipo}:${variante}`;
 export const claveDeRecurso = (recurso, variante) => `recurso:${recurso}:${variante}`;
@@ -152,7 +185,7 @@ export function nombreDeArchivoPara(toma) {
 }
 
 /** Una entrada de archivo hecha desde una toma ya generada de un episodio. */
-export function entradaDeArchivo(toma, { nombre = '', pieza, tomas, propios = [] }) {
+export function entradaDeArchivo(toma, { nombre = '', pieza, tomas, propios = [], aspecto = '16:9' }) {
   if (toma?.imagen !== 'ok') throw new Error('Esa toma todavía no tiene imagen que guardar.');
   // La que ya viene del archivo no se vuelve a guardar: sería la misma imagen dos
   // veces, ocupando dos sitios en la rotación de su papel.
@@ -177,6 +210,10 @@ export function entradaDeArchivo(toma, { nombre = '', pieza, tomas, propios = []
     heredado: claveFotograma(pieza, toma, tomas),
     // El clip se lleva con la imagen, si lo tiene y le corresponde.
     heredadoVid: clipVigente(toma, tomas) ? claveClip(pieza, toma, tomas) : null,
+    // EN QUÉ FORMATO SE GENERÓ. Un episodio solo hereda de las de su formato: el
+    // montaje no pone barras, agranda y recorta el centro, así que una imagen
+    // vertical en un episodio horizontal pierde dos tercios del alto.
+    aspecto: aspecto === '9:16' ? '9:16' : '16:9',
     desde: pieza,
     cuando: Date.now(),
   };
@@ -464,9 +501,15 @@ export function huellaDePlano(plano, encargo = ENCARGO_DEL_CANAL) {
  * y no de la pantalla: en la pantalla no se podía ni comprobar.
  * ─────────────────────────────────────────────────────────────────────────────
  */
-export function sincronizarEnSitio(piezas, propios = []) {
-  const previa = (piezas || []).find((z) => z.esBiblioteca) || null;
-  const z = sincronizarBiblioteca(previa, propios);
+export function sincronizarEnSitio(piezas, propios = [], aspecto = null) {
+  // La biblioteca DE ESTE FORMATO. Las de los otros siguen ahí, con sus imágenes
+  // pagadas, y no se tocan.
+  //
+  // Sin formato pedido no se cambia el que ya tenga: sincronizar es poner al día
+  // una biblioteca, no convertirla a otro formato.
+  const previa =
+    (piezas || []).find((z) => z.esBiblioteca && (!aspecto || aspectoPieza(z) === aspecto)) || null;
+  const z = sincronizarBiblioteca(previa, propios, aspecto);
   if (!previa) {
     piezas.push(z);
     return z;
@@ -479,11 +522,14 @@ export function sincronizarEnSitio(piezas, propios = []) {
   return previa;
 }
 
-export function sincronizarBiblioteca(pieza, propios = []) {
+export function sincronizarBiblioteca(pieza, propios = [], aspecto = null) {
+  // Sin formato pedido, el que ya tenga la pieza. Ver `sincronizarEnSitio`.
+  const suyo = aspecto || aspectoPieza(pieza);
   const previas = new Map((pieza?.tomas || []).filter((t) => t.clave).map((t) => [t.clave, t]));
   let siguiente = Math.max(-1, ...[...previas.values()].map((t) => Number(t.i) || 0)) + 1;
 
-  const tomas = tomasDeBiblioteca({ propios }).map((nueva) => {
+  const suyos = (propios || []).filter((p) => aspectoDeEntrada(p) === suyo);
+  const tomas = tomasDeBiblioteca({ propios: suyos }).map((nueva) => {
     const huella = huellaDePlano(nueva.plano);
     const vieja = previas.get(nueva.clave);
     if (!vieja) return { ...nueva, huella, i: siguiente++ };
@@ -533,9 +579,10 @@ export function sincronizarBiblioteca(pieza, propios = []) {
 
   return {
     ...(pieza || {}),
-    id: ID_BIBLIOTECA,
-    titulo: 'Biblioteca del canal',
+    id: idBiblioteca(suyo),
+    titulo: suyo === '9:16' ? 'Biblioteca vertical (9:16)' : 'Biblioteca del canal (16:9)',
     esBiblioteca: true,
+    aspecto: suyo,
     // Sin guion, sin voz, sin música: no se monta nunca.
     guion: '',
     escenas: [

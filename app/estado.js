@@ -105,6 +105,10 @@ export function sanear(bruto) {
       plano: x.plano || null,
       heredado: String(x.heredado),
       heredadoVid: x.heredadoVid ? String(x.heredadoVid) : null,
+      // El formato en el que se generó. Sin él, una entrada vertical entraría en
+      // un episodio horizontal y el montaje la recortaría al centro sin avisar.
+      // Ver `aspectoDeEntrada` en `app/fases/biblioteca.js`: sin campo, 9:16.
+      aspecto: x.aspecto === '16:9' ? '16:9' : '9:16',
       desde: String(x.desde || ''),
       cuando: Number(x.cuando) || 0,
     }));
@@ -169,7 +173,10 @@ export function sanear(bruto) {
 }
 
 /** La pieza de la biblioteca, si el proyecto ya la tiene. */
-export const bibliotecaDe = (proyecto) => (proyecto?.piezas || []).find((z) => z.esBiblioteca) || null;
+export const bibliotecaDe = (proyecto, aspecto = null) =>
+  (proyecto?.piezas || []).find(
+    (z) => z.esBiblioteca && (!aspecto || (z.aspecto === '16:9' ? '16:9' : '9:16') === aspecto),
+  ) || null;
 
 /** Las piezas que son episodios de verdad: todas menos la biblioteca. */
 export const episodiosDe = (proyecto) => (proyecto?.piezas || []).filter((z) => !z.esBiblioteca);
@@ -356,6 +363,8 @@ function sanearPieza(bruto, n, proyecto) {
   const z = { ...piezaVacia(idPieza(n + 1), ''), ...(bruto || {}) };
   // La biblioteca es una pieza, pero no se monta nunca y su id no es `pNN`.
   z.esBiblioteca = z.esBiblioteca === true;
+  // El formato de una biblioteca. Las que ya existen no lo traen y son 9:16.
+  if (z.esBiblioteca) z.aspecto = z.aspecto === '16:9' ? '16:9' : '9:16';
   z.guion = String(z.guion || '');
   z.tomas = Array.isArray(z.tomas) ? z.tomas.map((t, i) => sanearToma(t, i, proyecto)) : [];
   z.escenas = Array.isArray(z.escenas) ? z.escenas : [];

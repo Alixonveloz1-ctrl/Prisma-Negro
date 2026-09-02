@@ -348,6 +348,19 @@ const pieza = () => estado.piezaDe(P, P.piezaActiva);
  */
 const mundoDeLaPieza = () => mundoDelCaso(pieza()?.caso || {});
 
+/** El formato del canal ahora mismo. Manda sobre qué biblioteca se usa. */
+const aspectoDelCanal = () => bibliotecaFase.aspectoDe(P.config);
+
+/**
+ * El formato en el que está hecha una pieza.
+ *
+ * La biblioteca lo lleva escrito. Un episodio no: se generó con el formato que
+ * tuviera el canal entonces, y no se guardó en ninguna parte. Se le da el del
+ * canal, que es lo único que se puede afirmar sin inventar.
+ */
+const aspectoDeLaPieza = (z) =>
+  z?.esBiblioteca ? bibliotecaFase.aspectoPieza(z) : String(z?.aspecto || aspectoDelCanal());
+
 /**
  * Guarda una imagen del episodio en el archivo del canal.
  *
@@ -364,6 +377,9 @@ async function guardarEnArchivo(i, nombre) {
     pieza: P.id,
     tomas: z.tomas,
     propios: P.archivoPropio,
+    // En qué formato se generó: sin esto entraría en el archivo sin decir si es
+    // vertical u horizontal y se mezclaría con las del otro formato.
+    aspecto: aspectoDelCanal(),
   });
   P.archivoPropio = [...(P.archivoPropio || []), entrada];
   // Se vuelve a sincronizar para que la entrada tenga ya su sitio y su índice: sin
@@ -1830,10 +1846,59 @@ async function asegurarDireccion() {
 const guardaToma = async (nueva) => {
   const k = pieza().tomas.findIndex((x) => x.i === nueva.i);
   if (k >= 0) pieza().tomas[k] = nueva;
+  archivarSiEsGenerica(nueva);
   await guardar();
   pintarTomas();
   pintarPasos();
 };
+
+/**
+ * LO GENÉRICO SE ARCHIVA SOLO.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Las imágenes del episodio se deben guardar automáticamente en la biblioteca
+ *  para poder reutilizarse para otros episodios. Las que deben guardarse
+ *  automáticamente son las genéricas; el resto tendrá su botón y yo decidiré.»
+ *
+ * Genérica no es una corazonada: es que el director le puso al plano una clave
+ * del catálogo —`personaje: 'perito forense'`, `recurso: 'carretera comarcal de
+ * noche'`—. Esa clave significa exactamente «esto no es de este caso, es del
+ * canal». Lo demás —la víctima de este caso, el rompeolas de este pueblo— NO se
+ * archiva solo: se archivaría la cara de Nora Kellerman como si fuera un
+ * arquetipo y saldría de perito en el episodio siguiente.
+ *
+ * Pasa por aquí toda imagen generada, venga del botón grande o de rehacer una
+ * suelta, así que no hay un segundo camino que se olvide de archivar.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+function archivarSiEsGenerica(toma) {
+  if (toma?.imagen !== 'ok' || toma.heredado) return false;
+  const generica = String(toma.personaje || toma.plano?.personaje || toma.recurso || toma.plano?.recurso || '').trim();
+  if (!generica) return false;
+
+  const clave = claveFotograma(P.id, toma, pieza().tomas);
+  // Ya archivada: no se duplica. Ocuparía dos sitios en la rotación de su papel y
+  // la misma cara saldría el doble de veces.
+  if ((P.archivoPropio || []).some((p) => p.heredado === clave)) return false;
+
+  try {
+    P.archivoPropio = [
+      ...(P.archivoPropio || []),
+      bibliotecaFase.entradaDeArchivo(toma, {
+        pieza: P.id,
+        tomas: pieza().tomas,
+        propios: P.archivoPropio,
+        aspecto: aspectoDelCanal(),
+      }),
+    ];
+    laBiblioteca();
+    return true;
+  } catch {
+    // Una toma que no se puede archivar —sin nombre, ya heredada— no puede parar
+    // la generación: lo que se estaba haciendo era generar una imagen.
+    return false;
+  }
+}
 
 /**
  * El interruptor «rehacer lo que ya está hecho».
@@ -1943,7 +2008,9 @@ function laBiblioteca() {
   // CON LO GUARDADO DESDE LOS EPISODIOS. Sin pasarlo aquí, las entradas propias
   // desaparecerían en la primera sincronización: el archivo se reconstruye desde
   // el catálogo, y lo que no esté en él no sobrevive.
-  return bibliotecaFase.sincronizarEnSitio(P.piezas, P.archivoPropio);
+  // La biblioteca DE ESTE FORMATO. Las de los otros formatos siguen en el
+  // proyecto con sus imágenes pagadas y no se tocan.
+  return bibliotecaFase.sincronizarEnSitio(P.piezas, P.archivoPropio, aspectoDelCanal());
 }
 
 function pintarBiblioteca() {
@@ -1957,8 +2024,20 @@ function pintarResumenBiblioteca() {
   if (!caja) return;
   const tomas = tomasParaPintar();
   const r = bibliotecaFase.resumenBiblioteca(tomas, P.config.movimiento.politica);
+  // EN QUÉ FORMATO ESTÁ ESTA BIBLIOTECA, LO PRIMERO.
+  //
+  // Hay una por formato, y la pantalla enseña la del formato en el que se está
+  // trabajando. Sin decirlo, cambiar el canal de 9:16 a 16:9 parece haber borrado
+  // ciento veintiséis imágenes pagadas: no se han borrado, están en la otra.
+  const suyo = aspectoDelCanal();
+  const otras = (P.piezas || []).filter(
+    (z) => z.esBiblioteca && bibliotecaFase.aspectoPieza(z) !== suyo,
+  );
+  const enOtras = otras.reduce((n, z) => n + (z.tomas || []).filter((t) => t.imagen === 'ok').length, 0);
+
   caja.innerHTML =
     `<div class="reparto">` +
+    `<span class="pastilla p-ok">${escapar(suyo)}</span>` +
     `<span class="pastilla ${r.imagenesFaltan ? '' : 'p-ok'}">${r.total - r.imagenesFaltan} de ${r.total} imágenes</span>` +
     // GENERADA NO ES BUENA, y por eso son dos cifras y no una. La de en medio es la
     // que faltaba: cuántas he mirado yo.
@@ -1970,6 +2049,13 @@ function pintarResumenBiblioteca() {
     `</div>` +
     // Qué le tocó a este episodio, y a los anteriores: es lo que hace visible que
     // la rotación existe. Sin enseñarlo, «no repite» es un acto de fe.
+    (enOtras
+      ? `<p class="nota chica" style="margin-top:8px">Y ${enOtras} ` +
+        `${enOtras === 1 ? 'imagen guardada' : 'imágenes guardadas'} en ${otras.length === 1 ? 'la biblioteca' : 'las bibliotecas'} de ` +
+        `${otras.map((z) => escapar(bibliotecaFase.aspectoPieza(z))).join(' y ')}. ` +
+        `No se han perdido: cada formato tiene la suya, y un episodio solo usa la del suyo. ` +
+        `Cambia el formato en Ajustes para verlas.</p>`
+      : '') +
     (Object.keys(P.reparto || {}).length
       ? `<p class="nota chica" style="margin-top:8px">Reparto por episodio: ` +
         ordenDeEpisodios()
@@ -4024,7 +4110,7 @@ function aplicarHerencia(z, lista) {
  * coincidencia es por parecido y la decide una persona.
  */
 async function resolverContraBiblioteca(z) {
-  const b = estado.bibliotecaDe(P);
+  const b = estado.bibliotecaDe(P, aspectoDelCanal());
   if (!b || !z.tomas.length) return 0;
   const puede = imagenFase.heredables(z.tomas, [b], contextoDeReparto(z));
   if (!puede.length) return 0;
@@ -4045,9 +4131,15 @@ accion(
     // un pasillo de juzgado— y sirven para el caso de la semana que viene igual
     // que para el de hoy. Limitar esto a la ascendencia dejaba fuera justo el
     // banco que hace viable un canal que todavía no monetiza.
-    const otras = P.piezas.filter((x) => x.id !== z.id);
+    //
+    // PERO SOLO LAS DE SU FORMATO. El montaje no pone barras: agranda hasta
+    // llenar el ancho y recorta el centro, así que una imagen vertical en un
+    // episodio horizontal pierde dos tercios del alto. Reutilizar entre formatos
+    // no ahorra: estropea.
+    const suAspecto = aspectoDelCanal();
+    const otras = P.piezas.filter((x) => x.id !== z.id && aspectoDeLaPieza(x) === suAspecto);
     if (!otras.length) {
-      throw new Error('Todavía no hay otros casos de los que reutilizar nada.');
+      throw new Error(`Todavía no hay otros casos en ${suAspecto} de los que reutilizar nada.`);
     }
 
     const puede = imagenFase.heredables(z.tomas, otras, contextoDeReparto(z));
