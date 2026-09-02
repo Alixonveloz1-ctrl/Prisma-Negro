@@ -4158,6 +4158,95 @@ export const invariantes = [
   },
 
   {
+    nombre: 'lo-generado-en-un-formato-se-puede-traer-al-otro-sin-pagar',
+    dice: '«Todas las imágenes y videoclips que ya están en nueve dieciséis, simplemente las utilicemos también en formato dieciséis nueve, la imagen con su video, recortándole y que se vea solo el centro, y eso ya quede como biblioteca del formato dieciséis nueve.» Es lo contrario de heredar entre formatos —que no se hace y no se va a hacer—: es una decisión suya, UNA VEZ, de que la biblioteca del formato nuevo arranque con lo ya pagado en vez de vacía. Y no cuesta nada ni hay que recortar nada a mano: la entrada nueva apunta al MISMO archivo y el recorte al centro lo hace el montaje él solo. Fabricar copias recortadas daría el mismo fotograma ocupando el doble.',
+    comprobar(ctx) {
+      const { traerDeOtroFormato, sincronizarEnSitio, sanear } = ctx.fn;
+      const fallos = [];
+
+      const proyecto = () =>
+        sanear({
+          id: 'p',
+          config: { formato: { vertical: false } },
+          piezas: [
+            { id: 'p01' },
+            {
+              id: 'biblioteca',
+              esBiblioteca: true,
+              aspecto: '9:16',
+              tomas: [
+                { i: 0, clave: 'recurso:carretera-noche:v1', recurso: 'carretera-noche', variante: 'v1', imagen: 'ok', video: 'ok', aprobada: true },
+                { i: 1, clave: 'recurso:carretera-noche:v2', recurso: 'carretera-noche', variante: 'v2', imagen: 'ok', aprobada: true },
+              ],
+            },
+          ],
+          archivoPropio: [{ clave: 'recurso:la-costa:g1', recurso: 'la-costa', variante: 'g1', nombre: 'la costa', heredado: 'p01/t003/img', aspecto: '9:16' }],
+        });
+
+      const P = proyecto();
+      const r = traerDeOtroFormato(P.piezas, P.archivoPropio, '9:16', '16:9');
+      P.archivoPropio = [...P.archivoPropio, ...r.entradas];
+
+      if (!r.tomas) fallos.push('No se trae nada del catálogo del otro formato: la biblioteca nueva arranca vacía.');
+      if (!r.entradas.length) fallos.push('No se trae lo guardado desde los episodios: se quedaría solo en el formato viejo.');
+
+      const dest = P.piezas.find((z) => z.esBiblioteca && z.aspecto === '16:9');
+      const traidas = (dest?.tomas || []).filter((t) => t.imagen === 'ok');
+      if (traidas.length < 2) fallos.push(`La biblioteca de 16:9 queda con ${traidas.length} imagen(es) tras traer.`);
+
+      // 1 · APUNTA AL MISMO ARCHIVO. Si compusiera una clave suya, pediría un
+      // archivo que nadie ha generado y el montaje se pararía.
+      const una = traidas.find((t) => t.clave === 'recurso:carretera-noche:v1');
+      if (una && !String(una.heredado || '').startsWith('biblioteca/')) {
+        fallos.push(`Lo traído no apunta al material de origen (${JSON.stringify(una?.heredado)}): se pediría un archivo que no existe.`);
+      }
+      // Y el clip se va con su imagen: es lo más caro que hay.
+      if (una && !una.heredadoVid) fallos.push('El clip no se trae con su imagen: lo más caro se quedaría sin usar.');
+      // Y se dice de dónde vino, porque en la ficha se ve entera y en el vídeo no.
+      if (una && una.recortada !== '9:16') {
+        fallos.push(`Lo traído no dice de qué formato viene (${JSON.stringify(una?.recortada)}).`);
+      }
+
+      // 2 · LA DE ORIGEN NO SE TOCA. Traer no es mover.
+      const origen = P.piezas.find((z) => z.esBiblioteca && z.aspecto === '9:16');
+      if ((origen?.tomas || []).filter((t) => t.imagen === 'ok').length !== 2) {
+        fallos.push('Traer se lleva por delante la biblioteca de origen: sería mover, no traer.');
+      }
+
+      // 3 · SOBREVIVE A RECARGAR. Esta lista es blanca: lo que no se nombre en
+      // `sincronizarBiblioteca` desaparece en la siguiente carga, y eso ya se ha
+      // pagado con `heredado` y con las versiones del clip.
+      const P2 = sanear(JSON.parse(JSON.stringify(P)));
+      sincronizarEnSitio(P2.piezas, P2.archivoPropio, '16:9');
+      const d2 = P2.piezas.find((z) => z.esBiblioteca && z.aspecto === '16:9');
+      const vivas = (d2?.tomas || []).filter((t) => t.imagen === 'ok');
+      if (vivas.length < traidas.length) {
+        fallos.push(`Al recargar quedan ${vivas.length} de ${traidas.length} traídas: se pierden solas.`);
+      }
+      if (vivas.length && !vivas.every((t) => t.recortada === '9:16')) {
+        fallos.push('Al recargar se pierde la marca de recortada: la ficha dejaría de avisar.');
+      }
+
+      // 4 · LO QUE YA ESTÁ GENERADO EN ESTE FORMATO MANDA. Traer rellena huecos.
+      const P3 = proyecto();
+      const suyaYa = sincronizarEnSitio(P3.piezas, P3.archivoPropio, '16:9');
+      const k = suyaYa.tomas.findIndex((t) => t.clave === 'recurso:carretera-noche:v1');
+      suyaYa.tomas[k] = { ...suyaYa.tomas[k], imagen: 'ok', versionImagen: 3 };
+      traerDeOtroFormato(P3.piezas, P3.archivoPropio, '9:16', '16:9');
+      const suya = P3.piezas
+        .find((z) => z.esBiblioteca && z.aspecto === '16:9')
+        .tomas.find((t) => t.clave === 'recurso:carretera-noche:v1');
+      if (suya?.heredado || suya?.recortada) {
+        fallos.push('Traer pisa una imagen ya generada en este formato: se cambiaría la buena por una recortada.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: no hay forma de traer, y la biblioteca del formato
+    // nuevo arranca vacía teniendo ciento veintiséis imágenes pagadas al lado.
+    romper: (ctx) => conFuncion(ctx, 'traerDeOtroFormato', () => ({ tomas: 0, entradas: [] })),
+  },
+
+  {
     nombre: 'un-episodio-sabe-en-que-formato-se-genero-y-no-hereda-de-otro',
     dice: '«El episodio debería saber en qué formato se generó.» No lo sabía: nadie se lo escribía nunca, así que la reutilización entre episodios daba por hecho que TODOS estaban en el formato de hoy. Hoy no molesta porque solo hay uno; el día que haya un episodio vertical y se trabaje en horizontal, el botón de reutilizar le ofrecería sus imágenes — y el montaje no pone barras, agranda y recorta, así que se perdería el tercio central. Ahora la pieza se sella con el formato AL GENERAR SU PRIMERA IMAGEN, que es cuando el formato es un hecho y no una suposición sobre un episodio que todavía no ha gastado nada. Y `heredables` comprueba el formato POR SU CUENTA en vez de fiarse de quien la llama: la protección que vive solo en quien llama se rompe el día que aparece un tercer sitio que llama, y eso ya se ha pagado cuatro veces aquí.',
     comprobar(ctx) {

@@ -109,6 +109,7 @@ export function sanear(bruto) {
       // un episodio horizontal y el montaje la recortaría al centro sin avisar.
       // Ver `aspectoDeEntrada` en `app/fases/biblioteca.js`: sin campo, 9:16.
       aspecto: x.aspecto === '16:9' ? '16:9' : '9:16',
+      recortada: x.recortada === '9:16' || x.recortada === '16:9' ? x.recortada : '',
       desde: String(x.desde || ''),
       cuando: Number(x.cuando) || 0,
     }));
@@ -489,6 +490,9 @@ function sanearToma(bruto, i, proyecto) {
     // que todo lo de aquí: sin ella, cada recarga la borraría y la biblioteca
     // dejaría de saber que el catálogo cambió debajo de una imagen ya pagada.
     huella: String(t.huella || ''),
+    // De qué formato se trajo esta entrada, si se trajo. Lo que se ve en el
+    // montaje es su tercio central, y la ficha tiene que poder decirlo.
+    recortada: t.recortada === '9:16' || t.recortada === '16:9' ? t.recortada : '',
     // ── DE QUÉ IMAGEN SALIÓ EL CLIP ────────────────────────────────────────
     // `versionImagen` sube con cada imagen generada; `versionClip` guarda la que
     // había cuando se generó el clip. Iguales = el clip le corresponde. En la

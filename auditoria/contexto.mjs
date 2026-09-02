@@ -219,6 +219,7 @@ async function funcionesPuras() {
     tomasDeBiblioteca: bib.tomasDeBiblioteca,
     sincronizarBiblioteca: bib.sincronizarBiblioteca,
     sincronizarEnSitio: bib.sincronizarEnSitio,
+    traerDeOtroFormato: bib.traerDeOtroFormato,
     resumenBiblioteca: bib.resumenBiblioteca,
     clipsPosibles: bib.clipsPosibles,
     huellaDePlano: bib.huellaDePlano,

@@ -2030,6 +2030,52 @@ function laBiblioteca() {
 function pintarBiblioteca() {
   pintarResumenBiblioteca();
   pintarGaleriaBiblioteca();
+  // EL BOTÓN DE TRAER, encendido solo cuando hay algo que traer y huecos donde
+  // ponerlo. Ver `traerDeOtroFormato`.
+  const b = $('b-traer-formato');
+  if (!b) return;
+  const suyo = aspectoDelCanal();
+  const otra = (P.piezas || []).find(
+    (z) => z.esBiblioteca && bibliotecaFase.aspectoPieza(z) !== suyo && (z.tomas || []).some((t) => t.imagen === 'ok'),
+  );
+  const huecos = tomasParaPintar().some((t) => t.imagen !== 'ok' && !t.heredado);
+  const desde = otra ? bibliotecaFase.aspectoPieza(otra) : '';
+  b.classList.toggle('oculto', !(desde && huecos));
+  if (desde && huecos) {
+    b.textContent = `Traer las de ${desde} recortadas al centro`;
+    b.onclick = () => traerBibliotecaDe(desde);
+  }
+}
+
+/**
+ * Trae a este formato lo que ya está generado en otro. UNA VEZ, y gratis.
+ *
+ * «Todas las imágenes y videoclips que ya están en nueve dieciséis, simplemente
+ *  las utilicemos también en dieciséis nueve, recortándole y que se vea solo el
+ *  centro, y eso ya quede como biblioteca del formato dieciséis nueve.»
+ *
+ * No genera ni recorta nada: la entrada nueva apunta al MISMO archivo y el
+ * recorte al centro lo hace el montaje él solo. Lo que ya esté generado en este
+ * formato no se toca.
+ */
+async function traerBibliotecaDe(desde) {
+  const hacia = aspectoDelCanal();
+  if (!desde || desde === hacia) return;
+  const r = bibliotecaFase.traerDeOtroFormato(P.piezas, P.archivoPropio, desde, hacia);
+  if (r.entradas.length) P.archivoPropio = [...(P.archivoPropio || []), ...r.entradas];
+  laBiblioteca();
+  await guardar();
+  pintarTodo();
+  const n = r.tomas + r.entradas.length;
+  avisar(
+    'biblioteca',
+    n
+      ? `${n} ${n === 1 ? 'entrada traída' : 'entradas traídas'} de ${desde} a ${hacia}. ` +
+        'No se ha pagado nada: apuntan al mismo material y el montaje las recorta al centro. ' +
+        'Lo que generes de ahora en adelante en este formato las va sustituyendo.'
+      : `No había nada en ${desde} que traer.`,
+    'bueno',
+  );
 }
 
 /** Las cifras de arriba, que son HTML barato y se pueden repintar solas. */
@@ -2365,6 +2411,9 @@ function tarjetaDeBiblioteca(x, tomas, mia) {
     // del canal—: sigue estando y sigue pagada, pero ya no es lo que se pide. Se
     // dice, y se pierde el visto bueno.
     (x.desfasada ? '<span class="pastilla p-falta">hay que rehacerla</span>' : '') +
+    // TRAÍDA DE OTRO FORMATO: en el montaje se ve su tercio central, no la imagen
+    // entera. Se dice, porque en la ficha se ve completa y en el video no.
+    (x.recortada ? `<span class="pastilla p-aviso">recortada de ${escapar(x.recortada)}</span>` : '') +
     (x.aprobada ? '<span class="pastilla p-ok">aprobada</span>' : hay ? '<span class="pastilla p-aviso">por revisar</span>' : '') +
     // «CLIP LISTO» SOLO SI EL CLIP ES DE LA IMAGEN QUE HAY AHORA. Con la bandera
     // suelta, un clip de la imagen descartada seguía anunciándose en verde y ni

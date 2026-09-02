@@ -51,7 +51,7 @@ import {
   planoDeVariante,
   planoDeRecurso,
 } from '../../comun/elenco.mjs';
-import { clipVigente, claveFotograma, claveClip } from '../../comun/claves.mjs';
+import { clipVigente, claveFotograma, claveClip, claveToma } from '../../comun/claves.mjs';
 import {
   ESTILO_DEL_CANAL,
   SIN_TEXTO_LEGIBLE,
@@ -317,6 +317,9 @@ export function tomasDeBiblioteca({ elenco = ELENCO, recursos = RECURSOS, propio
       heredado: p.heredado,
       video: p.heredadoVid ? 'ok' : null,
       heredadoVid: p.heredadoVid || null,
+      // Si la entrada se trajo de otro formato, la toma lo hereda: en la ficha se
+      // ve entera y en el montaje se ve su tercio central, y eso hay que decirlo.
+      recortada: p.recortada || '',
       aprobada: true,
     });
   }
@@ -501,6 +504,69 @@ export function huellaDePlano(plano, encargo = ENCARGO_DEL_CANAL) {
  * y no de la pantalla: en la pantalla no se podía ni comprobar.
  * ─────────────────────────────────────────────────────────────────────────────
  */
+/**
+ * TRAE A ESTE FORMATO LO QUE YA ESTÁ GENERADO EN OTRO. SIN GENERAR NADA.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Todas las imágenes y videoclips que ya están en nueve dieciséis, simplemente
+ *  las utilicemos también en formato dieciséis nueve, la imagen con su video,
+ *  recortándole y que se vea solo el centro, y eso ya quede como biblioteca del
+ *  formato dieciséis nueve.»
+ *
+ * Es lo contrario de heredar entre formatos, que es lo que NO se hace: aquí no
+ * hay un episodio horizontal cogiendo material vertical a escondidas. Hay una
+ * decisión suya, una vez, de que la biblioteca de 16:9 ARRANQUE con lo que ya
+ * está pagado. A partir de ahí cada formato va por su lado.
+ *
+ * NO CUESTA NI UN CÉNTIMO Y NO SE RECORTA NADA A MANO. La entrada nueva apunta al
+ * MISMO archivo con `heredado`, y el recorte al centro lo hace el montaje él solo
+ * —`scale ... force_original_aspect_ratio=increase` + `crop`—, que es exactamente
+ * el recorte que se pide. Fabricar copias recortadas daría el mismo fotograma,
+ * ocupando el doble y con un paso más que puede fallar.
+ *
+ * Lo ya generado en el formato de destino NO se toca: traer es rellenar huecos.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export function traerDeOtroFormato(piezas, propios = [], desde = '9:16', hacia = '16:9') {
+  const origen = (piezas || []).find((z) => z.esBiblioteca && aspectoPieza(z) === desde);
+  if (!origen || desde === hacia) return { tomas: 0, entradas: [] };
+
+  const destino = sincronizarEnSitio(piezas, propios, hacia);
+  const suyas = new Map((destino.tomas || []).filter((t) => t.clave).map((t) => [t.clave, t]));
+
+  let tomas = 0;
+  for (const v of origen.tomas || []) {
+    const conImagen = v.imagen === 'ok' || !!v.heredado;
+    if (!conImagen) continue;
+    const d = suyas.get(v.clave);
+    // Un hueco: la de destino no tiene nada suyo. Lo que ya esté generado en este
+    // formato manda sobre lo traído.
+    if (!d || d.imagen === 'ok' || d.heredado) continue;
+
+    d.heredado = v.heredado || claveToma(origen.id, v.i, 'img');
+    d.imagen = 'ok';
+    d.aprobada = v.aprobada === true;
+    // De dónde vino, para que la ficha lo diga: lo que se ve en el montaje es su
+    // tercio central, no la imagen entera.
+    d.recortada = desde;
+    if (v.video === 'ok' || v.heredadoVid) {
+      d.heredadoVid = v.heredadoVid || claveToma(origen.id, v.i, 'vid');
+      d.video = 'ok';
+      d.movimiento = true;
+    }
+    tomas++;
+  }
+
+  // Y lo guardado desde los episodios, igual: una copia que apunta al mismo
+  // archivo y vive en el otro formato.
+  const yaEsta = (p) => (propios || []).some((q) => q.clave === p.clave && aspectoDeEntrada(q) === hacia);
+  const entradas = (propios || [])
+    .filter((p) => aspectoDeEntrada(p) === desde && !yaEsta(p))
+    .map((p) => ({ ...p, aspecto: hacia, recortada: desde }));
+
+  return { tomas, entradas };
+}
+
 export function sincronizarEnSitio(piezas, propios = [], aspecto = null) {
   // La biblioteca DE ESTE FORMATO. Las de los otros siguen ahí, con sus imágenes
   // pagadas, y no se tocan.
@@ -561,6 +627,9 @@ export function sincronizarBiblioteca(pieza, propios = [], aspecto = null) {
       video: vieja.video || null,
       heredado: vieja.heredado || null,
       heredadoVid: vieja.heredadoVid || null,
+      // De qué formato se trajo, si se trajo. Sin nombrarlo aquí desaparecería en
+      // la siguiente carga y la ficha dejaría de avisar de que va recortada.
+      recortada: vieja.recortada || '',
       // Y LOS NÚMEROS QUE DICEN SI EL CLIP ES DE ESTA IMAGEN. Esta lista es
       // blanca: lo que no se nombre aquí desaparece en la siguiente carga. Sin
       // estas dos líneas, un clip de la imagen descartada volvía a darse por bueno
