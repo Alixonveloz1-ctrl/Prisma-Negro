@@ -3944,7 +3944,7 @@ export const invariantes = [
       // ── 6 · Y EL BOTÓN SALE EN TODAS ──────────────────────────────────────
       // «Todas deben tener su botón para guardar.» La marca del director es una
       // sugerencia; la última palabra es de quien paga.
-      const i = main.indexOf('Guardar en el archivo');
+      const i = main.indexOf('Guardar en la biblioteca del canal');
       const cerca = i < 0 ? '' : main.slice(Math.max(0, i - 700), i + 200);
       if (!cerca) fallos.push('No hay botón para guardar una imagen del episodio en el archivo.');
       else if (!/if \(hay && !x\.heredado && !yaEnArchivo\)/.test(cerca)) {

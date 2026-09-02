@@ -2093,7 +2093,12 @@ function pintarResumenBiblioteca() {
  * hablan de la misma toma.
  */
 function tomasParaPintar() {
-  return bibliotecaFase.sincronizarBiblioteca(estado.bibliotecaDe(P)).tomas;
+  // CON EL FORMATO, las dos veces. Sin decirlo aquí, la pantalla pintaba la
+  // primera biblioteca que encontraba —la vertical— mientras el episodio resolvía
+  // contra la horizontal: se veían las imágenes de 9:16 metidas en fichas de 16:9
+  // y parecía que el formato no se estaba aplicando.
+  const suyo = aspectoDelCanal();
+  return bibliotecaFase.sincronizarBiblioteca(estado.bibliotecaDe(P, suyo), P.archivoPropio, suyo).tomas;
 }
 
 const filtroBiblioteca = { estado: 'todas', grupo: '', tope: 24 };
@@ -2632,7 +2637,7 @@ accion(
           // la imagen se había generado, se había pagado y se había subido, y la
           // anotación se tiraba sin una palabra. Un `if` que descarta en silencio
           // el resultado de la fase más cara no es una guarda, es un agujero.
-          const actual = estado.bibliotecaDe(P);
+          const actual = estado.bibliotecaDe(P, aspectoDelCanal());
           const k = actual ? actual.tomas.findIndex((t) => t.i === nueva.i) : -1;
           if (k < 0) {
             throw new Error(
@@ -2711,7 +2716,7 @@ accion(
           // la imagen se había generado, se había pagado y se había subido, y la
           // anotación se tiraba sin una palabra. Un `if` que descarta en silencio
           // el resultado de la fase más cara no es una guarda, es un agujero.
-          const actual = estado.bibliotecaDe(P);
+          const actual = estado.bibliotecaDe(P, aspectoDelCanal());
           const k = actual ? actual.tomas.findIndex((t) => t.i === nueva.i) : -1;
           if (k < 0) {
             throw new Error(
@@ -3376,7 +3381,7 @@ function pintarPorTipo() {
     if (hay && !x.heredado && !yaEnArchivo) {
       const g = document.createElement('button');
       g.className = `btn chico ${x.generico ? 'primario' : 'fantasma'}`;
-      g.textContent = 'Guardar en el archivo';
+      g.textContent = 'Guardar en la biblioteca del canal';
       g.onclick = async () => {
         // El nombre VIENE ESCRITO: sale del plano, que es lo que se le pidió al
         // generador. Solo hay que corregirlo si no convence.
@@ -3394,7 +3399,7 @@ function pintarPorTipo() {
         } catch (e) {
           avisar('previa', e.message, 'malo');
           g.disabled = false;
-          g.textContent = 'Guardar en el archivo';
+          g.textContent = 'Guardar en la biblioteca del canal';
         }
       };
       cuerpo.appendChild(g);
@@ -3598,7 +3603,7 @@ const filaClips = [];
 let bombeandoClips = false;
 
 /** La pieza de una entrada de la fila: el episodio abierto, o la biblioteca. */
-const piezaDeFila = (zid) => (zid === bibliotecaFase.ID_BIBLIOTECA ? estado.bibliotecaDe(P) : pieza());
+const piezaDeFila = (zid) => (zid === bibliotecaFase.ID_BIBLIOTECA ? estado.bibliotecaDe(P, aspectoDelCanal()) : pieza());
 
 /** En qué está una toma dentro de la fila: 'generando', 'en cola (n.º)' o nada. */
 function estadoEnFila(i, zid = P.id) {

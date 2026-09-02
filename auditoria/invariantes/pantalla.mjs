@@ -450,7 +450,7 @@ export const invariantes = [
       // que se pagan una sola vez—.
       const conArchivo = sanear({
         piezas: [
-          { id: 'biblioteca', esBiblioteca: true, tomas: [{ i: 0, clave: 'recurso:x:v1', imagen: 'ok' }] },
+          { id: 'biblioteca', esBiblioteca: true, aspecto: '16:9', tomas: [{ i: 0, clave: 'recurso:x:v1', imagen: 'ok' }] },
           { id: 'p01' },
         ],
         piezaActiva: 'p01',
@@ -522,7 +522,7 @@ export const invariantes = [
       // Y la biblioteca no se borra: no es un episodio, es lo que hace baratos a
       // todos los demás.
       try {
-        const conArchivo = sanear({ piezas: [{ id: 'p01' }, { id: 'biblioteca', esBiblioteca: true }] });
+        const conArchivo = sanear({ piezas: [{ id: 'p01' }, { id: 'biblioteca', esBiblioteca: true, aspecto: '16:9' }] });
         borrarPieza(conArchivo, 'biblioteca');
         fallos.push('Se puede borrar el archivo del canal desde la lista de episodios.');
       } catch {
@@ -606,7 +606,7 @@ export const invariantes = [
         p.piezas.push({
           id: ID_BIBLIOTECA,
           titulo: 'Biblioteca del canal',
-          esBiblioteca: true,
+          esBiblioteca: true, aspecto: '16:9',
           // Del formato del canal: hay una biblioteca por formato y la pantalla
           // enseña la del formato en el que se está trabajando.
           aspecto: '16:9',
@@ -752,7 +752,7 @@ export const invariantes = [
         const p = proyectoYaEmpezado();
         p.piezas.push({
           id: 'biblioteca',
-          esBiblioteca: true,
+          esBiblioteca: true, aspecto: '16:9',
           titulo: 'x',
           escenas: [{ n: 0, titulo: 'R' }, { n: 1, titulo: 'E' }],
           tomas: [{ i: 0, clave: 'personaje:perito:v1', personaje: 'perito', variante: 'v1', imagen: 'ok', aprobada: true, movimiento: true, video }],
@@ -801,7 +801,7 @@ export const invariantes = [
       const p = proyectoYaEmpezado();
       p.piezas.push({
         id: 'biblioteca',
-        esBiblioteca: true,
+        esBiblioteca: true, aspecto: '16:9',
         titulo: 'x',
         escenas: [{ n: 0, titulo: 'R' }, { n: 1, titulo: 'E' }],
         tomas: [
@@ -875,7 +875,7 @@ export const invariantes = [
         const p = proyectoYaEmpezado();
         p.piezas.push({
           id: 'biblioteca',
-          esBiblioteca: true,
+          esBiblioteca: true, aspecto: '16:9',
           titulo: 'x',
           escenas: [{ n: 0, titulo: 'R' }, { n: 1, titulo: 'E' }],
           tomas: [
@@ -1026,7 +1026,7 @@ export const invariantes = [
       const p = proyectoYaEmpezado();
       p.piezas.push({
         id: 'biblioteca',
-        esBiblioteca: true,
+        esBiblioteca: true, aspecto: '16:9',
         titulo: 'x',
         escenas: [{ n: 0, titulo: 'R' }, { n: 1, titulo: 'E' }],
         tomas: [{ i: 0, clave: 'recurso:carretera-noche:v1', recurso: 'carretera-noche', variante: 'v1', imagen: 'ok', aprobada: false }],
@@ -1062,7 +1062,7 @@ export const invariantes = [
           { id: 'p01' },
           {
             id: 'biblioteca',
-            esBiblioteca: true,
+            esBiblioteca: true, aspecto: '16:9',
             tomas: [{ i: 0, clave: 'recurso:carretera-noche:v1', imagen: 'ok', aprobada: false }],
           },
         ],
@@ -1096,7 +1096,10 @@ export const invariantes = [
       }
       // Y se busca la pieza FRESCA en cada anotación, no una referencia cogida al
       // empezar: es el cinturón que sobrevive aunque alguien vuelva a sustituirla.
-      if (!/const actual = estado\.bibliotecaDe\(P\);/.test(main)) {
+      // Anclado a la BÚSQUEDA, no a la lista de argumentos: la biblioteca se pide
+      // ahora con su formato, y exigir la llamada letra por letra convertía ese
+      // añadido en un fallo falso.
+      if (!/const actual = estado\.bibliotecaDe\(P[,)]/.test(main)) {
         fallos.push('La anotación usa una referencia cogida al empezar la tanda en vez de buscar la pieza al día.');
       }
       return fallos;
@@ -1129,7 +1132,7 @@ export const invariantes = [
       p.piezas.push({
         id: 'biblioteca',
         titulo: 'Biblioteca del canal',
-        esBiblioteca: true,
+        esBiblioteca: true, aspecto: '16:9',
         escenas: [{ n: 0, titulo: 'Recursos' }, { n: 1, titulo: 'Reparto' }],
         tomas: [
           { i: 0, clave: 'recurso:carretera-noche:v1', recurso: 'carretera-noche', variante: 'v1', imagen: 'ok', aprobada: true },
@@ -2162,6 +2165,67 @@ export const invariantes = [
     romper: (ctx) =>
       editando(ctx, 'app/main.js', (t) =>
         t.replace('function pintarCuentasFase() {\n  pintarDesglose();', 'function pintarCuentasFase() {'),
+      ),
+  },
+
+  {
+    nombre: 'la-pantalla-ensena-la-biblioteca-del-formato-en-el-que-se-trabaja',
+    dice: '«Elegí en los ajustes el formato dieciséis nueve, y lo único que pasó es que en la biblioteca todas las imágenes se cambiaron de tamaño, pero son las mismas que ya existían en nueve dieciséis. ¿Dónde está la biblioteca de nueve dieciséis y la de dieciséis nueve?» Hay una biblioteca por formato y el episodio ya resolvía contra la suya, pero la galería pedía la biblioteca SIN decir el formato y se llevaba la primera que encontraba —la vertical—. Así que en pantalla salían las imágenes de 9:16 metidas en fichas de 16:9 y parecía que el formato no se estaba aplicando. Dos caminos, uno arreglado: el fallo de siempre.',
+    async comprobar(ctx) {
+      const { humoDeLaPantalla, proyectoYaEmpezado } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      // TODAS las lecturas de la biblioteca dicen su formato. Se cuentan, como el
+      // aviso del guion y como los caminos que reparten: «hay al menos una» ya ha
+      // fallado tres veces en este repositorio por lo mismo.
+      const lecturas = [...main.matchAll(/bibliotecaDe\(P([^)]*)\)/g)].map((m) => m[1]);
+      if (!lecturas.length) fallos.push('Nadie lee la biblioteca: la galería no podría pintar nada.');
+      const mudas = lecturas.filter((a) => !a.trim());
+      if (mudas.length) {
+        fallos.push(
+          `${mudas.length} de ${lecturas.length} lecturas de la biblioteca no dicen el formato: ` +
+            'se llevarían la primera que encuentren, que puede ser la del otro formato.',
+        );
+      }
+
+      // Y de verdad: un proyecto con las DOS bibliotecas, trabajando en 16:9,
+      // enseña la de 16:9 y no la vertical.
+      const p = proyectoYaEmpezado();
+      p.config = { ...(p.config || {}), formato: { ...(p.config?.formato || {}), vertical: false } };
+      p.piezas.push({
+        id: 'biblioteca',
+        titulo: 'Biblioteca vertical',
+        esBiblioteca: true,
+        aspecto: '9:16',
+        escenas: [{ n: 0, titulo: 'Recursos' }],
+        // Cuatro con imagen: si la galería se lleva esta, se le nota.
+        tomas: [0, 1, 2, 3].map((i) => ({
+          i, clave: `recurso:carretera-noche:v${i + 1}`, recurso: 'carretera-noche',
+          variante: `v${i + 1}`, imagen: 'ok', aprobada: true,
+        })),
+      });
+
+      const r = await humoDeLaPantalla({ parche, proyecto: p });
+      fallos.push(...r.fallos);
+      const resumen = r.textoDentro('resumen-biblioteca');
+      if (!/16:9/.test(resumen)) {
+        fallos.push(`El Archivo no dice en qué formato está: «${resumen.replace(/<[^>]*>/g, ' ').slice(0, 120)}»`);
+      }
+      // Y dice que las otras siguen ahí. Sin esto, cambiar de formato parece haber
+      // borrado ciento veintiséis imágenes pagadas.
+      if (!/9:16/.test(resumen)) {
+        fallos.push('El Archivo no dice que hay imágenes guardadas en el otro formato: parecerían borradas.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: la galería pide la biblioteca sin decir el formato.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace('estado.bibliotecaDe(P, suyo)', 'estado.bibliotecaDe(P)'),
       ),
   },
 
