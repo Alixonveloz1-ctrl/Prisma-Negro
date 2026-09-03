@@ -400,9 +400,18 @@ export const invariantes = [
         fallos.push('La marca se sube con otro id que el de la pieza: la clave no coincidiría con la hoja.');
       }
       // ANTES de preguntar qué falta: después, seguiría faltando.
-      const iSube = mon.indexOf('subirMarca(');
-      const iPregunta = mon.indexOf("llamar('montar.comprobar'");
-      if (iSube < 0 || iPregunta < 0 || iSube > iPregunta) {
+      //
+      // Y se mira DENTRO de `revisar`, no en el archivo entero: hay más de una
+      // función que pregunta qué falta, y con `indexOf` a pelo la comprobación
+      // empezó a fijarse en la primera que apareciera —que no es esta—. Mismo
+      // fallo de ventana de siempre; por eso se exige que la ventana exista.
+      const iRevisar = mon.indexOf('export async function revisar(');
+      const cuerpo = iRevisar < 0 ? '' : mon.slice(iRevisar);
+      const iSube = cuerpo.indexOf('subirMarca(');
+      const iPregunta = cuerpo.indexOf("llamar('montar.comprobar'");
+      if (!cuerpo) {
+        fallos.push('No encuentro la revisión: esta comprobación estaría mirando al vacío.');
+      } else if (iSube < 0 || iPregunta < 0 || iSube > iPregunta) {
         fallos.push('La marca se sube después de comprobar: el montaje se pararía igual.');
       }
       // Solo cuando la hoja la pide: subir una marca que el montaje no va a usar
@@ -544,6 +553,79 @@ export const invariantes = [
     },
     // Se rompe como estaba: el montaje sabe cuántas faltan y no dice qué hay.
     romper: (ctx) => conFuncion(ctx, 'loQueDiceElAlmacen', () => null),
+  },
+
+  {
+    nombre: 'el-material-que-esta-en-el-almacen-se-encuentra-y-no-se-vuelve-a-pagar',
+    dice: '«No me importa el mensaje que diga la aplicación. Yo lo que necesito es solucionar.» Y tenía razón: un mensaje que explica muy bien por qué no se puede montar sigue sin montar. El material estaba en el almacén, pagado y entero, guardado bajo el id con el que se subió —y el montaje pedía el de la pieza de ahora. Desde la pantalla no había ninguna salida que no fuera volver a generarlo todo. Ahora se busca cada archivo que falta por su cola —`t017/img`, `mus/003`—, se elige LA carpeta que más cubra, y cada toma queda apuntada a su archivo real. Sin copiar, sin generar y sin borrar.',
+    comprobar(ctx) {
+      const fallos = [];
+      const { apuntarAlMaterialQueHay, construirHojaDe, clavesDeLaHoja } = ctx.fn;
+
+      const pieza = () => ({
+        id: 'p2929',
+        tomas: [
+          { i: 0, imagen: 'ok', audio: 'ok', video: null, reusa: null },
+          { i: 1, imagen: 'ok', audio: 'ok', video: 'ok', movimiento: true, reusa: null },
+        ],
+        escenas: [{ n: 0, musica: 'ok' }],
+      });
+      const faltan = [
+        'p2929/t000/img', 'p2929/t000/audio',
+        'p2929/t001/img', 'p2929/t001/vid', 'p2929/t001/audio',
+        'p2929/mus/000',
+      ];
+      const almacen = [
+        'p2925/t000/img', 'p2925/t000/audio',
+        'p2925/t001/img', 'p2925/t001/vid', 'p2925/t001/audio',
+        'p2925/mus/000',
+        // Ruido: otra carpeta con UNA coincidencia, y la firma que sube la revisión.
+        'biblioteca/t000/img', 'p2929/firma',
+      ];
+
+      // 1 · LOS ENCUENTRA TODOS, en la carpeta que más cubre.
+      const z = pieza();
+      const r = apuntarAlMaterialQueHay(z, faltan, almacen);
+      if (r.encontrados !== faltan.length || r.carpeta !== 'p2925') {
+        fallos.push(
+          `Con el material entero en «p2925», encuentra ${r.encontrados} de ${faltan.length} ` +
+            `en «${r.carpeta}»: lo que no encuentre aquí hay que pagarlo otra vez.`,
+        );
+      }
+
+      // 2 · Y LO DEJA APUNTADO DONDE EL MONTAJE LO MIRA. Escribirlo en un campo
+      //     que la hoja no lee sería exactamente el mismo callejón de antes.
+      const claves = clavesDeLaHoja(construirHojaDe(z, ctx.config));
+      const sigueFuera = claves.filter((k) => k.startsWith('p2929/') && !k.endsWith('/firma'));
+      if (sigueFuera.length) {
+        fallos.push(`Después de apuntarlo, la hoja sigue pidiendo: ${sigueFuera.join(', ')}.`);
+      }
+
+      // 3 · NO MEZCLA CARPETAS. Coger de cada una lo que encaje monta este episodio
+      //     con trozos de otro, y eso es peor que no montar.
+      const partido = pieza();
+      apuntarAlMaterialQueHay(partido, faltan, [
+        'p2925/t000/img', 'p2925/t000/audio', 'p2925/t001/img', 'p2925/t001/audio',
+        'p0007/t001/vid', 'p0007/mus/000',
+      ]);
+      const apuntado = [
+        partido.tomas[1].heredadoVid || '',
+        String(partido.escenas[0].musica || ''),
+      ].filter((k) => k.includes('/'));
+      if (apuntado.some((k) => !k.startsWith('p2925/'))) {
+        fallos.push(`Mezcla carpetas: apuntó a ${apuntado.join(', ')} teniendo el grueso en «p2925».`);
+      }
+
+      // 4 · Y SI NO ESTÁ, NO SE INVENTA UN SITIO.
+      const vacio = pieza();
+      const nada = apuntarAlMaterialQueHay(vacio, faltan, ['p2929/firma']);
+      if (nada.encontrados || vacio.tomas[0].heredado) {
+        fallos.push('Sin material en el almacén, apunta a algo igualmente: eso es un archivo que no existe.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: no hay dónde buscar y la única salida es generar.
+    romper: (ctx) => conFuncion(ctx, 'apuntarAlMaterialQueHay', () => ({ encontrados: 0, carpeta: '' })),
   },
 
   {

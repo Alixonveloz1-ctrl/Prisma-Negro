@@ -4423,6 +4423,41 @@ accion(
           : r.faltan,
       );
     }
+    // Y CON MATERIAL QUE FALTA, LA SALIDA A MANO. Sale aquí porque es aquí donde
+    // se descubre: un botón que solo aparece cuando sirve.
+    $('b-buscar-material').classList.toggle('oculto', r.completo);
+  },
+  'paso5',
+);
+
+accion(
+  'b-buscar-material',
+  async () => {
+    avisar('paso5', 'Buscando en el almacén el material que falta…');
+    const r = await montajeFase.buscarElMaterial({
+      pieza: pieza(),
+      config: P.config,
+      aviso: (m) => avisar('paso5', m),
+    });
+    if (!r.encontrados) {
+      avisar(
+        'paso5',
+        r.faltaban
+          ? `No encontré en el almacén ninguno de los ${r.faltaban} que faltan. Ese material no ` +
+            `está subido: hay que generarlo.`
+          : 'No falta nada.',
+        r.faltaban ? 'malo' : 'bueno',
+      );
+      return;
+    }
+    await guardar();
+    pintarTodo();
+    avisar(
+      'paso5',
+      `Encontrados ${r.encontrados} de ${r.faltaban} en «${r.carpeta}», y apuntados a su sitio. ` +
+        `No se ha generado ni pagado nada. Dale a Revisar otra vez.`,
+      'bueno',
+    );
   },
   'paso5',
 );

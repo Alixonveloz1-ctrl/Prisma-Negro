@@ -157,6 +157,95 @@ export function loQueDiceElAlmacen(pieza, claves, faltan, tiene, todo = null) {
 }
 
 /**
+ * BUSCA EL MATERIAL DONDE ESTÉ Y APUNTA CADA TOMA A SU ARCHIVO.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Ahí está el bucket, está correcto, ahí está todo guardado, ya revisé los
+ *  archivos.» Y la pantalla: «Faltan 238 de 250 materiales.»
+ *
+ * «No me importa el mensaje que diga la aplicación. Yo lo que necesito es
+ *  solucionar.»
+ *
+ * Un mensaje que explica muy bien por qué no se puede montar sigue siendo un
+ * mensaje que no monta. El material está en el almacén, pagado y entero, guardado
+ * bajo un nombre que el montaje ya no pide — porque la carpeta lleva el id de la
+ * pieza y ese id no es el mismo con el que se subió. Eso NO se arregla generando.
+ *
+ * Esto lo arregla: mira el almacén ENTERO, busca cada archivo que falta por su
+ * cola —`t017/img`, `mus/003`—, se queda con la carpeta que más cubra, y apunta
+ * cada toma a su archivo real con el mecanismo que ya existía para heredar
+ * material de otra pieza. No copia nada, no genera nada, no borra nada: solo deja
+ * escrito dónde está lo que ya está.
+ *
+ * Una sola carpeta, la que más cubra: mezclar dos sería montar este episodio con
+ * trozos de otro, y eso es peor que no montar.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export async function buscarElMaterial({ pieza, config, senal, aviso }) {
+  const hoja = hojaDe(pieza, config);
+  const previa = await llamar('montar.comprobar', { hoja }, { senal });
+  // La firma no se busca: la vuelve a subir la propia revisión.
+  const faltan = (previa.faltan || []).filter((k) => !k.endsWith('/firma'));
+  if (!faltan.length) return { faltaban: 0, encontrados: 0, carpeta: '' };
+
+  aviso?.('Mirando el almacén entero…');
+  const r = await llamar('listar', { prefijo: '' }, { senal });
+  const enElAlmacen = (r.materiales || []).filter((m) => m.bytes > 0).map((m) => String(m.clave));
+  return { faltaban: faltan.length, ...apuntarAlMaterialQueHay(pieza, faltan, enElAlmacen) };
+}
+
+/** La parte sin nube: elige carpeta y escribe los punteros. Ver arriba. */
+export function apuntarAlMaterialQueHay(pieza, faltan, enElAlmacen) {
+  const hay = new Set(enElAlmacen);
+  const cola = (k) => k.slice(k.indexOf('/') + 1);
+  const carpeta = (k) => k.slice(0, k.indexOf('/'));
+  const colas = faltan.map(cola);
+
+  // UNA sola carpeta, la que más cubra. Ir cogiendo de cada una lo que encaje
+  // montaría este episodio con trozos de otro, y eso es peor que no montar.
+  let ganadora = '';
+  let mejor = 0;
+  for (const c of new Set([...hay].map(carpeta).filter(Boolean))) {
+    if (c === pieza.id) continue;
+    const n = colas.filter((x) => hay.has(`${c}/${x}`)).length;
+    if (n > mejor) {
+      mejor = n;
+      ganadora = c;
+    }
+  }
+  if (!ganadora) return { encontrados: 0, carpeta: '' };
+
+  let encontrados = 0;
+  for (const k of faltan) {
+    const destino = `${ganadora}/${cola(k)}`;
+    if (!hay.has(destino)) continue;
+
+    const deToma = /^t(\d{3})\/(img|vid|audio)$/.exec(cola(k));
+    if (deToma) {
+      const t = (pieza.tomas || []).find((x) => x.i === Number(deToma[1]));
+      if (!t) continue;
+      if (deToma[2] === 'img') t.heredado = destino;
+      if (deToma[2] === 'vid') t.heredadoVid = destino;
+      if (deToma[2] === 'audio') t.heredadoAudio = destino;
+      encontrados++;
+      continue;
+    }
+
+    const deEscena = /^mus\/(\d{3})$/.exec(cola(k));
+    if (deEscena) {
+      const e = (pieza.escenas || []).find((x) => x.n === Number(deEscena[1]));
+      if (!e) continue;
+      // La hoja ya acepta una clave entera aquí: si `escena.musica` lleva una
+      // barra, la usa tal cual en vez de componerla. No hace falta campo nuevo.
+      e.musica = destino;
+      encontrados++;
+    }
+  }
+
+  return { encontrados, carpeta: ganadora };
+}
+
+/**
  * Qué se va a montar y con qué. Se enseña ANTES de arrancar nada.
  *
  * Incluye la comprobación previa contra el almacén: si falta material, aquí sale

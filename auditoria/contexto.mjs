@@ -299,6 +299,9 @@ async function funcionesPuras() {
     duracionQueSePide: mov.duracionQueSePide,
     duracionMasLarga: mod.duracionMasLarga,
     loQueDiceElAlmacen: mtj.loQueDiceElAlmacen,
+    apuntarAlMaterialQueHay: mtj.apuntarAlMaterialQueHay,
+    construirHojaDe: mtj.hojaDe,
+    clavesDeLaHoja: hoj.clavesDeLaHoja,
   };
 }
 
