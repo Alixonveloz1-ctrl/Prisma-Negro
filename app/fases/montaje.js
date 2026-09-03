@@ -14,7 +14,7 @@
 
 import { llamar } from '../api.js';
 import { construirHoja, guionFfmpeg, guionEntrega, clavesDeLaHoja } from '../../comun/hoja.mjs';
-import { claveFinal, claveVozEntera, claveLecho } from '../../comun/claves.mjs';
+import { claveFinal, claveVozEntera, claveLecho, tipoDe } from '../../comun/claves.mjs';
 import { crc32, armarZip, cabeEnZip } from '../../comun/zip.mjs';
 import { deBase64 } from '../imagenes.js';
 import { subirMarca } from './miniatura.js';
@@ -246,6 +246,38 @@ export function apuntarAlMaterialQueHay(pieza, faltan, enElAlmacen) {
 }
 
 /**
+ * DE QUÉ SON LOS 250 MATERIALES.
+ *
+ * «Además, todo el tiempo dice doscientos cincuenta. Si son ciento y algo de
+ *  tomas, no entiendo.»
+ *
+ * Y no hay por qué entenderlo: un número solo no dice de qué es. Cada toma son
+ * DOS archivos —su voz y su visual— y encima el visual se comparte: dos tomas del
+ * mismo plano usan la misma imagen y no se paga dos veces. Sumadas la música de
+ * cada escena y la marca, salen los doscientos cincuenta.
+ *
+ * Dicho por tipos, la cuenta se puede seguir con los dedos y además se ve dónde
+ * está lo caro.
+ */
+export function porTipo(claves) {
+  const nombres = { audio: 'voces', img: 'imágenes', vid: 'clips', mus: 'músicas', firma: 'la marca' };
+  const cuenta = new Map();
+  for (const k of claves) {
+    let t;
+    try {
+      t = tipoDe(k);
+    } catch {
+      continue;
+    }
+    cuenta.set(t, (cuenta.get(t) || 0) + 1);
+  }
+  return ['audio', 'img', 'vid', 'mus', 'firma']
+    .filter((t) => cuenta.get(t))
+    .map((t) => (t === 'firma' ? 'la marca' : `${cuenta.get(t)} ${nombres[t]}`))
+    .join(' · ');
+}
+
+/**
  * Qué se va a montar y con qué. Se enseña ANTES de arrancar nada.
  *
  * Incluye la comprobación previa contra el almacén: si falta material, aquí sale
@@ -286,6 +318,7 @@ export async function revisar({ pieza, config, senal }) {
     faltan,
     total: previa.total,
     duracion: hoja.total,
+    deQueSon: porTipo(claves),
     dondeEsta,
     avisos: [
       // Primero: cuando falta material, lo que decide qué hacer es DÓNDE está, no

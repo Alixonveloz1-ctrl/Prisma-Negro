@@ -4474,8 +4474,8 @@ accion(
     avisar(
       'paso5',
       r.completo
-        ? `Todo listo: ${r.total} materiales, ${(r.duracion / 60).toFixed(1)} minutos.`
-        : `Faltan ${r.faltan.length} de ${r.total} materiales.`,
+        ? `Todo listo: ${r.total} materiales — ${r.deQueSon} — y ${(r.duracion / 60).toFixed(1)} minutos.`
+        : `Faltan ${r.faltan.length} de ${r.total} materiales (${r.deQueSon}).`,
       r.completo ? 'bueno' : 'malo',
     );
     // EL PORQUÉ ANTES QUE LA LISTA, Y EN LA MISMA CAJA QUE EL TITULAR.

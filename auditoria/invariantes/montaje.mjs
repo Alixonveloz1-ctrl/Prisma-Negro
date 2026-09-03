@@ -629,6 +629,44 @@ export const invariantes = [
   },
 
   {
+    nombre: 'el-numero-de-materiales-dice-de-que-son',
+    dice: '«Todo el tiempo dice doscientos cincuenta. Si son ciento y algo de tomas, no entiendo.» Y no hay por qué entenderlo: un número solo no dice de qué es. Cada toma son dos archivos —su voz y su visual—, el visual se comparte entre tomas del mismo plano, y encima están la música de cada escena y la marca. Dicho por tipos, la cuenta se sigue con los dedos.',
+    comprobar(ctx) {
+      const fallos = [];
+      const { porTipo } = ctx.fn;
+      const claves = [];
+      for (let i = 0; i < 133; i++) claves.push(`p07/t${String(i).padStart(3, '0')}/audio`);
+      for (let i = 0; i < 68; i++) claves.push(`p07/t${String(i).padStart(3, '0')}/img`);
+      for (let i = 0; i < 41; i++) claves.push(`p07/t${String(i).padStart(3, '0')}/vid`);
+      for (let i = 0; i < 8; i++) claves.push(`p07/mus/${String(i).padStart(3, '0')}`);
+      claves.push('p07/firma');
+
+      const dicho = porTipo(claves);
+      for (const [cuantos, que] of [[133, 'voces'], [68, 'imágenes'], [41, 'clips'], [8, 'músicas']]) {
+        if (!dicho.includes(`${cuantos} ${que}`)) {
+          fallos.push(`El desglose no dice «${cuantos} ${que}»: «${dicho}»`);
+        }
+      }
+      if (!/marca/.test(dicho)) fallos.push(`El desglose se come la marca: «${dicho}»`);
+
+      // Y la pantalla tiene que enseñarlo, en las dos frases: la de todo listo y
+      // la de faltan. Un desglose que no sale a pantalla no ha explicado nada.
+      const pan = fuente(ctx, 'app/main.js');
+      const a = pan.indexOf("'b-revisar',\n  async ()");
+      const b = a < 0 ? -1 : pan.indexOf("'b-buscar-material',", a);
+      const revisar = a < 0 || b < 0 ? '' : pan.slice(a, b);
+      if (!revisar) {
+        fallos.push('No encuentro el botón de revisar: esta comprobación estaría mirando al vacío.');
+      } else if ((revisar.match(/r\.deQueSon/g) || []).length < 2) {
+        fallos.push('El desglose no sale en las dos frases —todo listo y faltan—: en una de las dos vuelve a ser un número solo.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: el número, a secas.
+    romper: (ctx) => conFuncion(ctx, 'porTipo', () => ''),
+  },
+
+  {
     nombre: 'el-tono-de-la-voz-no-se-toca',
     dice: 'La voz sale COMO LA GENERÓ EL SERVICIO. Aquí vivieron dos cosas —un mando de gravedad y un igualador de tono entre tomas— y las dos hicieron más daño que bien: el mando iba al revés y sonaba fina y acelerada; el agravador granular doblaba la voz; frenar la reproducción cortaba la última palabra; y el igualador, con el medidor yéndose de octava, dejaba «una toma grave, una normal, una grave, una normal» — hasta en el video ya descargado. Cada arreglo trajo un defecto nuevo, así que se quitó de raíz. Esta invariante existe para que no vuelva a entrar sin que alguien la borre a propósito.',
     comprobar(ctx) {

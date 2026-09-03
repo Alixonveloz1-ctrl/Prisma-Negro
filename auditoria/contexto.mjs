@@ -301,6 +301,7 @@ async function funcionesPuras() {
     loQueDiceElAlmacen: mtj.loQueDiceElAlmacen,
     apuntarAlMaterialQueHay: mtj.apuntarAlMaterialQueHay,
     construirHojaDe: mtj.hojaDe,
+    porTipo: mtj.porTipo,
     clavesDeLaHoja: hoj.clavesDeLaHoja,
   };
 }
