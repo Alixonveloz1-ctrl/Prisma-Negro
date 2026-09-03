@@ -1572,7 +1572,12 @@ export const invariantes = [
       const bloque = s.slice(s.indexOf('5. El montador'));
       for (const [que, senal] of [
         ['el nombre del job que busca', /\$\{job\}/],
-        ['en qué proyecto lo busca', /proyecto\(\)\}/],
+        // Y DE DÓNDE SALE ESE NOMBRE. El censor borra el id del proyecto de toda
+        // respuesta, y el nombre por defecto lo lleva dentro: en pantalla se leía
+        // «[oculto]-montador» y con eso no se sabe qué job crear. Decir si es el
+        // de por defecto o el de una variable sí sobrevive al censor.
+        ['de dónde sale el nombre', /nombre por defecto/],
+        ['que el hueco lo pone el censor y no es un fallo', /tapado a prop[oó]sito/],
         ['en qué región lo busca', /regi[oó]n \$\{region\}|regi[oó]n \$\{regionJob|\$\{region\}`/],
         ['que el montador vive en la nube del usuario', /vive en TU Google Cloud/],
         ['cómo cambiar el nombre', /nombrePrincipal\('job'\)/],

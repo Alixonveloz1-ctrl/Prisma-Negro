@@ -243,7 +243,21 @@ export async function probarCadena() {
       // poder leer de un vistazo — el job que se busca, dónde se busca, y que el
       // nombre se puede cambiar.
       const job = valorEntorno('job', 'prisma-negro-montador');
-      const donde = `«${job}» en el proyecto «${proyecto()}», región ${region}`;
+      // DE DÓNDE SALE EL NOMBRE, porque el nombre sale TAPADO.
+      //
+      // El censor borra el id del proyecto de toda respuesta, y el nombre por
+      // defecto del montador lo lleva dentro: en pantalla se lee
+      // «[oculto]-montador» y con eso no se sabe qué job crear. Decir de dónde
+      // viene el nombre sí sobrevive al censor y contesta la pregunta: si es el de
+      // por defecto, ya se sabe cuál es; si viene de una variable, se sabe dónde
+      // mirarlo. Y se avisa de que el hueco es el censor y no un fallo.
+      const suyo = !!valorEntorno('job');
+      const deDonde = suyo
+        ? `el que pusiste en ${nombrePrincipal('job')}`
+        : 'el nombre por defecto, «prisma-negro-montador»';
+      const donde =
+        `«${job}» (${deDonde}) en el proyecto de la cuenta de servicio que hay en ` +
+        `esta aplicación, región ${region}`;
       const url =
         `https://run.googleapis.com/v2/projects/${proyecto()}` +
         `/locations/${region}/jobs/${job}`;
@@ -257,9 +271,12 @@ export async function probarCadena() {
             false,
             `No hay ningún contenedor de montaje ${donde}.`,
             `El montador vive en TU Google Cloud, no en esta aplicación: una cuenta o un ` +
-              `proyecto nuevo empieza sin él y hay que instalarlo ahí. Si el tuyo se llama de ` +
-              `otra forma, pon su nombre en ${nombrePrincipal('job')}; si está en otra región, ` +
-              `en ${nombrePrincipal('regionJob')}.`,
+              `proyecto nuevo empieza sin él y hay que instalarlo ahí, y NO se puede usar el de ` +
+              `otro proyecto — el proyecto es el de la cuenta de servicio, y es uno para todo. ` +
+              `Si el tuyo se llama de otra forma, pon su nombre en ${nombrePrincipal('job')}; si ` +
+              `está en otra región, en ${nombrePrincipal('regionJob')}. ` +
+              `Lo que salga como «[oculto]» es el id de tu proyecto, tapado a propósito: no es ` +
+              `un fallo.`,
           ),
         );
       } else {
