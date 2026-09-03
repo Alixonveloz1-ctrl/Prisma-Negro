@@ -85,8 +85,11 @@ export function textoDePublicacion(m, titulo) {
   if (!m) return '';
   // DOS COPIAS Y NO CINCO. Son dos campos distintos de YouTube y no hay forma de
   // juntarlos más: la descripción —que ya lleva los hashtags dentro— y el campo
-  // de etiquetas, que va sin almohadilla. El documento dice exactamente dónde va
-  // cada una para no tener que acordarse.
+  // de etiquetas, que va sin almohadilla.
+  //
+  // Y los títulos a secas: «¿Para qué les pones esa etiqueta diciendo qué es la
+  // descripción y qué es las etiquetas? Yo voy a poder entenderlo.» Explicarle a
+  // alguien lo que ya sabe le hace leer más para encontrar lo mismo.
   return [
     `TÍTULO`,
     (m.titulos || [])[0] || titulo || '',
@@ -94,10 +97,10 @@ export function textoDePublicacion(m, titulo) {
     (m.titulos || []).length > 1 ? 'OTROS TÍTULOS' : '',
     ...(m.titulos || []).slice(1),
     (m.titulos || []).length > 1 ? '' : '',
-    'DESCRIPCIÓN — pégala tal cual, los hashtags ya van dentro',
+    'DESCRIPCIÓN',
     m.descripcion || '',
     '',
-    'ETIQUETAS — para el campo de etiquetas de YouTube, no para la descripción',
+    'ETIQUETAS',
     (m.etiquetas || []).join(', '),
   ]
     .filter((x) => x !== '' || true)

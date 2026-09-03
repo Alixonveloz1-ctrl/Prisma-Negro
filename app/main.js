@@ -4675,10 +4675,10 @@ accion(
       // va sin almohadilla y separado por comas, y los hashtags van dentro de la
       // descripción con ella. Estaba solo el primero, así que el segundo había que
       // escribirlo a mano, uno por uno.
-      `<label>Hashtags · para la descripción</label>` +
+      `<label>Hashtags</label>` +
       `<textarea readonly style="min-height:70px">${escapar(metadatos.hashtagsDe(m.etiquetas).join(' '))}</textarea>` +
-      `<p class="nota chica">Ya van al final de la descripción, así que con pegar la descripción es suficiente. Están aquí sueltos por si los quieres aparte.</p>` +
-      `<label>Etiquetas · para el campo de tags</label>` +
+
+      `<label>Etiquetas</label>` +
       `<textarea readonly style="min-height:70px">${escapar(m.etiquetas.join(', '))}</textarea>`;
   },
   'paso5',
