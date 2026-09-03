@@ -234,15 +234,33 @@ export async function probarCadena() {
   {
     try {
       const region = valorEntorno('regionJob', 'us-central1');
+      // EL NOMBRE QUE SE BUSCA, DICHO CON TODAS LAS LETRAS.
+      //
+      // Decía «no está desplegado con ese nombre» y «revisa CLOUD_RUN_JOB», sin
+      // decir NUNCA qué nombre ni en qué proyecto. Con eso no se puede comprobar
+      // nada desde un teléfono: «¿cómo va a saber mi cuenta lo del montador, si
+      // ese montador era de otra cuenta?». Pues eso es exactamente lo que hay que
+      // poder leer de un vistazo — el job que se busca, dónde se busca, y que el
+      // nombre se puede cambiar.
+      const job = valorEntorno('job', 'prisma-negro-montador');
+      const donde = `«${job}» en el proyecto «${proyecto()}», región ${region}`;
       const url =
         `https://run.googleapis.com/v2/projects/${proyecto()}` +
-        `/locations/${region}/jobs/${valorEntorno('job', 'prisma-negro-montador')}`;
+        `/locations/${region}/jobs/${job}`;
       const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (r.ok) {
-        pasos.push(paso('montador', true, 'El contenedor de montaje está desplegado y visible.'));
+        pasos.push(paso('montador', true, `El contenedor de montaje está desplegado: ${donde}.`));
       } else if (r.status === 404) {
         pasos.push(
-          paso('montador', false, 'El contenedor de montaje no está desplegado con ese nombre.', `Revisa ${nombrePrincipal('job')} y que el job esté en la región ${region}.`),
+          paso(
+            'montador',
+            false,
+            `No hay ningún contenedor de montaje ${donde}.`,
+            `El montador vive en TU Google Cloud, no en esta aplicación: una cuenta o un ` +
+              `proyecto nuevo empieza sin él y hay que instalarlo ahí. Si el tuyo se llama de ` +
+              `otra forma, pon su nombre en ${nombrePrincipal('job')}; si está en otra región, ` +
+              `en ${nombrePrincipal('regionJob')}.`,
+          ),
         );
       } else {
         const d = await r.json().catch(() => ({}));

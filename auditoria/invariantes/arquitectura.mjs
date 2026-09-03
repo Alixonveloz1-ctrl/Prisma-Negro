@@ -1557,6 +1557,28 @@ export const invariantes = [
       if (!/arregla/.test(s)) {
         fallos.push('Los eslabones rotos no dicen qué hacer para arreglarlos.');
       }
+
+      // Y UN NOMBRE QUE NO SE ENCUENTRA SE DICE ENTERO.
+      //
+      // «¿Cómo va a saber mi cuenta lo del montador, si ese montador era de otra
+      //  cuenta de Google diferente?» El diagnóstico decía «no está desplegado con
+      //  ese nombre» y «revisa CLOUD_RUN_JOB», sin decir NUNCA qué nombre buscaba
+      //  ni en qué proyecto. Desde un teléfono eso no se puede comprobar: hay que
+      //  poder leer el job, el proyecto y la región de un vistazo, y que se puede
+      //  cambiar el nombre. Un diagnóstico que no dice qué buscó obliga a leer el
+      //  código, y el código no se lee desde un móvil.
+      // Desde el rótulo de su sección: anclarlo en la URL empezaba DESPUÉS de la
+      // línea que compone el mensaje, así que la comprobación miraba donde no era.
+      const bloque = s.slice(s.indexOf('5. El montador'));
+      for (const [que, senal] of [
+        ['el nombre del job que busca', /\$\{job\}/],
+        ['en qué proyecto lo busca', /proyecto\(\)\}/],
+        ['en qué región lo busca', /regi[oó]n \$\{region\}|regi[oó]n \$\{regionJob|\$\{region\}`/],
+        ['que el montador vive en la nube del usuario', /vive en TU Google Cloud/],
+        ['cómo cambiar el nombre', /nombrePrincipal\('job'\)/],
+      ]) {
+        if (!senal.test(bloque)) fallos.push(`El diagnóstico del montador no dice ${que}.`);
+      }
       // El pegado incompleto de la clave PEM es EL fallo de configurar desde un
       // teléfono: tiene que cazarse por su nombre, no como «error de firma».
       if (!/-----BEGIN/.test(s) || !/-----END/.test(s)) {
