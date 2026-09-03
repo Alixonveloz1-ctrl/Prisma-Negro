@@ -435,6 +435,10 @@ function sanearToma(bruto, i, proyecto) {
     // —porque para ella ya estaba hecho—. Callejón sin salida desde la interfaz.
     heredado: claveHeredada(t.heredado),
     heredadoVid: claveHeredada(t.heredadoVid),
+    // Y el mismo caso para la voz, que llegó después: una toma que cambió de
+    // número al volver a repartir el guion tiene su voz subida con el número de
+    // antes. Ver `claveVoz` en `comun/claves.mjs`.
+    heredadoAudio: claveHeredada(t.heredadoAudio),
     // La ficha cambió al volver a dirigir y el material anterior ya no vale.
     desfasada: t.desfasada === true,
     movimiento: t.movimiento === true,

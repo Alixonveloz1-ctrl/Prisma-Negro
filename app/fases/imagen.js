@@ -588,6 +588,11 @@ export async function generarImagen({
   return {
     ...toma,
     imagen: 'ok',
+    // Y DEJA DE APUNTAR A OTRO SITIO. `heredado` guarda la clave de un material
+    // que vive fuera de esta toma —otra pieza, u otro número de antes de un
+    // reparto—. Acabamos de escribir en la clave PROPIA: conservarlo haría que
+    // todos siguieran leyendo la imagen vieja, con la nueva pagada y sin usar.
+    heredado: null,
     bytesImagen: r.guardado.bytes,
     versionImagen: (Number(toma.versionImagen) || 0) + 1,
   };

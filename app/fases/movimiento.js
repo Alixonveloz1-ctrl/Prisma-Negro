@@ -158,6 +158,8 @@ export async function generarClip({ toma, tomas, pieza, config, tratamiento = nu
   return {
     ...toma,
     video: 'ok',
+    // El clip acaba de escribirse en la clave propia: ya no vive fuera.
+    heredadoVid: null,
     bytesVideo: r.guardado.bytes,
     versionClip: Number(toma.versionImagen) || 0,
   };

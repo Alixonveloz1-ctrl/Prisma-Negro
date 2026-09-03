@@ -41,7 +41,7 @@ import * as previa from './previa.js';
 import * as local from './local.js';
 import { material } from './material.js';
 import { deBase64 } from './imagenes.js';
-import { claveToma, claveMusica, claveFotograma, claveClip, clipVigente } from '../comun/claves.mjs';
+import { claveToma, claveMusica, claveVoz, claveFotograma, claveClip, clipVigente } from '../comun/claves.mjs';
 
 const $ = (id) => document.getElementById(id);
 
@@ -191,6 +191,45 @@ function conSitioEnElGuion(tomas, guion) {
   });
 }
 
+/**
+ * EL ARCHIVO NO SE MUEVE CUANDO LA TOMA CAMBIA DE NÚMERO.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Todo está generado, pero aún así el montador dice que algo falta.»
+ *
+ * Abajo, los `reusa` se reescriben porque apuntan a un índice y los índices se
+ * mueven al volver a repartir. Pues `imagen: 'ok'`, `video: 'ok'` y `audio: 'ok'`
+ * son TAMBIÉN punteros por índice, solo que implícitos: la clave del archivo se
+ * compone con el número de la toma —`p07/t017/img`— y el archivo, que está en el
+ * almacén, no se entera de que la toma pasó a ser la 23.
+ *
+ * Conservar la marca sin conservar el nombre dejaba lo peor de los dos mundos:
+ * en pantalla, todo verde y pagado; en el montaje, doscientas claves pedidas que
+ * no existen. Y como la fase de imagen ve `imagen: 'ok'`, tampoco lo regenera:
+ * callejón sin salida, igual que el que ya se pagó con `heredado` en `sanearToma`.
+ *
+ * Así que se conserva APUNTANDO al nombre con el que se subió. El mecanismo ya
+ * estaba —`heredado` y `heredadoVid` guardan la clave entera de un material que
+ * vive en otro sitio— y la voz estrena el suyo, `heredadoAudio`.
+ *
+ * El nombre se saca con `claveFotograma`/`claveClip` sobre la lista VIEJA: si la
+ * donante repetía el fotograma de otra o lo heredaba de otra pieza, su archivo no
+ * está bajo su propio número, y componerlo a mano volvería a apuntar al vacío.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+function conSuArchivo(nueva, vieja, viejas) {
+  if (vieja.i === nueva.i) return nueva;
+  const con = { ...nueva };
+  // El prefijo es el mismo con el que se generó. Ver `pieza: P.id` en las fases.
+  if (con.imagen === 'ok' && !con.heredado) con.heredado = claveFotograma(P.id, vieja, viejas);
+  if (con.video === 'ok' && !con.heredadoVid) con.heredadoVid = claveClip(P.id, vieja, viejas);
+  // La voz no se comparte entre tomas: no hay cadena que resolver, solo su número.
+  if (con.audio === 'ok' && !con.heredadoAudio) {
+    con.heredadoAudio = claveToma(P.id, vieja.i, 'audio');
+  }
+  return con;
+}
+
 function repartirConservando(z, r) {
   const viejas = conSitioEnElGuion(z.tomas || [], z.guion || '');
   const solape = (a, b) =>
@@ -219,7 +258,7 @@ function repartirConservando(z, r) {
       // El texto es el mismo: todo vale. Pero la posición y el índice son los
       // NUEVOS — si mandara la vieja, la toma apuntaría a un trozo de guion que ya
       // no es el suyo.
-      return { ...mejor, ...t, plano: mejor.plano, audio: mejor.audio };
+      return conSuArchivo({ ...mejor, ...t, plano: mejor.plano, audio: mejor.audio }, mejor, viejas);
     }
 
     const heredado = {};
@@ -228,7 +267,7 @@ function repartirConservando(z, r) {
     }
     if (Object.keys(heredado).length) visuales++;
     // `audio` NO entra: se cortó en unos límites que ya no existen.
-    return { ...t, ...heredado };
+    return conSuArchivo({ ...t, ...heredado }, mejor, viejas);
   });
 
   // LOS `reusa` SE REESCRIBEN O SE CAEN. Apuntan a un índice de toma, y al volver
@@ -2864,7 +2903,9 @@ accion('b-inventario', async () => {
     // Lo heredado y lo que repite otra toma no tiene archivo propio: preguntar por
     // él daría «no está» y lo desmarcaría, que es justo al revés de la verdad.
     const propia = t.reusa === null || t.reusa === undefined;
-    mirar({ clave: claveToma(P.id, t.i, 'audio'), dice: `voz ${t.i + 1}` }, t.audio === 'ok', (v) => (t.audio = v));
+    // Por `claveVoz`: una toma renumerada tiene su voz con el nombre de antes, y
+    // preguntar por el de ahora la desmarcaría —y mandaría a pagarla otra vez—.
+    mirar({ clave: claveVoz(P.id, t), dice: `voz ${t.i + 1}` }, t.audio === 'ok', (v) => (t.audio = v));
     if (propia && !t.heredado) {
       mirar({ clave: claveToma(P.id, t.i, 'img'), dice: `imagen ${t.i + 1}` }, t.imagen === 'ok', (v) => (t.imagen = v));
     }
@@ -3338,7 +3379,7 @@ function pintarPorTipo() {
           `Toma ${x.i + 1} · ${(x.segundos || 0).toFixed(1)}s` +
           (x.audio === 'ok' && x.corteExacto === false && x.corteForzado === true ? ' · corte forzado' : ''),
         texto: x.texto,
-        cargar: x.audio === 'ok' ? () => materialLocal(claveToma(P.id, x.i, 'audio'), 'audio/wav') : null,
+        cargar: x.audio === 'ok' ? () => materialLocal(claveVoz(P.id, x), 'audio/wav') : null,
         alRehacer: () => rehacerVoz(x.i),
         alEditar: (nuevo) => editarTextoDeToma(x.i, nuevo),
       }),

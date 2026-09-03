@@ -272,6 +272,8 @@ async function funcionesPuras() {
     tomaDelFotograma: cla.tomaDelFotograma,
     claveFotograma: cla.claveFotograma,
     claveClip: cla.claveClip,
+    claveToma: cla.claveToma,
+    claveVoz: cla.claveVoz,
     clipVigente: cla.clipVigente,
     construirHoja: hoj.construirHoja,
     guionEntrega: hoj.guionEntrega,
@@ -291,7 +293,7 @@ async function funcionesPuras() {
     duracionMasCercana: mov.duracionMasCercana,
     duracionQueSePide: mov.duracionQueSePide,
     duracionMasLarga: mod.duracionMasLarga,
-    dondeEstaElMaterial: mtj.dondeEstaElMaterial,
+    loQueDiceElAlmacen: mtj.loQueDiceElAlmacen,
   };
 }
 

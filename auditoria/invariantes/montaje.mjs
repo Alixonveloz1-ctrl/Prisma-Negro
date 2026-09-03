@@ -424,7 +424,7 @@ export const invariantes = [
     dice: 'En pantalla: «Faltan 238 de 250 materiales», con el episodio entero generado y visible en el teléfono. Las dos cosas eran verdad: el material existía y estaba pagado, y el almacén no tenía ni uno —se había cambiado de cuenta de Google Cloud y el cubo nuevo empezaba vacío—. Una lista de claves que faltan no distingue eso de una generación a medias, y lo que hay que hacer es lo contrario en cada caso: generar, o traer lo que ya está pagado. Sin distinguirlo, la salida natural es darle otra vez a generar y pagar dos veces un episodio entero.',
     comprobar(ctx) {
       const fallos = [];
-      const { dondeEstaElMaterial } = ctx.fn;
+      const { loQueDiceElAlmacen } = ctx.fn;
       const pieza = { id: 'p07' };
 
       // Una hoja como las de verdad: lo suyo, la firma que sube la propia
@@ -436,40 +436,50 @@ export const invariantes = [
       const ajenas = ['biblioteca/t004/vid', 'biblioteca/t009/img', 'p07/firma'];
       const claves = [...suyas, ...ajenas];
 
-      // 1 · SIN NI UNO DE LO SUYO: lo heredado y la firma están, y aun así el
-      //     veredicto tiene que ser que el material está en otro sitio. Si esto se
-      //     contara como «algo hay», el caso que costó el episodio no saldría.
-      const vacio = dondeEstaElMaterial(pieza, claves, suyas);
+      // 1 · EL ALMACÉN VACÍO. Lo heredado y la firma están, y aun así el veredicto
+      //     tiene que decir que ahí abajo no hay nada — y decirlo con el número.
+      const vacio = loQueDiceElAlmacen(pieza, claves, suyas, ['p07/firma']);
       if (!vacio) {
         fallos.push('Con NADA del episodio en el almacén, el montaje no dice nada: solo lista claves.');
       } else {
-        if (!/cuenta|cubo/i.test(vacio)) {
-          fallos.push('No dice que el material pueda estar en otro cubo o en otra cuenta: sin eso, la lista de claves manda a generar.');
+        if (!/NI UNO/.test(vacio)) {
+          fallos.push('No dice que no hay ni un archivo: la lista de claves sola manda a generar de nuevo.');
         }
-        if (!/pagad|dos veces/i.test(vacio)) {
-          fallos.push('No dice que volver a generar sería pagarlo dos veces, que es lo que hay que evitar.');
-        }
-        if (!/\b0\b/.test(vacio)) {
-          fallos.push('No dice el número: «no tiene ninguno» es una afirmación, y una afirmación sin número no se puede comprobar desde el teléfono.');
+        if (!new RegExp(`\\b${suyas.length}\\b`).test(vacio)) {
+          fallos.push('No dice los números: una afirmación sin número no se puede comprobar desde el teléfono.');
         }
       }
 
       // 2 · CON TODO EN SU SITIO, callado. Un aviso que sale siempre no se lee.
-      if (dondeEstaElMaterial(pieza, claves, ['biblioteca/t004/vid'])) {
+      if (loQueDiceElAlmacen(pieza, claves, ['biblioteca/t004/vid'], suyas)) {
         fallos.push('Avisa aunque no falte nada del episodio: un aviso permanente deja de leerse.');
       }
 
-      // 3 · FALTANDO ALGUNAS, la cuenta y NADA MÁS. Decir «está en otro cubo» cuando
-      //     el cubo tiene 34 de 37 es mentira, y una mentira aquí manda a mover
-      //     gigas de un sitio a otro para nada.
-      const pocas = dondeEstaElMaterial(pieza, claves, suyas.slice(0, 3));
-      if (!pocas) {
-        fallos.push('Faltando algunas no dice cuántas hay: el número es lo que decide si se genera o se trae.');
-      } else if (/cuenta|cubo/i.test(pocas)) {
-        fallos.push('Con material suyo en el almacén sigue diciendo que el cubo es otro: eso es falso.');
+      // 3 · EL CASO QUE DE VERDAD DECIDE: están, pero con otro nombre. Un archivo
+      //     que está y que el montaje no pide solo puede ser material subido con un
+      //     número que ya no vale, y eso NO se arregla generando.
+      const conOtroNombre = suyas.map((k) => k.replace(/\/t(\d{3})\//, (_, n) => `/t${String(+n + 40).padStart(3, '0')}/`));
+      const movidas = loQueDiceElAlmacen(pieza, claves, suyas, conOtroNombre);
+      if (!movidas) {
+        fallos.push('Con el material subido con otros números, no dice nada.');
+      } else {
+        if (!/ESTÁN y el montaje no pide/.test(movidas)) {
+          fallos.push('No dice que hay archivos que están y nadie pide: es lo único que distingue «se movió el nombre» de «no se generó».');
+        }
+        if (!/no hay que volver a generarlo/.test(movidas)) {
+          fallos.push('No dice que no hay que volver a generarlo: sin eso, lo pagado se paga dos veces.');
+        }
       }
 
-      // 4 · Y EL MONTAJE TIENE QUE USARLO. Las dos salidas: el aviso que se lee
+      // 4 · Y NADA DE TEORÍAS. Adivinar aquí costó un episodio: el veredicto se
+      //     ciñe a los números y a los nombres que ha visto.
+      for (const inventado of [/cuenta de Google/i, /cambiar de cuenta/i]) {
+        if (inventado.test(vacio || '') || inventado.test(movidas || '')) {
+          fallos.push('El veredicto explica la causa en vez de decir lo que ve: eso es adivinar, y adivinar aquí manda a rehacer un episodio entero.');
+        }
+      }
+
+      // 5 · Y EL MONTAJE TIENE QUE USARLO. Las dos salidas: el aviso que se lee
       //     antes de montar, y el error que impide montar. Con una sola, la mitad de
       //     las veces sale la lista de claves a secas.
       //
@@ -493,7 +503,7 @@ export const invariantes = [
         fallos.push('El error que impide montar no lleva el veredicto: quien le dé a Montar solo verá la lista de claves.');
       }
 
-      // 5 · Y EN PANTALLA, ANTES DE LA LISTA. Doscientas treinta y ocho claves
+      // 6 · Y EN PANTALLA, ANTES DE LA LISTA. Doscientas treinta y ocho claves
       //     delante del aviso lo dejan fuera de la pantalla de un teléfono, y en la
       //     caja de otro paso ni siquiera se busca ahí.
       //
@@ -517,8 +527,8 @@ export const invariantes = [
       }
       return fallos;
     },
-    // Se rompe como estaba: el montaje sabe cuántas faltan y no dice dónde están.
-    romper: (ctx) => conFuncion(ctx, 'dondeEstaElMaterial', () => null),
+    // Se rompe como estaba: el montaje sabe cuántas faltan y no dice qué hay.
+    romper: (ctx) => conFuncion(ctx, 'loQueDiceElAlmacen', () => null),
   },
 
   {

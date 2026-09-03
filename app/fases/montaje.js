@@ -38,50 +38,84 @@ export function hojaDe(pieza, config) {
 }
 
 /**
- * ¿FALTA MATERIAL, O FALTA EL ALMACÉN?
+ * QUÉ TIENE EL ALMACÉN DE ESTE EPISODIO. No qué debería tener: qué tiene.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * «Todo está generado, pero aún así el montador dice que algo falta.»
  *
- * Y las dos cosas eran verdad a la vez. El material estaba generado y pagado —en
- * la pantalla se ve—, y el almacén no tenía casi nada de él. Una lista de
- * doscientas treinta y ocho claves que faltan no distingue eso de una generación
- * a medias, y lo que hay que hacer es LO CONTRARIO en cada caso: generar, o traer
- * lo que ya está pagado. Sin distinguirlo, la salida natural es darle otra vez a
- * generar y pagar dos veces un episodio entero.
+ * Y las dos cosas eran verdad a la vez: el episodio generado y pagado, y el
+ * montaje sin encontrarlo. Lo único que salía en pantalla era una lista de
+ * doscientas treinta y ocho claves que faltan, y esa lista no distingue entre las
+ * tres cosas que la producen —no se generó, no se subió, o está subido con otro
+ * nombre—, que se arreglan de tres maneras distintas. Con la lista a secas, la
+ * salida natural es darle otra vez a generar: pagar dos veces algo que a lo mejor
+ * ya está ahí.
  *
- * Se distingue sin preguntar nada nuevo: con la misma respuesta que el almacén
- * acaba de dar, contando aparte lo que es DE ESTE EPISODIO. Sale un número, no
- * una teoría: «tiene 1 de los 250». Y cuando ese número es cero —descontando la
- * firma, que la sube esta misma comprobación un segundo antes, y lo heredado, que
- * vive bajo el prefijo de otra pieza— el problema no es el material: es el sitio
- * donde se está mirando. Cambiar de cuenta o de cubo de Google Cloud deja
- * exactamente esta huella.
+ * Así que se le pregunta al almacén qué hay bajo el episodio y se pone al lado de
+ * lo que el montaje pide. Salen hechos, no teorías: cuántos archivos hay, y —lo
+ * que de verdad decide— si hay archivos que ESTÁN y que el montaje no pide. Eso
+ * último solo puede significar una cosa: el nombre cambió después de generarlos,
+ * y el nombre lleva dentro el número de la toma.
+ *
+ * NO se diagnostica más de lo que se ve. Adivinar aquí cuesta un episodio entero.
  * ─────────────────────────────────────────────────────────────────────────────
  */
-export function dondeEstaElMaterial(pieza, claves, faltan) {
+export async function queTieneElAlmacen(pieza, claves, faltan, senal) {
+  if (!faltan.length) return null;
+  if (!claves.some((k) => k.startsWith(`${pieza.id}/`))) return null;
+  try {
+    const r = await llamar('listar', { prefijo: `${pieza.id}/` }, { senal });
+    const tiene = (r.materiales || []).filter((m) => m.bytes > 0).map((m) => m.clave);
+    return loQueDiceElAlmacen(pieza, claves, faltan, tiene);
+  } catch {
+    // Sin respuesta del almacén no se dice nada: un diagnóstico inventado manda a
+    // rehacer un episodio entero.
+    return null;
+  }
+}
+
+/** La lectura, sin nube: lo que pide el montaje contra lo que hay. Ver arriba. */
+export function loQueDiceElAlmacen(pieza, claves, faltan, tiene) {
   // Solo lo de ESTE episodio: lo heredado y lo de la biblioteca vive bajo otro
-  // prefijo, existe desde antes y no dice nada de si el cubo es el correcto.
-  const suyas = claves.filter((k) => k.startsWith(`${pieza.id}/`) && k !== `${pieza.id}/firma`);
-  if (!suyas.length) return null;
+  // prefijo. Y la firma se descuenta porque la sube esta misma comprobación un
+  // segundo antes: contarla sería contar lo que acabamos de poner nosotros.
+  const bajo = `${pieza.id}/`;
+  const pide = claves.filter((k) => k.startsWith(bajo) && k !== `${pieza.id}/firma`);
+  if (!pide.length || !faltan.length) return null;
 
-  const seFue = new Set(faltan);
-  const hay = suyas.filter((k) => !seFue.has(k)).length;
-  if (hay === suyas.length) return null;
-  const cuenta =
-    `De este episodio el almacén tiene ${hay} ${hay === 1 ? 'material' : 'materiales'} ` +
-    `de los ${suyas.length} que hacen falta.`;
+  // La firma no cuenta: la sube esta misma comprobación un segundo antes, así que
+  // contarla sería contar lo que acabamos de poner nosotros y «no hay nada» nunca
+  // saldría.
+  const hay = tiene.filter((k) => k !== `${pieza.id}/firma`);
+  const pedidas = new Set(pide);
+  const sobran = hay.filter((k) => !pedidas.has(k));
+  const noEstan = pide.filter((k) => faltan.includes(k));
+  // Lo que falta es de la biblioteca o heredado de otra pieza: eso no se explica
+  // mirando bajo este episodio.
+  if (!noEstan.length) return null;
 
-  if (hay > 0) return cuenta;
+  const lineas = [
+    `El almacén tiene ${hay.length} ${hay.length === 1 ? 'archivo' : 'archivos'} de este ` +
+      `episodio. El montaje pide ${pide.length} y no encuentra ${noEstan.length}.`,
+  ];
 
-  return (
-    `${cuenta} NI UNO. Y eso no es que no esté generado: lo que ves en la pantalla ` +
-    `es la copia del teléfono, así que el material existe y está pagado, pero en el ` +
-    `cubo donde se generó. Pasa al cambiar de cuenta de Google Cloud: el cubo nuevo ` +
-    `empieza vacío. Hay dos salidas y ninguna es volver a generar —eso sería pagarlo ` +
-    `dos veces—: poner otra vez en Vercel la cuenta con la que se generó, o copiar el ` +
-    `material del cubo de antes al de ahora.`
-  );
+  if (!hay.length) {
+    lineas.push(
+      `No hay NI UNO bajo «${bajo}». Lo que se ve en la pantalla es la copia del ` +
+        `teléfono: lo generado no llegó a subirse, o se subió a otro sitio.`,
+    );
+  } else if (sobran.length) {
+    // Lo que de verdad decide. Un archivo que está y que nadie pide se generó con
+    // un nombre que ya no vale, y el nombre lleva dentro el número de la toma.
+    lineas.push(
+      `Hay ${sobran.length} que ESTÁN y el montaje no pide. Pide: ${noEstan.slice(0, 3).join(', ')}. ` +
+        `Tiene: ${sobran.slice(0, 3).join(', ')}. El nombre lleva dentro el número de la toma, ` +
+        `así que esto es material subido con números que ya no son los de ahora: está pagado y ` +
+        `no hay que volver a generarlo.`,
+    );
+  }
+
+  return lineas.join(' ');
 }
 
 /**
@@ -115,7 +149,7 @@ export async function revisar({ pieza, config, senal }) {
   const sinMedir = pieza.tomas.filter((t) => !t.medida);
   const forzados = pieza.tomas.filter((t) => t.corteForzado);
   const faltan = previa.faltan || [];
-  const dondeEsta = dondeEstaElMaterial(pieza, claves, faltan);
+  const dondeEsta = await queTieneElAlmacen(pieza, claves, faltan, senal);
 
   return {
     hoja,

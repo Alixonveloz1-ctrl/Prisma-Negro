@@ -9,7 +9,7 @@
 //
 // Cada regla del §5 viene de un defecto AUDIBLE. Las anotaciones dicen cuál.
 
-import { claveFotograma, claveClip, claveToma, nombreLocal, tomaDelFotograma, clipVigente } from './claves.mjs';
+import { claveFotograma, claveClip, claveToma, claveVoz, nombreLocal, tomaDelFotograma, clipVigente } from './claves.mjs';
 
 export const PREDETERMINADO = {
   fps: 30,
@@ -113,7 +113,9 @@ export function construirHoja({ pieza, tomas, escenas = [], config = {} }) {
           camara: hayClip ? null : camaraDe(t),
         };
       })(),
-      audio: claveToma(pieza, t.i, 'audio'),
+      // Por `claveVoz`, no a mano: una toma renumerada tiene su voz subida con el
+      // nombre de antes, y componer la clave aquí pediría un archivo que no existe.
+      audio: claveVoz(pieza, t),
       // §8.2: cada toma sabe de qué tipo es su imagen, y eso puede salir en
       // pantalla.
       tipoImagen: t.tipoImagen || 'generada',

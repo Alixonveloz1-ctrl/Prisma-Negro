@@ -289,6 +289,10 @@ export function proyectoYaEmpezado() {
 /** Un almacén de mentira en memoria, con la forma que espera `app/local.js`. */
 export function indexedDbDeMentira(semilla = null) {
   const bases = new Map();
+  // Lo guardado, para poder mirarlo desde una invariante: hay cosas que solo se
+  // ven en el proyecto que quedó escrito —qué campos sobrevivieron a un botón—, y
+  // sin esto solo se puede comprobar lo que además salga pintado en la pantalla.
+  const guardados = () => [...(bases.get('prisma-negro')?.get('proyectos')?.values() || [])];
   if (semilla) {
     bases.set('prisma-negro', new Map([['proyectos', new Map([[semilla.id, semilla]])]]));
   }
@@ -308,6 +312,7 @@ export function indexedDbDeMentira(semilla = null) {
   };
 
   return {
+    guardados,
     open(nombre) {
       const almacenes = bases.get(nombre) || new Map();
       bases.set(nombre, almacenes);
@@ -435,7 +440,8 @@ export async function humoDeLaPantalla({
     innerWidth: 430,
   };
   // `navigator` en Node es de solo lectura y ya existe: no hay que tocarlo.
-  globalThis.indexedDB = indexedDbDeMentira(proyecto);
+  const basura = indexedDbDeMentira(proyecto);
+  globalThis.indexedDB = basura;
   // La conexión cacheada de `local.js` es del arnés ANTERIOR: si otro arnés tocó
   // la base en este proceso, sin esto el arranque leería aquella —vacía— y el
   // proyecto sembrado no aparecería. Costó una tarde encontrarlo.
@@ -638,6 +644,8 @@ export async function humoDeLaPantalla({
   return {
     fallos,
     pedidos,
+    /** El proyecto TAL COMO QUEDÓ GUARDADO después de pulsar. */
+    proyectoGuardado: () => basura.guardados().sort((a, b) => (b.modificado || 0) - (a.modificado || 0))[0] || null,
     inexistentes: [...inexistentes],
     /** Cuántas opciones tiene un desplegable después de arrancar. */
     opcionesDe: (id) => elementos.get(id)?.children.length || 0,

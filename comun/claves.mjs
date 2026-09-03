@@ -179,6 +179,24 @@ export function claveClip(pieza, toma, tomas) {
   return claveToma(pieza, dueña.i, 'vid');
 }
 
+/**
+ * LA CLAVE DE LA VOZ DE UNA TOMA — respetando el nombre con el que se subió.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * El nombre del archivo lleva dentro el número de la toma: `p07/t017/audio`. Al
+ * volver a repartir el guion los números se mueven, y el archivo NO se mueve con
+ * ellos. Una toma renumerada que compusiera su clave a mano pediría un archivo
+ * que nadie ha subido —y `audio: 'ok'` seguiría diciendo que está—: en pantalla,
+ * todo verde; en el montaje, la voz que falta.
+ *
+ * `heredadoAudio` guarda el nombre real. Es lo mismo que `heredado` hace con la
+ * imagen, y por la misma razón.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export function claveVoz(pieza, toma) {
+  return toma?.heredadoAudio || claveToma(pieza, toma.i, 'audio');
+}
+
 export function claveFotograma(pieza, toma, tomas) {
   // Una toma heredada apunta a la imagen de OTRA PIEZA: es una continuación que
   // reutiliza un plano del caso anterior. La clave ya viene entera —lleva su pieza

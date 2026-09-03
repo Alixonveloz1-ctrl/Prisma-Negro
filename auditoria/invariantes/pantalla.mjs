@@ -2336,4 +2336,109 @@ export const invariantes = [
         ),
       ),
   },
+
+  {
+    nombre: 'lo-conservado-al-repartir-apunta-al-archivo-que-existe',
+    dice: '«Todo está generado, pero aún así el montador dice que algo falta.» Volver a partir el guion mueve los números de las tomas, y el archivo NO se mueve con ellos: la clave lleva el número dentro. Los `reusa` sí se reescribían —son punteros por índice y se ve—, pero `imagen: ok`, `video: ok` y `audio: ok` son punteros por índice TAMBIÉN, solo que implícitos. Conservar la marca sin conservar el nombre dejaba lo peor de los dos mundos: en pantalla todo verde y pagado, y el montaje pidiendo claves que no existen — y la fase de imagen sin regenerarlas, porque para ella ya estaban hechas.',
+    async comprobar(ctx) {
+      const { humoDeLaPantalla, proyectoYaEmpezado } = await import('../pantalla-humo.mjs');
+      // Las claves entran por `ctx.fn`, no por un import: importado, el sabotaje no
+      // las alcanza y la invariante saldría ciega. Hay una invariante que lo vigila.
+      const { claveToma, claveFotograma, claveClip, claveVoz } = ctx.fn;
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+      const fallos = [];
+
+      // Párrafos cortos partidos UNO A UNO, como los repartos viejos. Con la regla
+      // de ocho a dieciocho segundos se juntan, así que casi ninguna toma nueva
+      // conserva el número de la vieja: justo el caso que rompía.
+      const parrafos = [
+        'La llamada entró a las nueve y diez de la mañana, con una voz tranquila.',
+        'No dio su nombre.',
+        'Dijo que había encontrado algo en el terreno de atrás, entre los robles.',
+        'El roble se taló esa misma tarde y nadie preguntó por qué lo hicieron.',
+        'A los cuarenta centímetros apareció el primer botón, cosido con hilo azul.',
+      ];
+      const guion = `## El aviso\n\n${parrafos.join('\n\n')}`;
+      const proyecto = proyectoYaEmpezado();
+      const z = proyecto.piezas[0];
+      z.guion = guion;
+      let cursor = guion.indexOf(parrafos[0]);
+      z.tomas = parrafos.map((texto, i) => {
+        const inicio = guion.indexOf(texto, cursor);
+        cursor = inicio + texto.length;
+        return {
+          i, escena: 0, texto,
+          segundos: +(texto.length / 14.5).toFixed(2),
+          inicioEnGuion: inicio, finEnGuion: cursor,
+          plano: { encuadre: 'general', lugar: 'el bosque', luz: 'amanecer', sujetos: [], descripcion: `lo de la toma ${i}` },
+          tipoImagen: 'reconstruccion',
+          imagen: 'ok', audio: 'ok', video: 'ok', movimiento: true, reusa: null, fichas: [0],
+        };
+      });
+      z.escenas = [{ n: 0, titulo: 'El aviso', inicioEnGuion: 0 }];
+
+      // TODO lo que existe en el almacén antes de tocar nada. Después de repartir,
+      // ni una sola clave pedida puede caer fuera de aquí: lo que caiga fuera es un
+      // archivo que nadie ha generado y que nadie va a generar.
+      const antes = new Set();
+      for (const t of z.tomas) {
+        antes.add(claveToma(proyecto.id, t.i, 'img'));
+        antes.add(claveToma(proyecto.id, t.i, 'vid'));
+        antes.add(claveToma(proyecto.id, t.i, 'audio'));
+      }
+
+      const tras = await humoDeLaPantalla({ parche, proyecto, pulsa: ['b-segmentar'] });
+      fallos.push(...tras.fallos);
+      const guardado = tras.proyectoGuardado();
+      const nuevas = guardado?.piezas?.find((x) => x.id === z.id)?.tomas || [];
+
+      // Sin esto, todo lo de abajo pasaría por no tener nada que mirar.
+      if (nuevas.length === 0 || nuevas.length === parrafos.length) {
+        fallos.push(
+          `Volver a partir no dejó un reparto nuevo guardado (${nuevas.length} tomas de ${parrafos.length}): ` +
+            'esta comprobación estaría mirando al vacío.',
+        );
+        return fallos;
+      }
+
+      let renumeradas = 0;
+      for (const t of nuevas) {
+        for (const [marca, clave, que] of [
+          [t.imagen, () => claveFotograma(proyecto.id, t, nuevas), 'imagen'],
+          [t.video, () => claveClip(proyecto.id, t, nuevas), 'clip'],
+          [t.audio, () => claveVoz(proyecto.id, t), 'voz'],
+        ]) {
+          if (marca !== 'ok') continue;
+          const k = clave();
+          if (!antes.has(k)) {
+            fallos.push(
+              `La toma ${t.i} dice tener ${que} y la pide en «${k}», que no existe: el archivo se ` +
+                'quedó con el número de antes del reparto. En pantalla, verde; en el montaje, ' +
+                'una clave que falta y que nadie va a generar.',
+            );
+          } else if (!k.endsWith(`/t${String(t.i).padStart(3, '0')}/${que === 'voz' ? 'audio' : que === 'clip' ? 'vid' : 'img'}`)) {
+            renumeradas++;
+          }
+        }
+      }
+
+      // Y que de verdad haya habido renumeración: si todas las tomas conservaran su
+      // número, esto pasaría sin comprobar nada. Es el mismo cuidado de arriba.
+      if (!renumeradas) {
+        fallos.push('Ninguna toma cambió de número al repartir: la comprobación no ha ejercitado nada.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: se conserva la marca y no el nombre del archivo.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) => {
+        const antes = 'function conSuArchivo(nueva, vieja, viejas) {\n  if (vieja.i === nueva.i) return nueva;';
+        if (!t.includes(antes)) {
+          throw new Error('El sabotaje de `conSuArchivo` ya no encuentra su sitio: apúntalo otra vez o se está demostrando el aire.');
+        }
+        return t.replace(antes, 'function conSuArchivo(nueva, vieja, viejas) {\n  if (viejas) return nueva;');
+      }),
+  },
 ];

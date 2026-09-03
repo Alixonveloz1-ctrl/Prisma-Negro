@@ -143,6 +143,8 @@ export async function narrarBloque({ bloque, pieza, config, senal, alEsperar }) 
     salida.push({
       ...toma,
       audio: 'ok',
+      // La voz acaba de escribirse en la clave propia: ya no vive fuera.
+      heredadoAudio: null,
       // LA DURACIÓN REAL. A partir de aquí manda esta, no la estimada.
       segundos: +trozo.segundos.toFixed(4),
       medida: true,
