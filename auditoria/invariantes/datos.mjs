@@ -869,8 +869,8 @@ export const invariantes = [
         { titulos: ['Un caso'], etiquetas: ['crimen'], descripcion: `${DECLARACION_DE_FICCION}\n\nLo que pasó.` },
         'Un caso',
       );
-      const i = texto.indexOf('DESCRIPCIÓN');
-      if (i < 0 || !texto.slice(i, i + 140).includes('FICCIÓN DOCUMENTAL')) {
+      const i = texto.indexOf('Lo que pasó.');
+      if (i < 0 || !texto.slice(0, i).includes('FICCIÓN DOCUMENTAL')) {
         fallos.push('La declaración no encabeza la descripción: quedaría enterrada donde no la ve nadie.');
       }
 
@@ -985,16 +985,18 @@ export const invariantes = [
         { titulos: ['Un título'], descripcion: `Dos frases.\n\n${tags.join(' ')}`, etiquetas: ETIQUETAS_DEL_CANAL },
         'Episodio',
       );
-      for (const [que, re] of [
-        ['el título', /TÍTULO/],
-        ['la descripción', /DESCRIPCIÓN/],
-        ['las etiquetas', /ETIQUETAS/],
-        ['los hashtags', /#truecrime/],
+      for (const [que, dentro] of [
+        ['el título', 'Un título'],
+        ['la descripción', 'Dos frases.'],
+        ['los hashtags', '#truecrime'],
+        ['las etiquetas', ETIQUETAS_DEL_CANAL.join(', ')],
       ]) {
-        if (!re.test(doc)) fallos.push(`El documento que se baja con el video no lleva ${que}.`);
+        if (!doc.includes(dentro)) fallos.push(`Lo que se baja con el video no lleva ${que}.`);
       }
+      // Los hashtags, DENTRO de la descripción y en ningún sitio más: dos copias
+      // de lo mismo y una sobra.
       if ((doc.match(/#truecrime\b/g) || []).length > 1) {
-        fallos.push('El documento repite los hashtags fuera de la descripción: dos sitios para lo mismo y uno sobra.');
+        fallos.push('Los hashtags salen dos veces: uno de los dos sitios sobra.');
       }
       return fallos;
     },

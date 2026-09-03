@@ -81,31 +81,36 @@ export function tiemposDeEscenas(tomas, escenas) {
  * Esta herramienta no sabe qué es tendencia hoy, y meter etiquetas de moda que
  * no tienen que ver con el video es lo que hunde el alcance en vez de subirlo.
  */
+/**
+ * EL TEXTO DE PUBLICAR: TODO SEGUIDO Y SIN UNA SOLA CABECERA.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Tengo que copiar todo y después borrar la parte donde dice título, la parte
+ *  donde dice otros títulos.» Y antes: «¿Para qué les pones esa etiqueta diciendo
+ *  qué es la descripción y qué es las etiquetas? Yo voy a poder entenderlo.»
+ *
+ * El documento llevaba TÍTULO, OTROS TÍTULOS, DESCRIPCIÓN y ETIQUETAS escritos
+ * dentro. Servían para saber qué es cada cosa, y saber qué es cada cosa no hacía
+ * falta: se ve. Lo que sí hacía falta era borrarlas a mano antes de pegar, cada
+ * vez y en un teléfono.
+ *
+ * Un archivo, todo seguido, separado por líneas en blanco: el título, los
+ * alternativos, la descripción —con sus capítulos y sus hashtags dentro, porque
+ * eso es lo que va en ese campo— y las etiquetas. Se lee y se sabe dónde acaba
+ * cada una.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
 export function textoDePublicacion(m, titulo) {
   if (!m) return '';
-  // DOS COPIAS Y NO CINCO. Son dos campos distintos de YouTube y no hay forma de
-  // juntarlos más: la descripción —que ya lleva los hashtags dentro— y el campo
-  // de etiquetas, que va sin almohadilla.
-  //
-  // Y los títulos a secas: «¿Para qué les pones esa etiqueta diciendo qué es la
-  // descripción y qué es las etiquetas? Yo voy a poder entenderlo.» Explicarle a
-  // alguien lo que ya sabe le hace leer más para encontrar lo mismo.
   return [
-    `TÍTULO`,
     (m.titulos || [])[0] || titulo || '',
-    '',
-    (m.titulos || []).length > 1 ? 'OTROS TÍTULOS' : '',
     ...(m.titulos || []).slice(1),
-    (m.titulos || []).length > 1 ? '' : '',
-    'DESCRIPCIÓN',
     m.descripcion || '',
-    '',
-    'ETIQUETAS',
     (m.etiquetas || []).join(', '),
   ]
-    .filter((x) => x !== '' || true)
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
+    .map((x) => String(x).trim())
+    .filter(Boolean)
+    .join('\n\n')
     .trim();
 }
 

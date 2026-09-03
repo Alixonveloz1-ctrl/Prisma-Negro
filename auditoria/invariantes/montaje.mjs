@@ -797,19 +797,37 @@ export const invariantes = [
       const mon = fuente(ctx, 'api/_lib/montador.js');
       if (!/salidas:/.test(mon)) fallos.push('El encargo no lleva la lista de subidas.');
 
-      // 4 · El texto de publicar lleva los hashtags hechos, no las etiquetas
-      // crudas: publicar desde el teléfono es copiar y pegar. Y van DENTRO de la
-      // descripción, que es donde YouTube los lee — no en un apartado suelto que
-      // hay que pegar a mano en su sitio cada vez.
+      // 4 · El texto de publicar: TODO SEGUIDO Y SIN UNA SOLA CABECERA. Publicar
+      // desde el teléfono es leer, copiar el trozo y pegar; una cabecera dentro es
+      // una cosa que hay que borrar a mano cada vez. Y los hashtags van DENTRO de
+      // la descripción, que es el campo donde YouTube los lee.
       const tags = hashtagsDe(['crimen sin resolver', 'misterio médico']);
       if (!tags.includes('#crimensinresolver')) fallos.push('Las etiquetas no salen como hashtag: sin espacios ni tildes.');
       if (!tags.includes('#misteriomedico')) fallos.push('Un hashtag conserva la tilde: no funciona así.');
+
       const t = textoDePublicacion(
-        { titulos: ['Uno'], descripcion: `Va de esto.\n\n${tags.join(' ')}`, etiquetas: ['crimen sin resolver'] },
+        {
+          titulos: ['Uno', 'Dos'],
+          descripcion: `Va de esto.\n\nCapítulos:\n0:00 Empieza\n\n${tags.join(' ')}`,
+          etiquetas: ['crimen sin resolver', 'true crime'],
+        },
         'x',
       );
-      if (!/#crimensinresolver/.test(t)) fallos.push('El documento no lleva los hashtags.');
-      if (!/DESCRIPCIÓN/.test(t) || !/Va de esto\./.test(t)) fallos.push('El texto no lleva la descripción.');
+      for (const [que, dentro] of [
+        ['el título', 'Uno'],
+        ['los títulos alternativos', 'Dos'],
+        ['la descripción', 'Va de esto.'],
+        ['los capítulos', '0:00 Empieza'],
+        ['los hashtags', '#crimensinresolver'],
+        ['las etiquetas', 'crimen sin resolver, true crime'],
+      ]) {
+        if (!t.includes(dentro)) fallos.push(`El texto que se baja con el video no lleva ${que}.`);
+      }
+      for (const cabecera of ['TÍTULO', 'OTROS TÍTULOS', 'DESCRIPCIÓN', 'ETIQUETAS', 'HASHTAGS']) {
+        if (new RegExp(`^\\s*${cabecera}\\s*$`, 'm').test(t)) {
+          fallos.push(`El texto lleva la cabecera «${cabecera}» dentro: hay que borrarla a mano antes de pegar.`);
+        }
+      }
 
       // 5 · Y la pantalla baja el paquete, no el MP4 pelado.
       if (!/bajarPaquete/.test(fuente(ctx, 'app/main.js'))) {
