@@ -1905,4 +1905,41 @@ export const invariantes = [
     romper: (ctx) =>
       editando(ctx, 'api/ia.js', (t) => t.replace(/revisarConfiguracion/g, 'noExiste')),
   },
+
+  {
+    nombre: 'un-almacen-que-no-contesta-no-es-un-material-que-falta',
+    dice: '«Ahí está el bucket, está correcto, ahí está todo guardado, ya revisé los archivos.» Y la pantalla, a la vez: «Faltan 238 de 250 materiales.» Las dos cosas cabían porque la consulta en tanda llevaba un `.catch(() => ({ existe: false }))`: cualquier fallo —un permiso denegado, un corte, un 500, un tiempo agotado, o directamente el almacén sin configurar— se convertía en «ese archivo no está». Doscientos treinta y ocho permisos denegados y doscientos treinta y ocho archivos inexistentes se leen igual en pantalla y llevan a hacer lo contrario: mirar la cuenta, o pagar otra vez la generación entera. Un 404 sí es «no está», y eso lo dice `ficha` con `existe: false`; todo lo demás es que el almacén no ha contestado.',
+    async comprobar(ctx) {
+      const fallos = [];
+      const { fichasDelAlmacen } = ctx.fn;
+
+      // Una clave que el almacén no puede ni traducir a una ruta: `ficha` revienta
+      // antes de tocar la red, así que esto no sale a internet ni depende de que
+      // haya credenciales puestas. Es el fallo más benigno que existe — y aun así
+      // no puede contarse como «este material falta».
+      let salio = null;
+      let dijo = '';
+      try {
+        salio = await fichasDelAlmacen(['p01/t000/estonoesuntipo']);
+      } catch (e) {
+        dijo = String(e?.message || '');
+      }
+
+      if (salio) {
+        fallos.push(
+          'Con el almacén fallando, la consulta en tanda devuelve fichas igualmente: ' +
+            `${JSON.stringify(salio).slice(0, 120)}. Eso es un error contado como «no existe», ` +
+            'y en pantalla sale «faltan N materiales» con el material en su sitio.',
+        );
+      } else if (!/no contest|no se puede decir que falten/i.test(dijo)) {
+        fallos.push(`El almacén falla y la queja no dice que no se puede saber si falta: «${dijo.slice(0, 120)}»`);
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: cada fallo, una ficha que dice que no está.
+    romper: (ctx) =>
+      conFuncion(ctx, 'fichasDelAlmacen', async (claves) =>
+        Object.fromEntries(claves.map((c) => [c, { existe: false, bytes: 0 }])),
+      ),
+  },
 ];

@@ -167,7 +167,12 @@ async function funcionesPuras() {
   // sin una sola muestra.
   const prv = await import('../api/_lib/proveedor.js');
   const zip = await import('../comun/zip.mjs');
+  // El almacén entra entero por lo mismo que el proveedor: hay cosas suyas que solo
+  // se ven EJECUTÁNDOLAS —qué hace cuando el almacén no contesta— y mirarlas en el
+  // texto no habría cazado que un error se contaba como «ese archivo no está».
+  const alm = await import('../api/_lib/almacen.js');
   return {
+    fichasDelAlmacen: alm.fichas,
     normalizarWav: prv.normalizarWav,
     catalogoDeVoces: prv.catalogoDeVoces,
     armarZip: zip.armarZip,

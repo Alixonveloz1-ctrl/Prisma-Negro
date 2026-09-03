@@ -180,18 +180,57 @@ export async function ficha(clave) {
   return { existe: bytes > 0, bytes, actualizado: meta.updated || null };
 }
 
-/** Fichas de muchos materiales de una vez. El navegador pregunta «qué falta». */
+/**
+ * Fichas de muchos materiales de una vez. El navegador pregunta «qué falta».
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * UN ERROR NO ES UN «NO EXISTE». Y aquí lo era.
+ *
+ * «Ahí está el bucket, está correcto, ahí está todo guardado, ya revisé los
+ *  archivos y sí corresponden.» Y la pantalla, mientras tanto: «Faltan 238 de
+ *  250 materiales.»
+ *
+ * Las dos cosas cabían a la vez porque esto tenía un `.catch(() => ({ existe:
+ * false }))`: CUALQUIER fallo —un permiso denegado, un corte, un 500 del
+ * almacén, un tiempo agotado— se convertía en «ese archivo no está». Doscientos
+ * treinta y ocho permisos denegados y doscientos treinta y ocho archivos que no
+ * existen se leen exactamente igual en pantalla, y llevan a hacer lo contrario:
+ * revisar la cuenta, o pagar otra vez la generación entera.
+ *
+ * Es §7.6 otra vez —«un código de salida no es un mensaje de error»— y §7.12
+ * —ningún valor de retorno se ignora—: un 404 SÍ es «no está», y lo dice `ficha`
+ * devolviendo `existe: false`. Todo lo demás es que el almacén no ha contestado,
+ * y eso no se puede llamar «falta».
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
 export async function fichas(claves) {
   const salida = {};
   const tanda = 12;
+  let primerFallo = null;
+  let mudas = 0;
+
   for (let i = 0; i < claves.length; i += tanda) {
     const trozo = claves.slice(i, i + tanda);
     const res = await Promise.all(
-      trozo.map((c) => ficha(c).catch(() => ({ existe: false, bytes: 0 }))),
+      trozo.map((c) =>
+        ficha(c).catch((e) => {
+          mudas++;
+          primerFallo = primerFallo || `«${c}» → ${e.message}`;
+          return null;
+        }),
+      ),
     );
     trozo.forEach((c, j) => {
-      salida[c] = res[j];
+      if (res[j]) salida[c] = res[j];
     });
+  }
+
+  if (primerFallo) {
+    throw new Error(
+      `El almacén no contestó por ${mudas} de ${claves.length} materiales, así que NO se ` +
+        `puede decir que falten: un almacén que no contesta y un archivo que no existe no ` +
+        `son lo mismo. Lo primero que dijo: ${primerFallo}`,
+    );
   }
   return salida;
 }
