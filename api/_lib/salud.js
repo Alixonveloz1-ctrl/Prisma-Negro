@@ -196,15 +196,38 @@ export async function probarCadena() {
     if (r.status === 400) {
       pasos.push(paso('imagen', true, `${etiquetaDe('imagen', eleccion)} acepta llamadas y tiene cuota (${modelo}).`));
     } else if (r.status === 429) {
+      // UN 429 AQUÍ CASI NUNCA ES «NO TE QUEDA CUOTA».
+      //
+      // ─────────────────────────────────────────────────────────────────────────
+      // «¿Cómo se supone que la cuota va a ser cero si ya generó un capítulo
+      //  entero?» Exacto, y el diagnóstico lo decía igual.
+      //
+      // Esta petición va VACÍA a propósito: no genera ni una imagen, así que no
+      // puede gastar cuota de imágenes. Si Google contesta 429 es el LIMITADOR DE
+      // RITMO —peticiones por minuto—, que es justo lo que salta después de
+      // generar noventa y siete imágenes seguidas. Decir «la cuota está agotada» y
+      // mandar a pedir cuota es mandar a arreglar lo que no está roto.
+      //
+      // Así que manda lo que dice Google, no lo que suponemos: si su mensaje habla
+      // de minutos, se pasa solo; si habla de día o de límite cero, entonces sí.
+      // ─────────────────────────────────────────────────────────────────────────
+      const porMinuto = /per minute|por minuto|per-minute/i.test(msg);
+      const porDia = /per day|por d[ií]a|limit: ?0|quota_limit_value.{0,20}["']?0["']?/i.test(msg);
       pasos.push(
         paso(
           'imagen',
           false,
-          `La cuota del generador de imágenes está agotada. Google dice: ${msg}`,
-          'Si el mensaje habla de «per minute», se abre sola al pasar el minuto. Si habla de ' +
-            '«per day» o el límite es 0, hay que pedir cuota en Google Cloud → IAM y ' +
-            'administración → Cuotas, buscando el modelo, y comprobar que el proyecto tiene ' +
-            'facturación activada. Esperar no lo arregla.',
+          porMinuto || !porDia
+            ? `Google está limitando el ritmo ahora mismo (429). Dice: ${msg}`
+            : `La cuota diaria del generador de imágenes está agotada. Google dice: ${msg}`,
+          porMinuto || !porDia
+            ? 'Es un tope POR MINUTO y se abre solo: espera un minuto y vuelve a mirar. ' +
+              'Salta justo después de generar muchas imágenes seguidas, y no significa que ' +
+              'te hayas quedado sin cuota — si ya has generado en este proyecto, cuota hay. ' +
+              'Solo si el mensaje llega a decir «per day» o «limit: 0» hay que pedir más.'
+            : 'Esta sí hay que pedirla: Google Cloud → IAM y administración → Cuotas, buscar ' +
+              'el modelo, y comprobar que el proyecto tiene facturación activada. Esperar no ' +
+              'lo arregla. Vuelve mañana o pide el aumento.',
         ),
       );
     } else if (r.status === 403) {

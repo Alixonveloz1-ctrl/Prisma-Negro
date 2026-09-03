@@ -1558,6 +1558,32 @@ export const invariantes = [
         fallos.push('Los eslabones rotos no dicen qué hacer para arreglarlos.');
       }
 
+      // UN 429 EN EL DIAGNÓSTICO NO ES «SIN CUOTA».
+      //
+      // «¿Cómo se supone que la cuota va a ser cero si ya generó un capítulo
+      //  entero?» La petición de prueba va VACÍA a propósito —no genera ni una
+      //  imagen— así que no puede gastar cuota de imágenes: un 429 ahí es el
+      //  limitador de ritmo, que es justo lo que salta después de generar noventa
+      //  y siete seguidas. El diagnóstico decía «la cuota está agotada» y mandaba a
+      //  pedir cuota, o sea, a arreglar lo que no estaba roto. Ahora lee lo que
+      //  dice Google en vez de suponerlo.
+      // Desde el 429 HACIA DELANTE: buscar el 403 desde el principio del archivo
+      // devolvía una posición anterior y la ventana salía vacía, así que las tres
+      // comprobaciones de abajo fallaban con el texto delante.
+      const i429 = s.indexOf('r.status === 429');
+      const cuota = i429 < 0 ? '' : s.slice(i429, s.indexOf('r.status === 403', i429));
+      for (const [que, senal] of [
+        ['distinguir el tope por minuto del diario', /per minute/],
+        ['que el tope por minuto se pasa solo', /se abre solo|se pasa solo/],
+        ['que haber generado ya demuestra que hay cuota', /si ya has generado/i],
+      ]) {
+        if (!senal.test(cuota)) fallos.push(`El diagnóstico del generador de imágenes no dice ${que}.`);
+      }
+      // Y no puede seguir afirmando que la cuota está agotada sin mirar el mensaje.
+      if (/`La cuota del generador de im[aá]genes est[aá] agotada/.test(cuota)) {
+        fallos.push('El diagnóstico afirma que la cuota está agotada sin leer lo que dice Google.');
+      }
+
       // Y UN NOMBRE QUE NO SE ENCUENTRA SE DICE ENTERO.
       //
       // «¿Cómo va a saber mi cuenta lo del montador, si ese montador era de otra
