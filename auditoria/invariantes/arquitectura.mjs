@@ -1602,7 +1602,11 @@ export const invariantes = [
         // respuesta, y el nombre por defecto lo lleva dentro: en pantalla se leía
         // «[oculto]-montador» y con eso no se sabe qué job crear. Decir si es el
         // de por defecto o el de una variable sí sobrevive al censor.
-        ['de dónde sale el nombre', /nombre por defecto/],
+        ['de dónde sale el nombre', /de por defecto|pusiste en/],
+        // Y NO LO ESCRIBE PARA QUE EL CENSOR LO TAPE. El nombre por defecto empieza
+        // por el id del proyecto, así que citarlo da «[oculto]-montador» y no
+        // informa de nada: se dice dónde está escrito, no cuál es.
+        ['dónde está escrito el nombre por defecto', /escrito en el README/],
         ['que el hueco lo pone el censor y no es un fallo', /tapado a prop[oó]sito/],
         ['en qué región lo busca', /regi[oó]n \$\{region\}|regi[oó]n \$\{regionJob|\$\{region\}`/],
         ['que el montador vive en la nube del usuario', /vive en TU Google Cloud/],

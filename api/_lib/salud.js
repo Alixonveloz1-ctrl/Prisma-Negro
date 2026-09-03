@@ -274,13 +274,21 @@ export async function probarCadena() {
       // viene el nombre sí sobrevive al censor y contesta la pregunta: si es el de
       // por defecto, ya se sabe cuál es; si viene de una variable, se sabe dónde
       // mirarlo. Y se avisa de que el hueco es el censor y no un fallo.
+      // Y NO SE VUELVE A ESCRIBIR EL NOMBRE PARA QUE LO TAPEN OTRA VEZ.
+      //
+      // El intento anterior lo decía dos veces —el que busca y el de por defecto—
+      // y el censor tapó las dos, porque el nombre por defecto empieza por el id
+      // del proyecto. Quedó «"[oculto]-montador" (el nombre por defecto,
+      // "[oculto]-montador")»: el doble de texto y la misma nada.
+      //
+      // Se dice DÓNDE está escrito, que es lo que el censor no puede tapar.
       const suyo = !!valorEntorno('job');
       const deDonde = suyo
         ? `el que pusiste en ${nombrePrincipal('job')}`
-        : 'el nombre por defecto, «prisma-negro-montador»';
+        : 'el de por defecto, que está escrito en el README, en «El montador»';
       const donde =
-        `«${job}» (${deDonde}) en el proyecto de la cuenta de servicio que hay en ` +
-        `esta aplicación, región ${region}`;
+        `${suyo ? `«${job}»` : 'el montador'} — ${deDonde} — en el proyecto de la cuenta de ` +
+        `servicio que hay en esta aplicación, región ${region}`;
       const url =
         `https://run.googleapis.com/v2/projects/${proyecto()}` +
         `/locations/${region}/jobs/${job}`;
