@@ -316,9 +316,28 @@ export function normalizar(cruda) {
   c.formato.ancho = entero(c.formato.ancho, 640, 3840, 1920);
   c.formato.alto = entero(c.formato.alto, 360, 2160, 1080);
   c.formato.fps = [24, 25, 30, 60].includes(c.formato.fps) ? c.formato.fps : 30;
-  if (c.formato.vertical && c.formato.ancho > c.formato.alto) {
-    [c.formato.ancho, c.formato.alto] = [c.formato.alto, c.formato.ancho];
-  }
+  // EL INTERRUPTOR MANDA SOBRE LOS NÚMEROS, EN LAS DOS DIRECCIONES.
+  //
+  // ─────────────────────────────────────────────────────────────────────────
+  // «Montó el video, pero utilizó las imágenes dieciséis nueve y lo montó en
+  //  nueve dieciséis, y solamente hizo un zoom horrible que dañó todo.»
+  //
+  // Media hora de montaje a la basura. Las imágenes y los clips se generan
+  // mirando `vertical`; el montaje y la previa miran `ancho` y `alto`. Y esto
+  // solo les daba la vuelta a los números en UNA dirección: al pasar a vertical.
+  // Un proyecto que fue vertical guardó 1080×1920; al volver a horizontal el
+  // interruptor cambió y los números se quedaron. Las imágenes salieron
+  // apaisadas y el lienzo siguió de pie: cada una, recortada al centro.
+  //
+  // Dos sitios diciendo el formato es uno de más. El interruptor es el que se
+  // toca, así que es el que manda: los números se orientan por él, siempre.
+  // ─────────────────────────────────────────────────────────────────────────
+  const [menor, mayor] = [
+    Math.min(c.formato.ancho, c.formato.alto),
+    Math.max(c.formato.ancho, c.formato.alto),
+  ];
+  c.formato.ancho = c.formato.vertical ? menor : mayor;
+  c.formato.alto = c.formato.vertical ? mayor : menor;
 
   // EL SUELO Y EL TECHO SON LA REGLA, NO UNA PREFERENCIA, y por eso NO se leen del
   // proyecto: se ponen. «Todas las tomas deben ser de entre ocho y dieciocho

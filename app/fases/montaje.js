@@ -278,6 +278,38 @@ export function porTipo(claves) {
 }
 
 /**
+ * ¿EL LIENZO ES DEL FORMATO EN EL QUE SE GENERÓ EL EPISODIO?
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Montó el video, pero utilizó las imágenes dieciséis nueve y lo montó en nueve
+ *  dieciséis, y solamente hizo un zoom horrible que dañó todo.»
+ *
+ * El episodio lleva sellado el formato en el que generó su primera imagen
+ * (`aspecto`, ver `sellarFormato`). El lienzo del montaje sale de la
+ * configuración. Son dos cosas y pueden no cuadrar — cuadraron mal una vez y
+ * costó media hora de montaje—. Aquí se comparan ANTES de arrancar, que es el
+ * único momento en que decirlo sirve de algo.
+ *
+ * Un episodio sin formato sellado no ha generado nada todavía: no hay nada que
+ * comparar y no se inventa.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export function formatoQueNoCuadra(pieza, config) {
+  const sellado = pieza?.aspecto === '16:9' || pieza?.aspecto === '9:16' ? pieza.aspecto : '';
+  if (!sellado) return null;
+  const ancho = Number(config?.formato?.ancho) || 0;
+  const alto = Number(config?.formato?.alto) || 0;
+  if (!ancho || !alto) return null;
+  const lienzo = ancho >= alto ? '16:9' : '9:16';
+  if (lienzo === sellado) return null;
+  return (
+    `El episodio se generó en ${sellado} y el montaje saldría en ${lienzo} (${ancho}×${alto}): ` +
+    `cada imagen se recortaría al centro. No se monta así. Pon el canal en ${sellado} en ` +
+    `Ajustes, o vuelve a generar las imágenes en ${lienzo}.`
+  );
+}
+
+/**
  * Qué se va a montar y con qué. Se enseña ANTES de arrancar nada.
  *
  * Incluye la comprobación previa contra el almacén: si falta material, aquí sale
@@ -309,6 +341,7 @@ export async function revisar({ pieza, config, senal }) {
   const forzados = pieza.tomas.filter((t) => t.corteForzado);
   const faltan = previa.faltan || [];
   const dondeEsta = await queTieneElAlmacen(pieza, claves, faltan, senal);
+  const formatoMal = formatoQueNoCuadra(pieza, config);
   // Cuántas tomas NO tienen visual propio: la hoja les puso el mismo archivo que
   // a otra. Es la diferencia entre las tomas y los visuales de la lista.
   const repiten = hoja.tomas.length - new Set(hoja.tomas.map((t) => t.archivo)).size;
@@ -329,8 +362,12 @@ export async function revisar({ pieza, config, senal }) {
       porTipo(claves) +
       (repiten ? ` · y ${repiten} tomas repiten el visual de otra` : ''),
     dondeEsta,
+    formatoMal,
     avisos: [
-      // Primero: cuando falta material, lo que decide qué hacer es DÓNDE está, no
+      // Antes que nada: un lienzo del formato equivocado tira media hora de
+      // montaje entera, y se sabe ANTES de arrancar.
+      formatoMal,
+      // Después: cuando falta material, lo que decide qué hacer es DÓNDE está, no
       // cuántos faltan.
       dondeEsta,
       sinMedir.length
@@ -356,7 +393,11 @@ export async function revisar({ pieza, config, senal }) {
  * imagen.
  */
 export async function montar({ pieza, config, senal, aviso }) {
-  const { hoja, guion, completo, faltan, dondeEsta } = await revisar({ pieza, config, senal });
+  const { hoja, guion, completo, faltan, dondeEsta, formatoMal } = await revisar({ pieza, config, senal });
+
+  // No se lanza un montaje que va a salir mal. Media hora y un trabajo pagado
+  // para un video que hay que tirar: eso ya pasó una vez.
+  if (formatoMal) throw new Error(formatoMal);
 
   if (!completo) {
     throw new Error(

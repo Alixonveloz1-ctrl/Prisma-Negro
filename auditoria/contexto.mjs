@@ -302,6 +302,8 @@ async function funcionesPuras() {
     apuntarAlMaterialQueHay: mtj.apuntarAlMaterialQueHay,
     construirHojaDe: mtj.hojaDe,
     porTipo: mtj.porTipo,
+    formatoQueNoCuadra: mtj.formatoQueNoCuadra,
+    normalizar: cfg.normalizar,
     hashtagsDe: met.hashtagsDe,
     ETIQUETAS_DEL_CANAL: met.ETIQUETAS_DEL_CANAL,
     HASHTAGS_MAXIMOS: met.HASHTAGS_MAXIMOS,

@@ -669,6 +669,89 @@ export const invariantes = [
   },
 
   {
+    nombre: 'el-interruptor-del-formato-manda-en-las-dos-direcciones',
+    dice: '«Montó el video, pero utilizó las imágenes dieciséis nueve y lo montó en nueve dieciséis, y solamente hizo un zoom horrible que dañó todo.» Media hora de montaje a la basura. Las imágenes y los clips se generan mirando el interruptor `vertical`; el montaje y la previa miran `ancho` y `alto`. Y la normalización solo les daba la vuelta a los números en UNA dirección, al pasar a vertical: un proyecto que fue vertical guardó 1080×1920, al volver a horizontal el interruptor cambió y los números se quedaron. Dos sitios diciendo el formato es uno de más: el interruptor es el que se toca, así que es el que manda, siempre.',
+    comprobar(ctx) {
+      const fallos = [];
+      const { normalizar } = ctx.fn;
+
+      // El caso que costó el montaje: números de vertical con el interruptor en
+      // horizontal. Es exactamente lo que queda guardado después de cambiar de
+      // formato una vez.
+      const h = normalizar({ formato: { ancho: 1080, alto: 1920, vertical: false } }).formato;
+      if (!(h.ancho > h.alto)) {
+        fallos.push(`Con el interruptor en horizontal, el lienzo sale ${h.ancho}×${h.alto}: las imágenes apaisadas se recortan al centro.`);
+      }
+      // Y al revés, que ya funcionaba y tiene que seguir.
+      const v = normalizar({ formato: { ancho: 1920, alto: 1080, vertical: true } }).formato;
+      if (!(v.alto > v.ancho)) {
+        fallos.push(`Con el interruptor en vertical, el lienzo sale ${v.ancho}×${v.alto}.`);
+      }
+      // Sin perder los números: se orientan, no se sustituyen.
+      if (h.ancho !== 1920 || h.alto !== 1080 || v.ancho !== 1080 || v.alto !== 1920) {
+        fallos.push('Al orientar el lienzo se cambian los números en vez de darles la vuelta.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: la vuelta solo se daba al pasar a vertical.
+    romper: (ctx) =>
+      conFuncion(ctx, 'normalizar', (bruto) => {
+        const c = ctx.fn.normalizar(bruto);
+        const f = bruto?.formato || {};
+        if (!f.vertical && Number(f.alto) > Number(f.ancho)) {
+          c.formato.ancho = Number(f.ancho);
+          c.formato.alto = Number(f.alto);
+        }
+        return c;
+      }),
+  },
+
+  {
+    nombre: 'no-se-monta-en-un-formato-distinto-del-que-se-genero',
+    dice: 'La misma media hora perdida, mirada desde el otro lado: aunque los números se orienten bien, el episodio lleva sellado el formato en el que generó su primera imagen, y el lienzo del montaje sale de la configuración de hoy. Pueden no cuadrar. Si no cuadran, el montaje NO se lanza y lo dice antes: un video que hay que tirar cuesta lo mismo que uno bueno.',
+    comprobar(ctx) {
+      const fallos = [];
+      const { formatoQueNoCuadra } = ctx.fn;
+
+      // 1 · Episodio en 16:9, lienzo de pie: se para y se dice con los números.
+      const mal = formatoQueNoCuadra({ aspecto: '16:9' }, { formato: { ancho: 1080, alto: 1920 } });
+      if (!mal) {
+        fallos.push('Un episodio generado en 16:9 se montaría en un lienzo vertical sin que nadie lo pare.');
+      } else if (!/16:9/.test(mal) || !/9:16/.test(mal) || !/1080×1920/.test(mal)) {
+        fallos.push(`El aviso no dice los dos formatos y el tamaño del lienzo: «${mal.slice(0, 90)}»`);
+      }
+      // 2 · Cuadrando, callado. Y sin formato sellado —nada generado— tampoco se
+      //     inventa nada.
+      if (formatoQueNoCuadra({ aspecto: '16:9' }, { formato: { ancho: 1920, alto: 1080 } })) {
+        fallos.push('Con el formato bien avisa igual: un aviso permanente deja de leerse.');
+      }
+      if (formatoQueNoCuadra({ aspecto: '' }, { formato: { ancho: 1080, alto: 1920 } })) {
+        fallos.push('Un episodio sin nada generado sale con un formato que nadie le ha sellado.');
+      }
+
+      // 3 · Y el montaje lo usa como FRENO, no como nota: lanza antes de arrancar,
+      //     y la revisión lo enseña lo primero.
+      const mon = fuente(ctx, 'app/fases/montaje.js');
+      const iMontar = mon.indexOf('export async function montar(');
+      const iLanzar = iMontar < 0 ? -1 : mon.indexOf("llamar(\n    'montar.lanzar'", iMontar);
+      const antesDeLanzar = iMontar < 0 || iLanzar < 0 ? '' : mon.slice(iMontar, iLanzar);
+      if (!antesDeLanzar) {
+        fallos.push('No encuentro el lanzamiento del montaje: esta comprobación estaría mirando al vacío.');
+      } else if (!/if \(formatoMal\) throw/.test(antesDeLanzar)) {
+        fallos.push('El montaje se lanza aunque el formato no cuadre: media hora para un video que se tira.');
+      }
+      const iAvisos = mon.indexOf('avisos: [');
+      const avisos = iAvisos < 0 ? '' : mon.slice(iAvisos, iAvisos + 400);
+      if (!/formatoMal,\s*\n\s*\/\/[^\n]*\n\s*\/\/[^\n]*\n\s*dondeEsta/.test(avisos) && !/formatoMal,[\s\S]{0,300}dondeEsta,/.test(avisos)) {
+        fallos.push('La revisión no enseña el formato que no cuadra antes que nada.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: nadie compara el formato sellado con el lienzo.
+    romper: (ctx) => conFuncion(ctx, 'formatoQueNoCuadra', () => null),
+  },
+
+  {
     nombre: 'el-tono-de-la-voz-no-se-toca',
     dice: 'La voz sale COMO LA GENERÓ EL SERVICIO. Aquí vivieron dos cosas —un mando de gravedad y un igualador de tono entre tomas— y las dos hicieron más daño que bien: el mando iba al revés y sonaba fina y acelerada; el agravador granular doblaba la voz; frenar la reproducción cortaba la última palabra; y el igualador, con el medidor yéndose de octava, dejaba «una toma grave, una normal, una grave, una normal» — hasta en el video ya descargado. Cada arreglo trajo un defecto nuevo, así que se quitó de raíz. Esta invariante existe para que no vuelva a entrar sin que alguien la borre a propósito.',
     comprobar(ctx) {
