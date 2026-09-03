@@ -438,7 +438,8 @@ export const invariantes = [
 
       // 1 · EL ALMACÉN VACÍO. Lo heredado y la firma están, y aun así el veredicto
       //     tiene que decir que ahí abajo no hay nada — y decirlo con el número.
-      const vacio = loQueDiceElAlmacen(pieza, claves, suyas, ['p07/firma']);
+      const otras = ['p03/t000/img', 'p03/t001/img', 'biblioteca/t007/vid'];
+      const vacio = loQueDiceElAlmacen(pieza, claves, suyas, ['p07/firma'], otras);
       if (!vacio) {
         fallos.push('Con NADA del episodio en el almacén, el montaje no dice nada: solo lista claves.');
       } else {
@@ -448,6 +449,20 @@ export const invariantes = [
         if (!new RegExp(`\\b${suyas.length}\\b`).test(vacio)) {
           fallos.push('No dice los números: una afirmación sin número no se puede comprobar desde el teléfono.');
         }
+        // Y NO puede decir «no se subió»: nada se marca en verde sin que el almacén
+        // confirme el archivo. Decirlo manda a generar otra vez lo ya pagado.
+        if (/no llegó a subirse|no se subió|no se generó/i.test(vacio)) {
+          fallos.push('Dice que no se subió, y eso no puede saberlo: lo verde solo se pone con la confirmación del almacén.');
+        }
+        // Con el episodio a cero, lo único que orienta es QUÉ hay en este almacén.
+        if (!/p03 \(2\)/.test(vacio) || !/biblioteca \(1\)/.test(vacio)) {
+          fallos.push('No enseña qué carpetas SÍ tiene el almacén: sin eso no se distingue un cubo equivocado de un cubo vacío.');
+        }
+      }
+      // Y un almacén vacío del todo se dice con esas palabras, no con una lista vacía.
+      const nada = loQueDiceElAlmacen(pieza, claves, suyas, [], []);
+      if (!/VAC[IÍ]O del todo/i.test(nada || '')) {
+        fallos.push('Un almacén sin un solo archivo no se dice: es el caso que separa «el cubo es otro» de «el cubo es nuevo».');
       }
 
       // 2 · CON TODO EN SU SITIO, callado. Un aviso que sale siempre no se lee.

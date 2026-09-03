@@ -66,7 +66,26 @@ export async function queTieneElAlmacen(pieza, claves, faltan, senal) {
   try {
     const r = await llamar('listar', { prefijo: `${pieza.id}/` }, { senal });
     const tiene = (r.materiales || []).filter((m) => m.bytes > 0).map((m) => m.clave);
-    return loQueDiceElAlmacen(pieza, claves, faltan, tiene);
+
+    // SI NO HAY NADA DEL EPISODIO, ¿QUÉ HAY?
+    //
+    // «Si la configuración estaba correcta, debió haberse guardado todo. No
+    //  entiendo por qué dice que no se guardó, si todo está generado ahí.»
+    //
+    // Y tiene razón en la extrañeza: nada se marca como generado sin que el
+    // almacén confirme el tamaño —una subida sin confirmar LANZA (§7.12)—, así que
+    // esos archivos existen y algún almacén los confirmó uno a uno. Decir «no se
+    // subió» sería falso. La pregunta buena es OTRA: qué hay aquí dentro. Un
+    // almacén con carpetas llenas de otro episodio dice una cosa; un almacén
+    // vacío del todo dice otra, y la segunda no se puede arreglar generando.
+    const todo = tiene.length ? null : await llamar('listar', { prefijo: '' }, { senal });
+    return loQueDiceElAlmacen(
+      pieza,
+      claves,
+      faltan,
+      tiene,
+      todo ? (todo.materiales || []).filter((m) => m.bytes > 0).map((m) => m.clave) : null,
+    );
   } catch {
     // Sin respuesta del almacén no se dice nada: un diagnóstico inventado manda a
     // rehacer un episodio entero.
@@ -74,8 +93,11 @@ export async function queTieneElAlmacen(pieza, claves, faltan, senal) {
   }
 }
 
+/** `p07/t003/img` → `p07`. La carpeta de primer nivel, que es lo que se enseña. */
+const carpetaDe = (clave) => String(clave).split('/')[0];
+
 /** La lectura, sin nube: lo que pide el montaje contra lo que hay. Ver arriba. */
-export function loQueDiceElAlmacen(pieza, claves, faltan, tiene) {
+export function loQueDiceElAlmacen(pieza, claves, faltan, tiene, todo = null) {
   // Solo lo de ESTE episodio: lo heredado y lo de la biblioteca vive bajo otro
   // prefijo. Y la firma se descuenta porque la sube esta misma comprobación un
   // segundo antes: contarla sería contar lo que acabamos de poner nosotros.
@@ -100,10 +122,26 @@ export function loQueDiceElAlmacen(pieza, claves, faltan, tiene) {
   ];
 
   if (!hay.length) {
+    // NI «no se generó» NI «no se subió»: nada se marca como generado sin que el
+    // almacén confirme el tamaño (§7.12). Lo que queda es que el almacén que lo
+    // confirmó no es este. Así que en vez de explicarlo, se enseña qué hay aquí.
     lineas.push(
-      `No hay NI UNO bajo «${bajo}». Lo que se ve en la pantalla es la copia del ` +
-        `teléfono: lo generado no llegó a subirse, o se subió a otro sitio.`,
+      `No hay NI UNO bajo «${bajo}», y eso no significa que no se generara: nada se ` +
+        `pone en verde sin que el almacén confirme el archivo, uno a uno. O sea que ` +
+        `estos ${pide.length} los confirmó un almacén — y no es este.`,
     );
+    if (Array.isArray(todo)) {
+      const porCarpeta = new Map();
+      for (const k of todo) porCarpeta.set(carpetaDe(k), (porCarpeta.get(carpetaDe(k)) || 0) + 1);
+      const orden = [...porCarpeta.entries()].sort((a, b) => b[1] - a[1]);
+      lineas.push(
+        orden.length
+          ? `Este almacén tiene ${todo.length} archivos en total, en estas carpetas: ` +
+            `${orden.slice(0, 8).map(([c, n]) => `${c} (${n})`).join(', ')}` +
+            `${orden.length > 8 ? ` y ${orden.length - 8} más` : ''}.`
+          : 'Este almacén está VACÍO del todo: ni un archivo, de ningún episodio ni de la biblioteca.',
+      );
+    }
   } else if (sobran.length) {
     // Lo que de verdad decide. Un archivo que está y que nadie pide se generó con
     // un nombre que ya no vale, y el nombre lleva dentro el número de la toma.
