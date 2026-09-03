@@ -420,6 +420,108 @@ export const invariantes = [
   },
 
   {
+    nombre: 'faltar-material-y-faltar-el-almacen-no-se-dicen-igual',
+    dice: 'En pantalla: «Faltan 238 de 250 materiales», con el episodio entero generado y visible en el teléfono. Las dos cosas eran verdad: el material existía y estaba pagado, y el almacén no tenía ni uno —se había cambiado de cuenta de Google Cloud y el cubo nuevo empezaba vacío—. Una lista de claves que faltan no distingue eso de una generación a medias, y lo que hay que hacer es lo contrario en cada caso: generar, o traer lo que ya está pagado. Sin distinguirlo, la salida natural es darle otra vez a generar y pagar dos veces un episodio entero.',
+    comprobar(ctx) {
+      const fallos = [];
+      const { dondeEstaElMaterial } = ctx.fn;
+      const pieza = { id: 'p07' };
+
+      // Una hoja como las de verdad: lo suyo, la firma que sube la propia
+      // comprobación, y material heredado que vive bajo el prefijo de otra pieza.
+      const suyas = [];
+      for (let i = 0; i < 20; i++) suyas.push(`p07/t${String(i).padStart(3, '0')}/audio`);
+      for (let i = 0; i < 14; i++) suyas.push(`p07/t${String(i).padStart(3, '0')}/img`);
+      for (let i = 0; i < 3; i++) suyas.push(`p07/mus/${String(i).padStart(3, '0')}`);
+      const ajenas = ['biblioteca/t004/vid', 'biblioteca/t009/img', 'p07/firma'];
+      const claves = [...suyas, ...ajenas];
+
+      // 1 · SIN NI UNO DE LO SUYO: lo heredado y la firma están, y aun así el
+      //     veredicto tiene que ser que el material está en otro sitio. Si esto se
+      //     contara como «algo hay», el caso que costó el episodio no saldría.
+      const vacio = dondeEstaElMaterial(pieza, claves, suyas);
+      if (!vacio) {
+        fallos.push('Con NADA del episodio en el almacén, el montaje no dice nada: solo lista claves.');
+      } else {
+        if (!/cuenta|cubo/i.test(vacio)) {
+          fallos.push('No dice que el material pueda estar en otro cubo o en otra cuenta: sin eso, la lista de claves manda a generar.');
+        }
+        if (!/pagad|dos veces/i.test(vacio)) {
+          fallos.push('No dice que volver a generar sería pagarlo dos veces, que es lo que hay que evitar.');
+        }
+        if (!/\b0\b/.test(vacio)) {
+          fallos.push('No dice el número: «no tiene ninguno» es una afirmación, y una afirmación sin número no se puede comprobar desde el teléfono.');
+        }
+      }
+
+      // 2 · CON TODO EN SU SITIO, callado. Un aviso que sale siempre no se lee.
+      if (dondeEstaElMaterial(pieza, claves, ['biblioteca/t004/vid'])) {
+        fallos.push('Avisa aunque no falte nada del episodio: un aviso permanente deja de leerse.');
+      }
+
+      // 3 · FALTANDO ALGUNAS, la cuenta y NADA MÁS. Decir «está en otro cubo» cuando
+      //     el cubo tiene 34 de 37 es mentira, y una mentira aquí manda a mover
+      //     gigas de un sitio a otro para nada.
+      const pocas = dondeEstaElMaterial(pieza, claves, suyas.slice(0, 3));
+      if (!pocas) {
+        fallos.push('Faltando algunas no dice cuántas hay: el número es lo que decide si se genera o se trae.');
+      } else if (/cuenta|cubo/i.test(pocas)) {
+        fallos.push('Con material suyo en el almacén sigue diciendo que el cubo es otro: eso es falso.');
+      }
+
+      // 4 · Y EL MONTAJE TIENE QUE USARLO. Las dos salidas: el aviso que se lee
+      //     antes de montar, y el error que impide montar. Con una sola, la mitad de
+      //     las veces sale la lista de claves a secas.
+      //
+      //     Los dos trozos se recortan por sus dos extremos y se comprueba que el
+      //     recorte EXISTE antes de mirar dentro: un `indexOf` que devuelve -1 deja
+      //     una ventana que empieza al principio del archivo, y entonces la
+      //     comprobación pasa siempre mirando lo que no es. Ese fallo ya se pagó dos
+      //     veces en esta misma auditoría.
+      const mon = fuente(ctx, 'app/fases/montaje.js');
+      const trozo = (desde, hasta) => {
+        const a = mon.indexOf(desde);
+        const b = a < 0 ? -1 : mon.indexOf(hasta, a);
+        return a < 0 || b < 0 ? null : mon.slice(a, b);
+      };
+      const avisos = trozo('avisos: [', '].filter(Boolean)');
+      const impedir = trozo('if (!completo) {', 'aviso?.(');
+      if (!avisos || !/\bdondeEsta\b/.test(avisos)) {
+        fallos.push('La revisión no mete el veredicto en los avisos: en pantalla no saldría.');
+      }
+      if (!impedir || !/\bdondeEsta\b/.test(impedir)) {
+        fallos.push('El error que impide montar no lleva el veredicto: quien le dé a Montar solo verá la lista de claves.');
+      }
+
+      // 5 · Y EN PANTALLA, ANTES DE LA LISTA. Doscientas treinta y ocho claves
+      //     delante del aviso lo dejan fuera de la pantalla de un teléfono, y en la
+      //     caja de otro paso ni siquiera se busca ahí.
+      //
+      //     El corte se ancla en la ACCIÓN, no en el nombre del botón: «b-revisar»
+      //     aparece antes en un `bloquear(…)`, y una ventana que empieza ahí y acaba
+      //     en el siguiente «b-montar» —otro `bloquear`— no contiene ni una línea de
+      //     lo que se quiere comprobar. Es el mismo fallo de ventana que ya se pagó
+      //     dos veces: por eso se comprueba también que el corte existe.
+      const pan = fuente(ctx, 'app/main.js');
+      const a = pan.indexOf("'b-revisar',\n  async ()");
+      const b = a < 0 ? -1 : pan.indexOf("'b-montar',\n  async ()", a);
+      const revisar = a < 0 || b < 0 ? '' : pan.slice(a, b);
+      const iAvisos = revisar.indexOf('r.avisos');
+      const iFaltan = revisar.indexOf('r.faltan.length > 20');
+      if (!revisar) {
+        fallos.push('No encuentro el botón de revisar en la pantalla: esta comprobación estaría mirando al vacío.');
+      } else if (iAvisos < 0 || iFaltan < 0 || iAvisos > iFaltan) {
+        fallos.push('La lista de lo que falta se pinta antes del aviso, o sin recortar: el aviso se queda fuera de pantalla.');
+      } else if (/registro\('paso4'/.test(revisar)) {
+        fallos.push('El detalle se pinta en la caja de otro paso, encima de lo que dejó la generación.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: el montaje sabe cuántas faltan y no dice dónde están.
+    romper: (ctx) => conFuncion(ctx, 'dondeEstaElMaterial', () => null),
+  },
+
+  {
     nombre: 'el-tono-de-la-voz-no-se-toca',
     dice: 'La voz sale COMO LA GENERÓ EL SERVICIO. Aquí vivieron dos cosas —un mando de gravedad y un igualador de tono entre tomas— y las dos hicieron más daño que bien: el mando iba al revés y sonaba fina y acelerada; el agravador granular doblaba la voz; frenar la reproducción cortaba la última palabra; y el igualador, con el medidor yéndose de octava, dejaba «una toma grave, una normal, una grave, una normal» — hasta en el video ya descargado. Cada arreglo trajo un defecto nuevo, así que se quitó de raíz. Esta invariante existe para que no vuelva a entrar sin que alguien la borre a propósito.',
     comprobar(ctx) {

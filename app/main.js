@@ -894,7 +894,7 @@ function tomasCaducadas(z) {
     const r = segmentarVerificado(guion, c);
     // Se compara por el TEXTO de cada toma, no por sus límites: los límites pueden
     // faltar en un proyecto guardado hace tiempo y el texto no falta nunca.
-    const forma = (l) => l.map((t) => String(t.texto || '')).join(' ');
+    const forma = (l) => l.map((t) => String(t.texto || '')).join('\u0000');
     caducadas = forma(r.tomas) === forma(z.tomas) ? 0 : r.tomas.length;
   } catch {
     // Un guion que ni siquiera se puede partir no es un reparto caducado: es otro
@@ -4365,8 +4365,23 @@ accion(
         : `Faltan ${r.faltan.length} de ${r.total} materiales.`,
       r.completo ? 'bueno' : 'malo',
     );
-    if (!r.completo) registro('paso4', r.faltan);
-    if (r.avisos.length) registro('paso4', r.avisos);
+    // EL PORQUÉ ANTES QUE LA LISTA, Y EN LA MISMA CAJA QUE EL TITULAR.
+    //
+    // Estaba al revés y en otro sitio: doscientas treinta y ocho claves —«Faltan
+    // 238 de 250»— se pintaban ANTES del aviso y en el registro del paso
+    // anterior, encima de lo que hubiera dejado la generación. En un teléfono eso
+    // deja fuera de pantalla lo único que decide qué hacer, que es si el material
+    // falta o está en otro sitio. Y la lista se recorta: veinte claves ya dicen
+    // de qué van las doscientas treinta y ocho.
+    if (r.avisos.length) registro('paso5', r.avisos);
+    if (!r.completo) {
+      registro(
+        'paso5',
+        r.faltan.length > 20
+          ? [...r.faltan.slice(0, 20), `… y ${r.faltan.length - 20} más.`]
+          : r.faltan,
+      );
+    }
   },
   'paso5',
 );

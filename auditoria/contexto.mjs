@@ -158,6 +158,7 @@ async function funcionesPuras() {
   const nar = await import('../app/fases/narracion.js');
   const met = await import('../app/fases/metadatos.js');
   const est2 = await import('../comun/estilos.mjs');
+  const mtj = await import('../app/fases/montaje.js');
   const gen = await import('../comun/generos.mjs');
   const col = await import('../app/cola.js');
   // El proveedor se importa entero para poder EJECUTAR lo que no llama a la nube
@@ -290,6 +291,7 @@ async function funcionesPuras() {
     duracionMasCercana: mov.duracionMasCercana,
     duracionQueSePide: mov.duracionQueSePide,
     duracionMasLarga: mod.duracionMasLarga,
+    dondeEstaElMaterial: mtj.dondeEstaElMaterial,
   };
 }
 

@@ -38,6 +38,53 @@ export function hojaDe(pieza, config) {
 }
 
 /**
+ * ¿FALTA MATERIAL, O FALTA EL ALMACÉN?
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Todo está generado, pero aún así el montador dice que algo falta.»
+ *
+ * Y las dos cosas eran verdad a la vez. El material estaba generado y pagado —en
+ * la pantalla se ve—, y el almacén no tenía casi nada de él. Una lista de
+ * doscientas treinta y ocho claves que faltan no distingue eso de una generación
+ * a medias, y lo que hay que hacer es LO CONTRARIO en cada caso: generar, o traer
+ * lo que ya está pagado. Sin distinguirlo, la salida natural es darle otra vez a
+ * generar y pagar dos veces un episodio entero.
+ *
+ * Se distingue sin preguntar nada nuevo: con la misma respuesta que el almacén
+ * acaba de dar, contando aparte lo que es DE ESTE EPISODIO. Sale un número, no
+ * una teoría: «tiene 1 de los 250». Y cuando ese número es cero —descontando la
+ * firma, que la sube esta misma comprobación un segundo antes, y lo heredado, que
+ * vive bajo el prefijo de otra pieza— el problema no es el material: es el sitio
+ * donde se está mirando. Cambiar de cuenta o de cubo de Google Cloud deja
+ * exactamente esta huella.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export function dondeEstaElMaterial(pieza, claves, faltan) {
+  // Solo lo de ESTE episodio: lo heredado y lo de la biblioteca vive bajo otro
+  // prefijo, existe desde antes y no dice nada de si el cubo es el correcto.
+  const suyas = claves.filter((k) => k.startsWith(`${pieza.id}/`) && k !== `${pieza.id}/firma`);
+  if (!suyas.length) return null;
+
+  const seFue = new Set(faltan);
+  const hay = suyas.filter((k) => !seFue.has(k)).length;
+  if (hay === suyas.length) return null;
+  const cuenta =
+    `De este episodio el almacén tiene ${hay} ${hay === 1 ? 'material' : 'materiales'} ` +
+    `de los ${suyas.length} que hacen falta.`;
+
+  if (hay > 0) return cuenta;
+
+  return (
+    `${cuenta} NI UNO. Y eso no es que no esté generado: lo que ves en la pantalla ` +
+    `es la copia del teléfono, así que el material existe y está pagado, pero en el ` +
+    `cubo donde se generó. Pasa al cambiar de cuenta de Google Cloud: el cubo nuevo ` +
+    `empieza vacío. Hay dos salidas y ninguna es volver a generar —eso sería pagarlo ` +
+    `dos veces—: poner otra vez en Vercel la cuenta con la que se generó, o copiar el ` +
+    `material del cubo de antes al de ahora.`
+  );
+}
+
+/**
  * Qué se va a montar y con qué. Se enseña ANTES de arrancar nada.
  *
  * Incluye la comprobación previa contra el almacén: si falta material, aquí sale
@@ -67,16 +114,22 @@ export async function revisar({ pieza, config, senal }) {
 
   const sinMedir = pieza.tomas.filter((t) => !t.medida);
   const forzados = pieza.tomas.filter((t) => t.corteForzado);
+  const faltan = previa.faltan || [];
+  const dondeEsta = dondeEstaElMaterial(pieza, claves, faltan);
 
   return {
     hoja,
     guion,
     claves,
     completo: previa.completo,
-    faltan: previa.faltan || [],
+    faltan,
     total: previa.total,
     duracion: hoja.total,
+    dondeEsta,
     avisos: [
+      // Primero: cuando falta material, lo que decide qué hacer es DÓNDE está, no
+      // cuántos faltan.
+      dondeEsta,
       sinMedir.length
         ? `${sinMedir.length} tomas no tienen duración medida: el montaje usaría la ` +
           `estimada y la voz no cuadraría con la imagen. Genera la narración primero.`
@@ -100,11 +153,14 @@ export async function revisar({ pieza, config, senal }) {
  * imagen.
  */
 export async function montar({ pieza, config, senal, aviso }) {
-  const { hoja, guion, completo, faltan } = await revisar({ pieza, config, senal });
+  const { hoja, guion, completo, faltan, dondeEsta } = await revisar({ pieza, config, senal });
 
   if (!completo) {
     throw new Error(
-      `Faltan ${faltan.length} materiales. No se lanza el montaje: fallaría sin decir ` +
+      // Lo primero de todo, DÓNDE ESTÁ: una lista de claves que faltan invita a
+      // volver a generar, y volver a generar es pagar dos veces lo que ya existe.
+      (dondeEsta ? `${dondeEsta}\n\n` : '') +
+        `Faltan ${faltan.length} materiales. No se lanza el montaje: fallaría sin decir ` +
         `por qué. Falta: ${faltan.slice(0, 10).join(', ')}` +
         (faltan.length > 10 ? ` y ${faltan.length - 10} más.` : '.'),
     );
