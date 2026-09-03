@@ -84,7 +84,7 @@ export function tiemposDeEscenas(tomas, escenas) {
  */
 export function textoDePublicacion(m, titulo) {
   if (!m) return '';
-  const etiquetas = (m.etiquetas || []).map(comoHashtag).filter(Boolean);
+  const etiquetas = hashtagsDe(m.etiquetas);
   return [
     `TÍTULO`,
     (m.titulos || [])[0] || titulo || '',
@@ -106,6 +106,86 @@ export function textoDePublicacion(m, titulo) {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
+
+/**
+ * LAS ETIQUETAS DEL CANAL, QUE SON LAS QUE BUSCA ALGUIEN.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Esas etiquetas no sirven, porque son etiquetas específicas del episodio.
+ *  Tienen que ser genéricas de documentales de crimen, para que puedan realmente
+ *  tener impacto. De nada me sirven etiquetas específicas del episodio cuando es
+ *  un canal nuevo que nadie conoce y un episodio nuevo que nadie conoce.»
+ *
+ * Tenía razón y es aritmética: «tetrápodo hueco» lo busca cero personas al mes,
+ * porque el episodio lo acaba de inventar esta herramienta. El modelo escribía
+ * quince etiquetas leyendo el guion, y leyendo el guion solo se pueden sacar
+ * nombres del guion.
+ *
+ * Así que el grueso va escrito aquí, es el mismo para todos los episodios —un
+ * canal se busca por su género, no por su capítulo— y no cuesta una llamada. Las
+ * del episodio van después y son pocas: sirven para el que ya llegó, no para el
+ * que todavía no.
+ *
+ * NINGUNA dice que el caso sea real. El canal es ficción documental y lo declara
+ * en la descripción y al final del video; etiquetarlo como «casos reales» sería
+ * decir en el buscador lo contrario de lo que dice el video. Los nombres de
+ * GÉNERO —true crime, documental de crimen, misterio— son el sitio donde vive
+ * esto, y eso sí es verdad.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export const ETIQUETAS_DEL_CANAL = [
+  'true crime',
+  'true crime en español',
+  'documental de crimen',
+  'documental true crime',
+  'casos sin resolver',
+  'misterios sin resolver',
+  'crimen sin resolver',
+  'documental de misterio',
+  'historias de crimen',
+  'documental narrado',
+  'documental completo en español',
+  'investigación criminal',
+  'suspenso',
+  'misterio',
+  'crimen y misterio',
+];
+
+/** El tope del campo de etiquetas de YouTube. Lo que pase de ahí lo corta él. */
+export const TOPE_ETIQUETAS = 500;
+
+/**
+ * Las del canal delante, las del episodio detrás, sin repetir y sin pasarse del
+ * tope. Cortadas aquí y no por YouTube: cortando él, la última queda a medias.
+ */
+export function mezclarEtiquetas(delEpisodio = []) {
+  const vistas = new Set();
+  const salida = [];
+  let largo = 0;
+  for (const e of [...ETIQUETAS_DEL_CANAL, ...delEpisodio]) {
+    const t = String(e || '').trim().toLowerCase();
+    if (!t || vistas.has(t)) continue;
+    const cuesta = (salida.length ? 2 : 0) + t.length;
+    if (largo + cuesta > TOPE_ETIQUETAS) continue;
+    vistas.add(t);
+    salida.push(t);
+    largo += cuesta;
+  }
+  return salida;
+}
+
+/**
+ * Los hashtags, listos para pegar.
+ *
+ * «Las etiquetas están saliendo sin hashtag. De nada me sirve, igual tengo que
+ *  hacer trabajo manual poniéndole hashtag uno por uno.»
+ *
+ * Y son doce, no las treinta: YouTube enseña los tres primeros encima del título
+ * y a partir de quince los ignora TODOS. Poner treinta es quedarse sin ninguno.
+ */
+export const HASHTAGS_MAXIMOS = 12;
+export const hashtagsDe = (etiquetas = []) =>
+  [...new Set((etiquetas || []).map(comoHashtag).filter(Boolean))].slice(0, HASHTAGS_MAXIMOS);
 
 /** «crimen sin resolver» → «#crimensinresolver». Sin tildes ni signos. */
 function comoHashtag(etiqueta) {
@@ -148,8 +228,10 @@ export async function generarMetadatos({ tema, guion, tomas, escenas, fichas = [
         `Tema: ${tema}\n\nGUION:\n${guion.slice(0, 12000)}\n\n` +
         `Escenas: ${tiempos.marcas.map((m) => `[${m.n}] ${m.titulo}`).join(', ')}\n\n` +
         `Devuelve: 4 títulos alternativos (máx. 70 caracteres), una descripción de ` +
-        `2 o 3 párrafos, 15 etiquetas, y un título corto para cada escena (para la ` +
-        `lista de capítulos).`,
+        `2 o 3 párrafos, 8 etiquetas DEL EPISODIO —nombres, lugares y objetos que ` +
+        `salen en él—, y un título corto para cada escena (para la lista de ` +
+        `capítulos). Las etiquetas de género del canal ya están puestas: no las ` +
+        `repitas.`,
       esquema: ESQUEMA,
       temperatura: 0.7,
     },
@@ -170,7 +252,8 @@ export async function generarMetadatos({ tema, guion, tomas, escenas, fichas = [
 
   return {
     titulos: j.titulos || [],
-    etiquetas: j.etiquetas || [],
+    // Las del canal delante: ver `ETIQUETAS_DEL_CANAL`.
+    etiquetas: mezclarEtiquetas(j.etiquetas || []),
     descripcion: [
       // LA DECLARACIÓN VA LA PRIMERA. Ver la cabecera de `DECLARACION_DE_FICCION`:
       // el episodio se ve igual que un documental, y eso es exactamente lo que

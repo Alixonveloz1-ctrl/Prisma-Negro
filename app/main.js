@@ -4666,7 +4666,19 @@ accion(
       m.titulos.map((t) => `<div class="ficha"><p>${escapar(t)}</p></div>`).join('') +
       `<label>Descripción · ${escapar(m.duracion)}</label>` +
       `<textarea readonly style="min-height:200px">${escapar(m.descripcion)}</textarea>` +
-      `<label>Etiquetas</label>` +
+      // LOS DOS CAMPOS DE YOUTUBE, CADA UNO EN SU FORMA, LISTOS PARA COPIAR.
+      //
+      // «Las etiquetas están saliendo sin hashtag. De nada me sirve, igual tengo
+      //  que hacer trabajo manual poniéndole hashtag uno por uno.»
+      //
+      // Son dos sitios distintos y quieren formas distintas: el campo de etiquetas
+      // va sin almohadilla y separado por comas, y los hashtags van dentro de la
+      // descripción con ella. Estaba solo el primero, así que el segundo había que
+      // escribirlo a mano, uno por uno.
+      `<label>Hashtags · para la descripción</label>` +
+      `<textarea readonly style="min-height:70px">${escapar(metadatos.hashtagsDe(m.etiquetas).join(' '))}</textarea>` +
+      `<p class="nota chica">YouTube enseña los tres primeros encima del título, y a partir de quince los ignora todos: por eso son doce.</p>` +
+      `<label>Etiquetas · para el campo de tags (${m.etiquetas.join(', ').length} de ${metadatos.TOPE_ETIQUETAS} caracteres)</label>` +
       `<textarea readonly style="min-height:70px">${escapar(m.etiquetas.join(', '))}</textarea>`;
   },
   'paso5',
