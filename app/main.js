@@ -2972,8 +2972,38 @@ accion('b-inventario', async () => {
     });
   }
 
+  // Y APARTE, LO QUE HAY QUE COMPROBAR AUNQUE NO SE PUEDA CORREGIR.
+  //
+  // «Cuando le doy a revisar qué hay generado, no se marca lo que realmente hay.»
+  //
+  // No mentía: se callaba. El resumen salía de la cuenta de lo que HABRÍA QUE
+  // GENERAR, y una toma que hereda su imagen no hay que generarla — así que
+  // desaparecía de la cuenta, y con todas heredadas la fila entera no salía. La
+  // pregunta era «¿qué hay generado?» y se contestaba «¿qué falta por pagar?».
+  //
+  // Esto mira el visual de CADA toma esté donde esté su archivo —propio, heredado
+  // o el de la toma cuyo plano repite— y la voz de cada una. No cambia ninguna
+  // marca: las marcas solo se tocan donde la toma es dueña de su archivo, que es
+  // lo de arriba. Solo cuenta la verdad para poder decirla.
+  const verificar = [];
+  for (const t of z.tomas) {
+    const conClip = clipVigente(t, z.tomas);
+    verificar.push({
+      clave: conClip ? claveClip(idMaterial(), t, z.tomas) : claveFotograma(idMaterial(), t, z.tomas),
+      de: conClip ? 'Clips' : 'Imágenes',
+    });
+    verificar.push({ clave: claveVoz(idMaterial(), t), de: 'Voz' });
+  }
+  for (const e of z.escenas) {
+    const suya = typeof e.musica === 'string' && e.musica.includes('/');
+    verificar.push({ clave: suya ? e.musica : claveMusica(idMaterial(), e.n), de: 'Música' });
+  }
+
   const hay = new Set();
-  for (const carpeta of new Set(aMirar.map((x) => x.clave.slice(0, x.clave.indexOf('/') + 1)))) {
+  const carpetas = new Set(
+    [...aMirar, ...verificar].map((x) => x.clave.slice(0, x.clave.indexOf('/') + 1)),
+  );
+  for (const carpeta of carpetas) {
     const r = await llamar('listar', { prefijo: carpeta });
     for (const m of r.materiales || []) if (m.bytes > 0) hay.add(m.clave);
   }
@@ -2997,12 +3027,21 @@ accion('b-inventario', async () => {
 
   // LA RESPUESTA ES POR FASES, no un número de archivos. «88 materiales en el
   // almacén» no le dice a nadie si puede montar ya: «Voz 34/34 ✓ · Imágenes
-  // 28/34 — faltan 6» sí. Es la misma cuenta que llevan los botones de arriba.
-  const resumen = cuentasDeFases()
-    .filter(([, , , total]) => total > 0)
-    .map(([, nombre, hechas, total]) =>
-      hechas === total ? `${nombre} ${hechas}/${total} ✓` : `${nombre} ${hechas}/${total} — faltan ${total - hechas}`,
-    )
+  // 28/34 — faltan 6» sí.
+  //
+  // Y la cuenta sale de lo que se acaba de mirar en el almacén, no de lo que
+  // quedaría por pagar: son preguntas distintas y este botón contesta la primera.
+  const porFase = new Map();
+  for (const v of verificar) {
+    const [ok, total] = porFase.get(v.de) || [0, 0];
+    porFase.set(v.de, [ok + (hay.has(v.clave) ? 1 : 0), total + 1]);
+  }
+  const resumen = ['Voz', 'Imágenes', 'Clips', 'Música']
+    .filter((n) => porFase.get(n)?.[1])
+    .map((n) => {
+      const [ok, total] = porFase.get(n);
+      return ok === total ? `${n} ${ok}/${total} ✓` : `${n} ${ok}/${total} — faltan ${total - ok}`;
+    })
     .join(' · ');
 
   const partes = [];

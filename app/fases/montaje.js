@@ -309,6 +309,9 @@ export async function revisar({ pieza, config, senal }) {
   const forzados = pieza.tomas.filter((t) => t.corteForzado);
   const faltan = previa.faltan || [];
   const dondeEsta = await queTieneElAlmacen(pieza, claves, faltan, senal);
+  // Cuántas tomas NO tienen visual propio: la hoja les puso el mismo archivo que
+  // a otra. Es la diferencia entre las tomas y los visuales de la lista.
+  const repiten = hoja.tomas.length - new Set(hoja.tomas.map((t) => t.archivo)).size;
 
   return {
     hoja,
@@ -318,7 +321,13 @@ export async function revisar({ pieza, config, senal }) {
     faltan,
     total: previa.total,
     duracion: hoja.total,
-    deQueSon: porTipo(claves),
+    // «Ahí dice ochenta y ocho imágenes y veinte clips. Se supone que son ciento
+    //  treinta y tres, ¿o no?» Sí: las que faltan para llegar repiten el visual de
+    //  otra toma —mismo plano, misma imagen, no se paga dos veces (§3)—. Sin
+    //  decirlo, la cuenta no cierra y parece que se perdió material.
+    deQueSon:
+      porTipo(claves) +
+      (repiten ? ` · y ${repiten} tomas repiten el visual de otra` : ''),
     dondeEsta,
     avisos: [
       // Primero: cuando falta material, lo que decide qué hacer es DÓNDE está, no

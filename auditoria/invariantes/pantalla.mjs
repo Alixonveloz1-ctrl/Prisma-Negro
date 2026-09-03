@@ -1590,9 +1590,18 @@ export const invariantes = [
         fallos.push('Las cuentas no se refrescan con los pasos: se quedarían viejas.');
       }
 
-      // 3 · El inventario contesta POR FASES, no en archivos.
+      // 3 · El inventario contesta POR FASES, no en archivos. Y la cuenta sale de
+      //     lo que acaba de mirar en el almacén, no de lo que quedaría por pagar:
+      //     con todo heredado, «lo que falta por pagar» es cero y la fila entera
+      //     desaparecía — «no se marca lo que realmente hay generado».
       const j = main.indexOf("accion('b-inventario'");
-      if (j >= 0 && !/cuentasDeFases\(\)/.test(main.slice(j, j + 3500))) {
+      const inventario = j < 0 ? '' : main.slice(j, j + 6000);
+      if (!inventario) {
+        fallos.push('No encuentro el inventario: esta comprobación estaría mirando al vacío.');
+      } else if (
+        !/\['Voz', 'Imágenes', 'Clips', 'Música'\]/.test(inventario) ||
+        !/\$\{ok\}\/\$\{total\}/.test(inventario)
+      ) {
         fallos.push('El inventario no contesta por fases: vuelve «88 materiales en el almacén».');
       }
 
@@ -2464,11 +2473,11 @@ export const invariantes = [
     // Se rompe como estaba: se pregunta por una sola carpeta, la del episodio.
     romper: (ctx) =>
       editando(ctx, 'app/main.js', (t) => {
-        const antes = "for (const carpeta of new Set(aMirar.map((x) => x.clave.slice(0, x.clave.indexOf('/') + 1)))) {";
+        const antes = "  const carpetas = new Set(\n    [...aMirar, ...verificar].map((x) => x.clave.slice(0, x.clave.indexOf('/') + 1)),\n  );";
         if (!t.includes(antes)) {
           throw new Error('El sabotaje del inventario ya no encuentra su sitio: apúntalo otra vez o se está demostrando el aire.');
         }
-        return t.replace(antes, "for (const carpeta of [`${idMaterial()}/`]) {");
+        return t.replace(antes, '  const carpetas = new Set([`${idMaterial()}/`]);');
       }),
   },
 
