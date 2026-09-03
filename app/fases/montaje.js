@@ -363,6 +363,16 @@ export async function revisar({ pieza, config, senal }) {
       (repiten ? ` · y ${repiten} tomas repiten el visual de otra` : ''),
     dondeEsta,
     formatoMal,
+    // EL LIENZO, DICHO CON NÚMEROS. «Antes también salía todo listo, sin ningún
+    // aviso de formato, y se montó mal.» Que no salte un aviso no demuestra nada:
+    // lo que demuestra es leer «1920×1080» al lado de «se generó en 16:9» antes de
+    // gastar una hora.
+    lienzo: {
+      ancho: config.formato.ancho,
+      alto: config.formato.alto,
+      aspecto: config.formato.ancho >= config.formato.alto ? '16:9' : '9:16',
+    },
+    generadoEn: pieza.aspecto === '16:9' || pieza.aspecto === '9:16' ? pieza.aspecto : '',
     avisos: [
       // Antes que nada: un lienzo del formato equivocado tira media hora de
       // montaje entera, y se sabe ANTES de arrancar.

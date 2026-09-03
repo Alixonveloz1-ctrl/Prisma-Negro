@@ -745,6 +745,19 @@ export const invariantes = [
       if (!/formatoMal,\s*\n\s*\/\/[^\n]*\n\s*\/\/[^\n]*\n\s*dondeEsta/.test(avisos) && !/formatoMal,[\s\S]{0,300}dondeEsta,/.test(avisos)) {
         fallos.push('La revisión no enseña el formato que no cuadra antes que nada.');
       }
+
+      // 4 · Y CUANDO CUADRA, LO DICE CON NÚMEROS. «Antes también salía todo listo,
+      //     sin ningún aviso de formato, y se montó mal.» Que no salte un aviso no
+      //     demuestra nada; leer «1920×1080» al lado de «se generó en 16:9» sí.
+      const pan = fuente(ctx, 'app/main.js');
+      const a = pan.indexOf("'b-revisar',\n  async ()");
+      const b = a < 0 ? -1 : pan.indexOf("'b-buscar-material',", a);
+      const revisar = a < 0 || b < 0 ? '' : pan.slice(a, b);
+      if (!revisar) {
+        fallos.push('No encuentro el botón de revisar: esta comprobación estaría mirando al vacío.');
+      } else if (!/r\.lienzo\.ancho/.test(revisar) || !/r\.lienzo\.alto/.test(revisar) || !/r\.generadoEn/.test(revisar)) {
+        fallos.push('«Todo listo» no dice en qué formato va a montar ni en cuál se generó el episodio: hay que fiarse de que no salte un aviso.');
+      }
       return fallos;
     },
     // Se rompe como estaba: nadie compara el formato sellado con el lienzo.

@@ -4516,7 +4516,9 @@ accion(
     avisar(
       'paso5',
       r.completo
-        ? `Todo listo: ${r.total} materiales — ${r.deQueSon} — y ${(r.duracion / 60).toFixed(1)} minutos.`
+        ? `Se monta en ${r.lienzo.aspecto}, ${r.lienzo.ancho}×${r.lienzo.alto}` +
+          (r.generadoEn ? `, y el episodio se generó en ${r.generadoEn}` : '') +
+          `. Todo listo: ${r.total} materiales — ${r.deQueSon} — y ${(r.duracion / 60).toFixed(1)} minutos.`
         : `Faltan ${r.faltan.length} de ${r.total} materiales (${r.deQueSon}).`,
       r.completo ? 'bueno' : 'malo',
     );
