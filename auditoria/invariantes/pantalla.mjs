@@ -2338,6 +2338,75 @@ export const invariantes = [
   },
 
   {
+    nombre: 'revisar-que-hay-generado-no-desmarca-lo-que-vive-en-otra-carpeta',
+    dice: 'Preguntarle al almacén qué hay generado listaba UNA carpeta —la del episodio— y desmarcaba todo lo que no apareciera ahí. Pero el material de una toma no vive siempre bajo su episodio: puede estar heredado de otra pieza, o guardado con el nombre de antes (el del proyecto, o el número previo a volver a repartir el guion). Así que el botón que existe para decir la verdad borraba el apunte de dónde estaba lo pagado y lo daba por no generado: la salida de eso es pagarlo otra vez. Y la música, cuyo campo puede SER la clave entera, se componía a mano — preguntando por un archivo que no existe y borrando el apunte.',
+    async comprobar(ctx) {
+      const { humoDeLaPantalla, proyectoYaEmpezado } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+      const fallos = [];
+
+      // Un episodio cuyo material vive bajo OTRA carpeta, apuntado como se apunta:
+      // es el estado en el que queda un episodio rescatado.
+      const proyecto = proyectoYaEmpezado();
+      const z = proyecto.piezas.find((x) => x.tomas?.length) || proyecto.piezas[0];
+      const fuera = 'p2925';
+      const materiales = [];
+      z.tomas = z.tomas.map((t) => {
+        const c = { ...t, reusa: null, imagen: 'ok', audio: 'ok' };
+        c.heredado = `${fuera}/t${String(t.i).padStart(3, '0')}/img`;
+        c.heredadoAudio = `${fuera}/t${String(t.i).padStart(3, '0')}/audio`;
+        materiales.push(c.heredado, c.heredadoAudio);
+        return c;
+      });
+      z.escenas = (z.escenas?.length ? z.escenas : [{ n: 0 }]).map((e) => {
+        const clave = `${fuera}/mus/${String(e.n).padStart(3, '0')}`;
+        materiales.push(clave);
+        return { ...e, musica: clave };
+      });
+
+      const tras = await humoDeLaPantalla({ parche, proyecto, materiales, pulsa: ['b-inventario'] });
+      fallos.push(...tras.fallos);
+
+      const guardado = tras.proyectoGuardado()?.piezas?.find((x) => x.id === z.id);
+      if (!guardado?.tomas?.length) {
+        fallos.push('El inventario no dejó nada guardado: esta comprobación estaría mirando al vacío.');
+        return fallos;
+      }
+
+      const sinVoz = guardado.tomas.filter((t) => t.audio !== 'ok').length;
+      const sinImagen = guardado.tomas.filter((t) => t.imagen !== 'ok').length;
+      const sinMusica = (guardado.escenas || []).filter((e) => !e.musica).length;
+      if (sinVoz || sinImagen) {
+        fallos.push(
+          `Con el material en «${fuera}» y apuntado, el inventario desmarcó ${sinImagen} imágenes y ` +
+            `${sinVoz} voces: eso manda a pagar otra vez lo que está ahí arriba.`,
+        );
+      }
+      if (sinMusica) {
+        fallos.push(`El inventario borró la clave de ${sinMusica} músicas que sí están en el almacén.`);
+      }
+      // Y la clave entera de la música no se sustituye por «ok»: perderla es
+      // volver a componerla a mano, que es de donde venía el problema.
+      const perdida = (guardado.escenas || []).filter((e) => e.musica && !String(e.musica).includes('/'));
+      if (perdida.length) {
+        fallos.push(`El inventario escribió «ok» encima de la clave de ${perdida.length} músicas y ya no se sabe dónde están.`);
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: se pregunta por una sola carpeta, la del episodio.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) => {
+        const antes = "for (const carpeta of new Set(aMirar.map((x) => x.clave.slice(0, x.clave.indexOf('/') + 1)))) {";
+        if (!t.includes(antes)) {
+          throw new Error('El sabotaje del inventario ya no encuentra su sitio: apúntalo otra vez o se está demostrando el aire.');
+        }
+        return t.replace(antes, "for (const carpeta of [`${idMaterial()}/`]) {");
+      }),
+  },
+
+  {
     nombre: 'lo-conservado-al-repartir-apunta-al-archivo-que-existe',
     dice: '«Todo está generado, pero aún así el montador dice que algo falta.» Volver a partir el guion mueve los números de las tomas, y el archivo NO se mueve con ellos: la clave lleva el número dentro. Los `reusa` sí se reescribían —son punteros por índice y se ve—, pero `imagen: ok`, `video: ok` y `audio: ok` son punteros por índice TAMBIÉN, solo que implícitos. Conservar la marca sin conservar el nombre dejaba lo peor de los dos mundos: en pantalla todo verde y pagado, y el montaje pidiendo claves que no existen — y la fase de imagen sin regenerarlas, porque para ella ya estaban hechas.',
     async comprobar(ctx) {
@@ -2382,11 +2451,13 @@ export const invariantes = [
       // TODO lo que existe en el almacén antes de tocar nada. Después de repartir,
       // ni una sola clave pedida puede caer fuera de aquí: lo que caiga fuera es un
       // archivo que nadie ha generado y que nadie va a generar.
+      // Bajo el id del EPISODIO, que es con el que se nombra el material. Ver
+      // `idMaterial` en `app/main.js`: el del proyecto solo coincide con el primero.
       const antes = new Set();
       for (const t of z.tomas) {
-        antes.add(claveToma(proyecto.id, t.i, 'img'));
-        antes.add(claveToma(proyecto.id, t.i, 'vid'));
-        antes.add(claveToma(proyecto.id, t.i, 'audio'));
+        antes.add(claveToma(z.id, t.i, 'img'));
+        antes.add(claveToma(z.id, t.i, 'vid'));
+        antes.add(claveToma(z.id, t.i, 'audio'));
       }
 
       const tras = await humoDeLaPantalla({ parche, proyecto, pulsa: ['b-segmentar'] });
@@ -2406,9 +2477,9 @@ export const invariantes = [
       let renumeradas = 0;
       for (const t of nuevas) {
         for (const [marca, clave, que] of [
-          [t.imagen, () => claveFotograma(proyecto.id, t, nuevas), 'imagen'],
-          [t.video, () => claveClip(proyecto.id, t, nuevas), 'clip'],
-          [t.audio, () => claveVoz(proyecto.id, t), 'voz'],
+          [t.imagen, () => claveFotograma(z.id, t, nuevas), 'imagen'],
+          [t.video, () => claveClip(z.id, t, nuevas), 'clip'],
+          [t.audio, () => claveVoz(z.id, t), 'voz'],
         ]) {
           if (marca !== 'ok') continue;
           const k = clave();

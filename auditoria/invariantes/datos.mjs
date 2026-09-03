@@ -3289,7 +3289,12 @@ export const invariantes = [
       if (!/Gemela de…/.test(main) || !/emparejarAMano\(x\.i/.test(main)) {
         fallos.push('El emparejado a mano existe y la galería no lo ofrece.');
       }
-      if (!/claveFotograma\(P\.id, dueña, tomas\)/.test(cuerpoMano) || !/claveClip\(P\.id, dueña, tomas\)/.test(cuerpoMano)) {
+      // El id es el del EPISODIO —`idMaterial()`—, no el del proyecto: bajo el del
+      // proyecto, del segundo episodio en adelante la clave apunta a otro sitio.
+      if (
+        !/claveFotograma\(idMaterial\(\), dueña, tomas\)/.test(cuerpoMano) ||
+        !/claveClip\(idMaterial\(\), dueña, tomas\)/.test(cuerpoMano)
+      ) {
         fallos.push('El emparejado a mano no resuelve las claves por la cadena: apuntaría a archivos que no existen.');
       }
       if (!/no tiene material que prestar/.test(cuerpoMano)) {

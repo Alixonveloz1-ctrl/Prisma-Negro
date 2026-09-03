@@ -220,12 +220,12 @@ function conSitioEnElGuion(tomas, guion) {
 function conSuArchivo(nueva, vieja, viejas) {
   if (vieja.i === nueva.i) return nueva;
   const con = { ...nueva };
-  // El prefijo es el mismo con el que se generó. Ver `pieza: P.id` en las fases.
-  if (con.imagen === 'ok' && !con.heredado) con.heredado = claveFotograma(P.id, vieja, viejas);
-  if (con.video === 'ok' && !con.heredadoVid) con.heredadoVid = claveClip(P.id, vieja, viejas);
+  // El prefijo es el del episodio, el mismo con el que se generó. Ver `idMaterial`.
+  if (con.imagen === 'ok' && !con.heredado) con.heredado = claveFotograma(idMaterial(), vieja, viejas);
+  if (con.video === 'ok' && !con.heredadoVid) con.heredadoVid = claveClip(idMaterial(), vieja, viejas);
   // La voz no se comparte entre tomas: no hay cadena que resolver, solo su número.
   if (con.audio === 'ok' && !con.heredadoAudio) {
-    con.heredadoAudio = claveToma(P.id, vieja.i, 'audio');
+    con.heredadoAudio = claveToma(idMaterial(), vieja.i, 'audio');
   }
   return con;
 }
@@ -378,6 +378,30 @@ const guardar = () => estado.guardar(P);
 const pieza = () => estado.piezaDe(P, P.piezaActiva);
 
 /**
+ * EL ID CON EL QUE SE NOMBRA EL MATERIAL. Es el del EPISODIO, no el del proyecto.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * En pantalla: «Faltan 238 de 250 materiales», con el episodio entero generado,
+ * el cubo correcto y los archivos comprobados uno a uno en la consola de Google.
+ * El montaje pedía `p2929/t000/img` y en el almacén estaba `p2925/t000/img`.
+ *
+ * `p2925` es el PROYECTO. `p2929` es el episodio abierto —el quinto—. Todas las
+ * fases componían la clave con el id del proyecto y la hoja de montaje con el de
+ * la pieza, que es lo correcto: cada episodio guarda su material bajo su propio
+ * nombre, y por eso `numeroPiezas` solo sube (ver `sanear`). Con un solo episodio
+ * los dos números coinciden —`nuevoProyecto` le da a la primera pieza el id del
+ * proyecto— y no se notaba nada. Del segundo en adelante, TODO lo generado se
+ * guardaba bajo el nombre del proyecto y el montaje lo buscaba bajo el del
+ * episodio: no encontraba nada, y encima cada episodio nuevo escribía encima del
+ * material del primero.
+ *
+ * Un id, un sitio. Lo que ya está guardado con el nombre viejo no se mueve: se
+ * apunta con `heredado`, que para eso está («Buscar el material que falta»).
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+const idMaterial = () => pieza().id;
+
+/**
  * EN QUÉ PAÍS PASA ESTE EPISODIO, para las imágenes.
  *
  * Sale del caso, que ya trae un país y una ciudad REALES. Un caso viejo —de antes
@@ -426,7 +450,7 @@ async function guardarEnArchivo(i, nombre) {
   if (!toma) throw new Error('No encuentro esa toma.');
   const entrada = bibliotecaFase.entradaDeArchivo(toma, {
     nombre,
-    pieza: P.id,
+    pieza: idMaterial(),
     tomas: z.tomas,
     propios: P.archivoPropio,
     // En qué formato se generó: sin esto entraría en el archivo sin decir si es
@@ -1929,7 +1953,7 @@ function archivarSiEsGenerica(toma) {
   const generica = String(toma.personaje || toma.plano?.personaje || toma.recurso || toma.plano?.recurso || '').trim();
   if (!generica) return false;
 
-  const clave = claveFotograma(P.id, toma, pieza().tomas);
+  const clave = claveFotograma(idMaterial(), toma, pieza().tomas);
   // Ya archivada: no se duplica. Ocuparía dos sitios en la rotación de su papel y
   // la misma cara saldría el doble de veces.
   if ((P.archivoPropio || []).some((p) => p.heredado === clave)) return false;
@@ -1938,7 +1962,7 @@ function archivarSiEsGenerica(toma) {
     P.archivoPropio = [
       ...(P.archivoPropio || []),
       bibliotecaFase.entradaDeArchivo(toma, {
-        pieza: P.id,
+        pieza: idMaterial(),
         tomas: pieza().tomas,
         propios: P.archivoPropio,
         aspecto: aspectoDelCanal(),
@@ -1974,7 +1998,7 @@ accion('b-narrar', async () => {
     'narración',
     bloques,
     (bloque, _i, senal, alEsperar) =>
-      narracion.narrarBloque({ bloque, pieza: P.id, config: P.config, senal, alEsperar }),
+      narracion.narrarBloque({ bloque, pieza: idMaterial(), config: P.config, senal, alEsperar }),
     {
       alTerminarUno: async (tomasNuevas) => {
         for (const t of tomasNuevas) await guardaToma(t);
@@ -1998,7 +2022,7 @@ accion('b-imagenes', async () => {
       imagenFase.generarImagen({
         toma,
         tomas: pieza().tomas,
-        pieza: P.id,
+        pieza: idMaterial(),
         config: P.config,
         tratamiento: pieza().tratamiento,
         // El país del caso, para que el coche, las matrículas y los uniformes
@@ -2025,7 +2049,7 @@ accion('b-movimiento', async () => {
       movimiento.generarClip({
         toma,
         tomas: pieza().tomas,
-        pieza: P.id,
+        pieza: idMaterial(),
         config: P.config,
         // El clip parte de la imagen, y si falta se genera aquí: hace falta el
         // tratamiento para que salga con la misma paleta que las demás.
@@ -2848,7 +2872,7 @@ accion('b-musica', async () => {
     pendientes,
     (escena, _i, senal, alEsperar) =>
       musica.generarMusicaDeEscena({
-        escena, tomas: pieza().tomas, pieza: P.id,
+        escena, tomas: pieza().tomas, pieza: idMaterial(),
         tratamiento: pieza().tratamiento, senal, alEsperar,
       }),
     {
@@ -2884,38 +2908,76 @@ accion('b-musica', async () => {
  */
 accion('b-inventario', async () => {
   avisar('paso4', 'Preguntando al almacén qué hay generado…');
-  const r = await llamar('listar', { prefijo: `${P.id}/` });
-  const hay = new Map((r.materiales || []).filter((m) => m.bytes > 0).map((m) => [m.clave, m]));
+  const z = pieza();
 
-  const cambios = { puestas: [], quitadas: [] };
-  const mirar = (etiqueta, tiene, poner) => {
-    const esta = hay.has(etiqueta.clave);
-    if (esta && !tiene) {
-      poner('ok');
-      cambios.puestas.push(etiqueta.dice);
-    } else if (!esta && tiene) {
-      poner(null);
-      cambios.quitadas.push(etiqueta.dice);
-    }
-  };
-
-  for (const t of pieza().tomas) {
-    // Lo heredado y lo que repite otra toma no tiene archivo propio: preguntar por
-    // él daría «no está» y lo desmarcaría, que es justo al revés de la verdad.
+  // QUÉ CLAVES HAY QUE MIRAR, ANTES DE MIRAR DÓNDE.
+  //
+  // El material de una toma no vive siempre bajo el episodio: puede estar
+  // heredado de otra pieza, o guardado con el nombre que tenía antes —el número
+  // del proyecto, o el de antes de volver a repartir el guion—. Preguntando solo
+  // bajo `<episodio>/`, esas claves salían «no está» y se DESMARCABAN: pagar otra
+  // vez lo que ya estaba pagado, y encima borrando el apunte de dónde estaba.
+  //
+  // Así que primero se compone la lista de claves, y luego se le pregunta al
+  // almacén por CADA carpeta que aparezca en ellas.
+  const aMirar = [];
+  for (const t of z.tomas) {
+    // Lo que repite otra toma no tiene archivo propio: preguntar por él daría «no
+    // está» y lo desmarcaría, que es justo al revés de la verdad.
     const propia = t.reusa === null || t.reusa === undefined;
-    // Por `claveVoz`: una toma renumerada tiene su voz con el nombre de antes, y
-    // preguntar por el de ahora la desmarcaría —y mandaría a pagarla otra vez—.
-    mirar({ clave: claveVoz(P.id, t), dice: `voz ${t.i + 1}` }, t.audio === 'ok', (v) => (t.audio = v));
+    aMirar.push({
+      clave: claveVoz(idMaterial(), t),
+      dice: `voz ${t.i + 1}`,
+      tiene: t.audio === 'ok',
+      poner: (v) => (t.audio = v),
+    });
     if (propia && !t.heredado) {
-      mirar({ clave: claveToma(P.id, t.i, 'img'), dice: `imagen ${t.i + 1}` }, t.imagen === 'ok', (v) => (t.imagen = v));
+      aMirar.push({
+        clave: claveToma(idMaterial(), t.i, 'img'),
+        dice: `imagen ${t.i + 1}`,
+        tiene: t.imagen === 'ok',
+        poner: (v) => (t.imagen = v),
+      });
     }
     if (propia && t.movimiento && !t.heredadoVid) {
-      mirar({ clave: claveToma(P.id, t.i, 'vid'), dice: `clip ${t.i + 1}` }, t.video === 'ok', (v) => (t.video = v));
+      aMirar.push({
+        clave: claveToma(idMaterial(), t.i, 'vid'),
+        dice: `clip ${t.i + 1}`,
+        tiene: t.video === 'ok',
+        poner: (v) => (t.video = v),
+      });
     }
   }
-  for (const e of pieza().escenas) {
-    const clave = `${P.id}/mus/${String(e.n).padStart(3, '0')}`;
-    mirar({ clave, dice: `música ${e.n}` }, e.musica === 'ok', (v) => (e.musica = v));
+  for (const e of z.escenas) {
+    // `escena.musica` puede SER la clave entera —así apunta la hoja a una música
+    // guardada con otro nombre—. Componerla a mano aquí preguntaba por un archivo
+    // que no existe y borraba el apunte.
+    const suya = typeof e.musica === 'string' && e.musica.includes('/');
+    aMirar.push({
+      clave: suya ? e.musica : claveMusica(idMaterial(), e.n),
+      dice: `música ${e.n}`,
+      tiene: !!e.musica,
+      // Y si está, NO se toca: escribir «ok» encima de la clave entera la perdería.
+      poner: (v) => (e.musica = v),
+    });
+  }
+
+  const hay = new Set();
+  for (const carpeta of new Set(aMirar.map((x) => x.clave.slice(0, x.clave.indexOf('/') + 1)))) {
+    const r = await llamar('listar', { prefijo: carpeta });
+    for (const m of r.materiales || []) if (m.bytes > 0) hay.add(m.clave);
+  }
+
+  const cambios = { puestas: [], quitadas: [] };
+  for (const x of aMirar) {
+    const esta = hay.has(x.clave);
+    if (esta && !x.tiene) {
+      x.poner('ok');
+      cambios.puestas.push(x.dice);
+    } else if (!esta && x.tiene) {
+      x.poner(null);
+      cambios.quitadas.push(x.dice);
+    }
   }
 
   await guardar();
@@ -2956,7 +3018,7 @@ accion('b-inventario', async () => {
  * los tres momentos en que aparece material nuevo que una gemela puede usar.
  */
 async function emparejarGemelos(avisarDonde = null) {
-  const cambios = imagenFase.emparejarDentroDelCaso(P.id, pieza().tomas);
+  const cambios = imagenFase.emparejarDentroDelCaso(idMaterial(), pieza().tomas);
   for (const c of cambios) {
     const k = pieza().tomas.findIndex((t) => t.i === c.i);
     if (k < 0) continue;
@@ -3011,11 +3073,11 @@ async function emparejarAMano(iRecibe, numeroDueña) {
 
   const partes = [];
   if (hayImg) {
-    recibe.heredado = claveFotograma(P.id, dueña, tomas);
+    recibe.heredado = claveFotograma(idMaterial(), dueña, tomas);
     partes.push('la imagen');
   }
   if (hayClip) {
-    recibe.heredadoVid = claveClip(P.id, dueña, tomas);
+    recibe.heredadoVid = claveClip(idMaterial(), dueña, tomas);
     recibe.movimiento = true;
     partes.push('el clip');
   }
@@ -3379,7 +3441,7 @@ function pintarPorTipo() {
           `Toma ${x.i + 1} · ${(x.segundos || 0).toFixed(1)}s` +
           (x.audio === 'ok' && x.corteExacto === false && x.corteForzado === true ? ' · corte forzado' : ''),
         texto: x.texto,
-        cargar: x.audio === 'ok' ? () => materialLocal(claveVoz(P.id, x), 'audio/wav') : null,
+        cargar: x.audio === 'ok' ? () => materialLocal(claveVoz(idMaterial(), x), 'audio/wav') : null,
         alRehacer: () => rehacerVoz(x.i),
         alEditar: (nuevo) => editarTextoDeToma(x.i, nuevo),
       }),
@@ -3400,7 +3462,7 @@ function pintarPorTipo() {
   g.innerHTML = conImagen.length ? '' : '<p class="nota">Dirige las tomas primero: la imagen sale de la ficha de plano.</p>';
   // Y SE SUELTA LO QUE YA NO SE VE, acotado a este episodio. Sin esto, cada
   // repintado de la galería creaba ochenta URL nuevas y no soltaba ninguna.
-  soltarUrles(new Set(conImagen.map((x) => claveFotograma(P.id, x, t))), `${P.id}/`);
+  soltarUrles(new Set(conImagen.map((x) => claveFotograma(idMaterial(), x, t))), `${idMaterial()}/`);
   for (const x of conImagen) {
     const d = document.createElement('div');
     d.className = 'pieza-mat';
@@ -3419,7 +3481,7 @@ function pintarPorTipo() {
     const clipListo = x.video === 'ok' || !!x.heredadoVid;
     // ¿ESTÁ YA GUARDADA EN EL ARCHIVO? Se mira por la clave del material, no por
     // el número de toma: es lo único que no cambia al reescribir el caso.
-    const suClave = hay ? claveFotograma(P.id, x, t) : '';
+    const suClave = hay ? claveFotograma(idMaterial(), x, t) : '';
     const yaEnArchivo = !!suClave && (P.archivoPropio || []).some((p) => p.heredado === suClave);
     cuerpo.innerHTML =
       `<p>#${x.i + 1}${x.heredado ? ' · heredada' : ''} · ${escapar((x.texto || '').slice(0, 70))}…</p>` +
@@ -3439,7 +3501,7 @@ function pintarPorTipo() {
     d.appendChild(cuerpo);
 
     if (hay) {
-      materialLocal(claveFotograma(P.id, x, t), 'image/png').then((blob) => {
+      materialLocal(claveFotograma(idMaterial(), x, t), 'image/png').then((blob) => {
         if (mia !== versionMateriales) return;
         if (!blob) {
           visual.textContent = 'no se pudo cargar';
@@ -3451,7 +3513,7 @@ function pintarPorTipo() {
         // revoca, y aquí no se revocaba ninguna. Con ochenta imágenes de dos megas
         // es exactamente lo que descargó la pestaña en Safari — y ahora se recorre
         // mucho más, porque es desde aquí donde se guarda en el archivo.
-        img.src = urlDeMaterial(claveFotograma(P.id, x, t), blob);
+        img.src = urlDeMaterial(claveFotograma(idMaterial(), x, t), blob);
         img.alt = '';
         img.loading = 'lazy';
         d.replaceChild(img, visual);
@@ -3563,7 +3625,7 @@ function pintarPorTipo() {
       filaAudio({
         titulo: `Escena ${e.n} · ${reloj(segundos)}`,
         texto: e.titulo || '',
-        cargar: e.musica === 'ok' ? () => materialLocal(claveMusica(P.id, e.n), 'audio/wav') : null,
+        cargar: e.musica === 'ok' ? () => materialLocal(claveMusica(idMaterial(), e.n), 'audio/wav') : null,
         alRehacer: () => rehacerMusica(e.n),
       }),
     );
@@ -3600,7 +3662,7 @@ function pintarPorTipo() {
       // tumbaba el navegador aprobando fotos, pero con archivos treinta veces
       // más grandes.
       v.onclick = () =>
-        verClip({ tarjeta: d, hueco: visual, clave: claveClip(P.id, x, t), boton: v }).catch((e) =>
+        verClip({ tarjeta: d, hueco: visual, clave: claveClip(idMaterial(), x, t), boton: v }).catch((e) =>
           avisar('previa', e.message, 'malo'),
         );
       cuerpo.appendChild(v);
@@ -3621,11 +3683,11 @@ async function rehacerVoz(i) {
   if (!bloque) throw new Error('No encuentro el bloque de esa toma.');
 
   avisar('previa', `Rehaciendo la voz del bloque de la toma ${i + 1}…`);
-  const nuevas = await narracion.narrarBloque({ bloque, pieza: P.id, config: P.config });
+  const nuevas = await narracion.narrarBloque({ bloque, pieza: idMaterial(), config: P.config });
   for (const t of nuevas) {
     const k = pieza().tomas.findIndex((x) => x.i === t.i);
     if (k >= 0) pieza().tomas[k] = t;
-    await refrescar(`${P.id}/t${String(t.i).padStart(3, '0')}/audio`);
+    await refrescar(`${idMaterial()}/t${String(t.i).padStart(3, '0')}/audio`);
   }
   await guardar();
   pintarPorTipo();
@@ -3647,12 +3709,12 @@ async function rehacerImagen(i) {
   ) {
     return;
   }
-  const claveVieja = tenia ? claveClip(P.id, toma, pieza().tomas) : '';
+  const claveVieja = tenia ? claveClip(idMaterial(), toma, pieza().tomas) : '';
   avisar('previa', `Rehaciendo la imagen de la toma ${i + 1}…`);
   const nueva = await imagenFase.generarImagen({
     toma,
     tomas: pieza().tomas,
-    pieza: P.id,
+    pieza: idMaterial(),
     config: P.config,
     tratamiento: pieza().tratamiento,
     mundo: mundoDeLaPieza(),
@@ -3661,7 +3723,7 @@ async function rehacerImagen(i) {
   // `movimiento` se conserva: la toma sigue mereciendo moverse, solo que ahora le
   // falta el clip — y por eso la galería vuelve a ofrecerlo.
   pieza().tomas[k] = { ...nueva, video: null, heredadoVid: null, bytesVideo: 0 };
-  await refrescar(`${P.id}/t${String(i).padStart(3, '0')}/img`);
+  await refrescar(`${idMaterial()}/t${String(i).padStart(3, '0')}/img`);
   if (claveVieja) await tirarElClip(claveVieja, 'previa');
   await guardar();
   pintarPorTipo();
@@ -3710,7 +3772,7 @@ let bombeandoClips = false;
 const piezaDeFila = (zid) => (zid === bibliotecaFase.ID_BIBLIOTECA ? estado.bibliotecaDe(P, aspectoDelCanal()) : pieza());
 
 /** En qué está una toma dentro de la fila: 'generando', 'en cola (n.º)' o nada. */
-function estadoEnFila(i, zid = P.id) {
+function estadoEnFila(i, zid = idMaterial()) {
   const k = filaClips.findIndex((x) => x.i === i && x.zid === zid);
   if (k < 0) return null;
   return k === 0 && bombeandoClips ? 'Generando…' : `En cola (${k + 1}º)`;
@@ -3721,7 +3783,7 @@ const estadoEnFilaBiblioteca = (i) => estadoEnFila(i, bibliotecaFase.ID_BIBLIOTE
 async function convertirEnClip(i, decir = () => {}) {
   const k = pieza().tomas.findIndex((t) => t.i === i);
   if (k < 0) throw new Error('No encuentro esa toma.');
-  if (filaClips.some((x) => x.i === i && x.zid === P.id)) return;
+  if (filaClips.some((x) => x.i === i && x.zid === idMaterial())) return;
 
   const segundos = movimiento.duracionMasCercana(
     pieza().tomas[k].segundos || 6,
@@ -3738,7 +3800,7 @@ async function convertirEnClip(i, decir = () => {}) {
   pieza().tomas[k].movimiento = true;
   await guardar();
 
-  filaClips.push({ zid: P.id, i, decir });
+  filaClips.push({ zid: idMaterial(), i, decir });
   decir(estadoEnFila(i) || 'En cola');
   bombearFilaDeClips();
 }
@@ -3846,10 +3908,10 @@ async function rehacerMusica(n) {
   await musica.generarMusicaDeEscena({
     escena,
     tomas: pieza().tomas,
-    pieza: P.id,
+    pieza: idMaterial(),
     tratamiento: pieza().tratamiento,
   });
-  await refrescar(`${P.id}/mus/${String(n).padStart(3, '0')}`);
+  await refrescar(`${idMaterial()}/mus/${String(n).padStart(3, '0')}`);
   pintarPorTipo();
   avisar('previa', 'Música rehecha: escúchala en su fila. El montado se actualiza al preparar.', 'bueno');
 }
@@ -4583,7 +4645,7 @@ accion(
     avisar('estilo', 'Generando una imagen de muestra…');
     const r = await imagenFase.probarEstilo({
       tomas: pieza().tomas,
-      config: { ...P.config, __pieza: P.id },
+      config: { ...P.config, __pieza: idMaterial() },
       tratamiento: pieza().tratamiento,
     });
     if (r.blob) {
@@ -4755,7 +4817,7 @@ accion(
   'b-marca',
   async () => {
     if (!P.config.marca.texto) throw new Error('Escribe el texto de la marca primero.');
-    await miniatura.subirMarca({ pieza: P.id, config: P.config });
+    await miniatura.subirMarca({ pieza: idMaterial(), config: P.config });
     avisar('proyecto', 'Marca subida. Se incrusta dentro de cada toma al montar.', 'bueno');
   },
   'proyecto',

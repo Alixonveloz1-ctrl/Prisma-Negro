@@ -1907,6 +1907,49 @@ export const invariantes = [
   },
 
   {
+    nombre: 'el-material-se-nombra-con-el-id-del-episodio-no-con-el-del-proyecto',
+    dice: 'En pantalla: «Faltan 238 de 250 materiales», con el episodio entero generado, el cubo correcto y los archivos comprobados uno a uno en la consola de Google. El montaje pedía `p2929/t000/img` y en el almacén estaba `p2925/t000/img`: `p2925` es el PROYECTO y `p2929` el episodio abierto, el quinto. Las fases componían la clave con el id del proyecto y la hoja con el de la pieza. Con un solo episodio los dos números coinciden —la primera pieza hereda el id del proyecto— y no se notaba; del segundo en adelante, todo lo generado se guardaba bajo el nombre del proyecto, el montaje no encontraba nada, y cada episodio nuevo escribía encima del material del primero.',
+    comprobar(ctx) {
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      // 1 · El id del material sale de la PIEZA. Si esto vuelve a ser el del
+      //     proyecto, todo lo de abajo sigue pasando y no comprueba nada.
+      if (!/const idMaterial = \(\) => pieza\(\)\.id;/.test(main)) {
+        fallos.push('`idMaterial` ya no sale de la pieza abierta: si vuelve a ser el del proyecto, del segundo episodio en adelante nada se encuentra.');
+      }
+
+      // 2 · Y NADIE compone una clave con el del proyecto. Se mira línea a línea
+      //     para poder decir cuál: `P.idea` y el id con el que el proyecto se
+      //     guarda en la nube son otra cosa y tienen que seguir existiendo.
+      const componen = [
+        /clave(?:Toma|Fotograma|Clip|Voz|Musica|Firma|Miniatura)\(P\.id\b/,
+        /\bpieza: P\.id\b/,
+        /`\$\{P\.id\}\//,
+        /prefijo: `\$\{P\.id\}/,
+      ];
+      main.split('\n').forEach((linea, n) => {
+        if (linea.trimStart().startsWith('//') || linea.trimStart().startsWith('*')) return;
+        for (const re of componen) {
+          if (re.test(linea)) {
+            fallos.push(`Línea ${n + 1}: se compone una clave de material con el id del proyecto — «${linea.trim().slice(0, 70)}»`);
+          }
+        }
+      });
+      return fallos;
+    },
+    // Se rompe como estaba: el material se nombra con el id del proyecto.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) => {
+        const antes = 'const idMaterial = () => pieza().id;';
+        if (!t.includes(antes)) {
+          throw new Error('El sabotaje de `idMaterial` ya no encuentra su sitio: apúntalo otra vez o se está demostrando el aire.');
+        }
+        return t.replace(antes, 'const idMaterial = () => P.id;');
+      }),
+  },
+
+  {
     nombre: 'un-almacen-que-no-contesta-no-es-un-material-que-falta',
     dice: '«Ahí está el bucket, está correcto, ahí está todo guardado, ya revisé los archivos.» Y la pantalla, a la vez: «Faltan 238 de 250 materiales.» Las dos cosas cabían porque la consulta en tanda llevaba un `.catch(() => ({ existe: false }))`: cualquier fallo —un permiso denegado, un corte, un 500, un tiempo agotado, o directamente el almacén sin configurar— se convertía en «ese archivo no está». Doscientos treinta y ocho permisos denegados y doscientos treinta y ocho archivos inexistentes se leen igual en pantalla y llevan a hacer lo contrario: mirar la cuenta, o pagar otra vez la generación entera. Un 404 sí es «no está», y eso lo dice `ficha` con `existe: false`; todo lo demás es que el almacén no ha contestado.',
     async comprobar(ctx) {

@@ -176,8 +176,19 @@ function textoDeArbol(nodo) {
 }
 
 /** Lo que contesta la nube de mentira a cada modo. */
-function respuestaDe(modo, cuerpo, nube = null) {
+function respuestaDe(modo, cuerpo, nube = null, materiales = []) {
   switch (modo) {
+    // El almacén de mentira. Sirve para comprobar lo que hace la pantalla con lo
+    // que HAY arriba —y sobre todo con lo que hay bajo OTRO nombre—, que es donde
+    // se desmarcaba material pagado.
+    case 'listar': {
+      const bajo = String(cuerpo?.prefijo || '');
+      return {
+        materiales: materiales
+          .filter((c) => String(c).startsWith(bajo))
+          .map((c) => ({ clave: String(c), bytes: 1024, actualizado: null })),
+      };
+    }
     case 'proyecto.cargar':
       return nube ? { existe: true, proyecto: nube } : { existe: false };
     case 'proyecto.guardar':
@@ -382,6 +393,9 @@ export async function humoDeLaPantalla({
   // Un proyecto guardado EN LA NUBE de mentira. Con `proyecto: null` y esto
   // puesto se prueba la recuperación: el teléfono perdió todo y la nube lo tiene.
   nube = null,
+  // Lo que el almacén de mentira TIENE. Claves de material, tal cual: si una toma
+  // apunta a `p2925/t003/img`, se pone aquí y la pantalla la encuentra.
+  materiales = [],
 } = {}) {
   const antes = {
     fetch: globalThis.fetch,
@@ -537,7 +551,7 @@ export async function humoDeLaPantalla({
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    return new Response(JSON.stringify({ ok: true, ...respuestaDe(modo, cuerpo, nube) }), {
+    return new Response(JSON.stringify({ ok: true, ...respuestaDe(modo, cuerpo, nube, materiales) }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
