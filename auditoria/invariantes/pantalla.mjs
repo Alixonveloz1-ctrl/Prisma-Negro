@@ -2347,6 +2347,50 @@ export const invariantes = [
   },
 
   {
+    nombre: 'un-montaje-en-marcha-se-recupera-al-volver',
+    dice: 'Montar media hora de documental tarda media hora, y en ese rato el teléfono se bloquea, Safari descarga la pestaña o la página se recarga. El trabajo no se entera —corre en la nube— pero la aplicación dejaba de mirarlo: al volver, la pantalla estaba igual que antes de empezar y el único botón era Montar. Darle otra vez son otros treinta minutos y otro trabajo pagado, para fabricar un archivo que ya estaba hecho. El identificador del trabajo se guarda en la pieza ANTES de esperar, justo para esto.',
+    comprobar(ctx) {
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      // 1 · Al arrancar se vuelve a mirar.
+      const i = main.indexOf('async function arrancar()');
+      const j = i < 0 ? -1 : main.indexOf('\n}', i);
+      const arranque = i < 0 || j < 0 ? '' : main.slice(i, j);
+      if (!arranque) {
+        fallos.push('No encuentro el arranque: esta comprobación estaría mirando al vacío.');
+      } else if (!/vigilarMontaje\(/.test(arranque)) {
+        fallos.push('Al arrancar no se vuelve a mirar el montaje que quedó en marcha: la pantalla vuelve a cero y el único camino es pagarlo otra vez.');
+      }
+
+      // 2 · Y el identificador se guarda ANTES de ponerse a esperar, o al volver
+      //     no habría nada que mirar.
+      const m = main.indexOf("accion(\n  'b-montar'");
+      const montar = m < 0 ? '' : main.slice(m, m + 1800);
+      const iGuarda = montar.indexOf('pieza().montaje = ejecucion');
+      const iEspera = montar.indexOf('vigilarMontaje(');
+      if (!montar || iGuarda < 0 || iEspera < 0 || iGuarda > iEspera) {
+        fallos.push('El identificador del trabajo no se guarda antes de esperar: si la pestaña se cae en ese hueco, el montaje queda huérfano.');
+      }
+
+      // 3 · Y no se lanza un segundo montaje encima de uno en marcha.
+      if (!/if \(vigilando\)/.test(montar)) {
+        fallos.push('Montar no comprueba si ya hay uno en marcha: dos trabajos por el mismo archivo, pagados los dos.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: al volver, nadie mira el montaje que quedó corriendo.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) => {
+        const antes = '  vigilarMontaje().catch(() => {});';
+        if (!t.includes(antes)) {
+          throw new Error('El sabotaje del montaje recuperado ya no encuentra su sitio: apúntalo otra vez o se está demostrando el aire.');
+        }
+        return t.replace(antes, '  /* sin vigilancia */');
+      }),
+  },
+
+  {
     nombre: 'un-episodio-rescatado-se-puede-montar',
     dice: '«¿Pero cómo lo voy a montar si no me deja?» La revisión decía «Todo listo: 250 materiales» y el botón de Montar seguía bloqueado, con la música en «0/8» teniendo las ocho pagadas y en su sitio. Los dos contadores de la pantalla solo sabían leer una de las formas de tener material: `imagen: ok` y `musica: ok`. La tercera —la clave entera, que es como queda apuntado el material que vive bajo otro nombre— no la contaban. Así que el montaje encontraba las 250 y la pantalla no dejaba lanzarlo.',
     async comprobar(ctx) {

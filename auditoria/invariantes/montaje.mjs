@@ -538,7 +538,9 @@ export const invariantes = [
       //     dos veces: por eso se comprueba también que el corte existe.
       const pan = fuente(ctx, 'app/main.js');
       const a = pan.indexOf("'b-revisar',\n  async ()");
-      const b = a < 0 ? -1 : pan.indexOf("'b-montar',\n  async ()", a);
+      // Hasta el botón SIGUIENTE, no hasta el de montar: entre medias hay más
+      // código, y una ventana de más se lleva por delante lo que comprueba esto.
+      const b = a < 0 ? -1 : pan.indexOf("'b-buscar-material',", a);
       const revisar = a < 0 || b < 0 ? '' : pan.slice(a, b);
       const iAvisos = revisar.indexOf('r.avisos');
       const iFaltan = revisar.indexOf('r.faltan.length > 20');

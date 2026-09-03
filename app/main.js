@@ -602,6 +602,9 @@ async function arrancar() {
   pintarTodo();
   cargarVoces();
   cargarModelos();
+  // Y SI SE DEJÓ UN MONTAJE EN MARCHA, se vuelve a mirar. Media hora de montaje
+  // no cabe en una pestaña de teléfono sin que se recargue: ver `vigilarMontaje`.
+  vigilarMontaje().catch(() => {});
 }
 
 /**
@@ -4573,9 +4576,61 @@ accion(
   'paso5',
 );
 
+/**
+ * VIGILA UN MONTAJE QUE YA ESTÁ EN MARCHA. Se llama al arrancar, no solo al pulsar.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * El montaje de media hora de documental tarda media hora, y en ese rato el
+ * teléfono se bloquea, Safari descarga la pestaña o se recarga la página. El
+ * trabajo NO se entera —corre en la nube, no aquí— pero la aplicación dejaba de
+ * mirarlo: al volver, la pantalla estaba como antes de empezar, y el único botón
+ * que había era Montar. Darle otra vez son otros treinta minutos y otro trabajo
+ * pagado, para fabricar un archivo que ya estaba hecho.
+ *
+ * El identificador del trabajo se guarda en la pieza ANTES de esperar, justo
+ * para esto. Aquí solo se usa: se le pregunta a la nube en qué va y se vuelve a
+ * mirar. Si ya terminó, se dice y se habilita la bajada, sin ruido.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+let vigilando = null;
+
+async function vigilarMontaje({ recienLanzado = false } = {}) {
+  const ejecucion = pieza().montaje;
+  if (!ejecucion || vigilando === ejecucion) return;
+  vigilando = ejecucion;
+  try {
+    const r = await montajeFase.esperarMontaje({ ejecucion, aviso: (m) => avisar('paso4', m) });
+    if (r.ok) {
+      avisar(
+        'paso4',
+        recienLanzado
+          ? `Montado en ${r.minutos} minutos. Ya puedes bajarlo en el paso 6.`
+          : 'El montaje que dejaste en marcha ya está terminado. Bájalo en el paso 6.',
+        'bueno',
+      );
+      $('b-bajar').disabled = false;
+      $('paso5').classList.remove('espera');
+    } else {
+      // §7.6: la aplicación lee el registro de la nube por su cuenta.
+      avisar('paso4', r.error, 'malo');
+      registro('paso4', r.registro);
+    }
+  } catch (e) {
+    avisar('paso4', e.message, 'malo');
+  } finally {
+    vigilando = null;
+  }
+}
+
 accion(
   'b-montar',
   async () => {
+    // SI YA HAY UNO EN MARCHA, NO SE LANZA OTRO. Volver a lanzarlo son otros
+    // treinta minutos y otro trabajo pagado por el mismo archivo.
+    if (vigilando) {
+      avisar('paso4', 'Ya hay un montaje en marcha. Espera a que termine.', 'malo');
+      return;
+    }
     avisar('paso4', 'Comprobando el material…');
     const ejecucion = await montajeFase.montar({
       pieza: pieza(),
@@ -4585,17 +4640,7 @@ accion(
     pieza().montaje = ejecucion;
     await guardar();
     pintarPasos();
-
-    const r = await montajeFase.esperarMontaje({ ejecucion, aviso: (m) => avisar('paso4', m) });
-    if (r.ok) {
-      avisar('paso4', `Montado en ${r.minutos} minutos. Ya puedes bajarlo en el paso 5.`, 'bueno');
-      $('b-bajar').disabled = false;
-      $('paso5').classList.remove('espera');
-    } else {
-      // §7.6: la aplicación lee el registro de la nube por su cuenta.
-      avisar('paso4', r.error, 'malo');
-      registro('paso4', r.registro);
-    }
+    await vigilarMontaje({ recienLanzado: true });
   },
   'paso5',
 );
