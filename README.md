@@ -70,31 +70,30 @@ En un proyecto de Google Cloud, con Vertex AI, Cloud Storage y Cloud Run activad
 
 ### 2. El montador
 
-Un solo comando, y se puede dar **desde el teléfono**: [Cloud Shell](https://shell.cloud.google.com)
-abre una terminal en el navegador, ya dentro de tu cuenta y con `gcloud` puesto.
+Dos palabras, y se puede dar **desde el teléfono**. Abre este enlace —cambiando
+`TU-PROYECTO`, y `authuser` si tienes varias cuentas de Google:
 
-```sh
-cd montador
-gcloud run jobs deploy prisma-negro-montador --source . \
-  --region us-central1 --memory 8Gi --cpu 4 --task-timeout 3600s \
-  --service-account LA-CUENTA-DE-SERVICIO
+```
+https://console.cloud.google.com/cloudshell/open?authuser=0&project=TU-PROYECTO&cloudshell_git_repo=https://github.com/Alixonveloz1-ctrl/Prisma-Negro&cloudshell_workspace=montador
 ```
 
-`--source .` construye la imagen y crea el job de una vez; la primera vez `gcloud`
-pide permiso para activar Cloud Build y Artifact Registry, y se le dice que sí.
-`us-central1` y `prisma-negro-montador` son los valores que la aplicación busca por
-defecto: con otros, hay que ponerlos en `CLOUD_RUN_REGION` y `CLOUD_RUN_JOB`.
-
-Para tener los dos archivos en Cloud Shell, sin instalar nada:
+Cloud Shell se abre en el navegador, ya dentro de tu cuenta, se descarga este
+repositorio solo y deja la terminal en la carpeta `montador`. Ahí:
 
 ```sh
-mkdir -p montador && cd montador
-curl -fO https://TU-APP.vercel.app/montador/montar.sh
-curl -fO https://TU-APP.vercel.app/montador/Dockerfile
+bash instalar.sh
 ```
 
-Y si el despliegue de la aplicación no los sirve, `git clone` del repositorio y
-`cd Prisma-Negro/montador`.
+Y ya. `instalar.sh` construye la imagen con ffmpeg dentro y crea el trabajo de
+Cloud Run, con el proyecto que tenga puesto Cloud Shell y los valores que la
+aplicación busca por defecto —`prisma-negro-montador` y `us-central1`—. Con otros
+nombres: `bash instalar.sh MI-NOMBRE MI-REGION`, y los mismos en `CLOUD_RUN_JOB` y
+`CLOUD_RUN_REGION`.
+
+> **Por qué un archivo y no una línea suelta.** El comando de despliegue son ciento
+> cincuenta caracteres con guiones dobles y unidades pegadas, y desde un móvil no se
+> puede pegar en Cloud Shell: hay que escribirlo, y un espacio de más lo tumba.
+> Escrito una vez aquí dentro, se da con dos palabras.
 
 > **AL CAMBIAR DE CUENTA DE GOOGLE CLOUD hay que volver a dar este comando.** El
 > montador vive en tu nube, no en la aplicación: una cuenta nueva empieza sin él.
