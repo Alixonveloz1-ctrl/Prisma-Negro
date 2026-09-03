@@ -724,7 +724,7 @@ export const invariantes = [
     nombre: 'lo-que-se-baja-es-el-paquete-de-publicar',
     dice: '«Estamos descargando solamente el MP4. Debería descargar un ZIP donde venga ya el video, un archivo de texto con la descripción que va al publicarlo más los hashtags, toda la música continua sola, y aparte toda la voz en un solo audio.» Las dos pistas sueltas ya las fabrica el montaje para poder mezclarlas y las tiraba al terminar; el texto ya lo escribe la fase de metadatos y había que recomponerlo a mano en el teléfono.',
     comprobar(ctx) {
-      const { armarZip, crc32, cabeEnZip, guionEntrega, construirHoja, textoDePublicacion } = ctx.fn;
+      const { armarZip, crc32, cabeEnZip, guionEntrega, construirHoja, textoDePublicacion, hashtagsDe } = ctx.fn;
       const fallos = [];
 
       // 1 · EL ZIP SE ARMA DE VERDAD Y SE ABRE. Un ZIP mal contado no da error:
@@ -798,13 +798,17 @@ export const invariantes = [
       if (!/salidas:/.test(mon)) fallos.push('El encargo no lleva la lista de subidas.');
 
       // 4 · El texto de publicar lleva los hashtags hechos, no las etiquetas
-      // crudas: publicar desde el teléfono es copiar y pegar.
+      // crudas: publicar desde el teléfono es copiar y pegar. Y van DENTRO de la
+      // descripción, que es donde YouTube los lee — no en un apartado suelto que
+      // hay que pegar a mano en su sitio cada vez.
+      const tags = hashtagsDe(['crimen sin resolver', 'misterio médico']);
+      if (!tags.includes('#crimensinresolver')) fallos.push('Las etiquetas no salen como hashtag: sin espacios ni tildes.');
+      if (!tags.includes('#misteriomedico')) fallos.push('Un hashtag conserva la tilde: no funciona así.');
       const t = textoDePublicacion(
-        { titulos: ['Uno'], descripcion: 'Va de esto.', etiquetas: ['crimen sin resolver', 'misterio médico'] },
+        { titulos: ['Uno'], descripcion: `Va de esto.\n\n${tags.join(' ')}`, etiquetas: ['crimen sin resolver'] },
         'x',
       );
-      if (!/#crimensinresolver/.test(t)) fallos.push('Las etiquetas no salen como hashtag: sin espacios ni tildes.');
-      if (!/#misteriomedico/.test(t)) fallos.push('Un hashtag conserva la tilde: no funciona así.');
+      if (!/#crimensinresolver/.test(t)) fallos.push('El documento no lleva los hashtags.');
       if (!/DESCRIPCIÓN/.test(t) || !/Va de esto\./.test(t)) fallos.push('El texto no lleva la descripción.');
 
       // 5 · Y la pantalla baja el paquete, no el MP4 pelado.

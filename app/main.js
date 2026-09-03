@@ -4677,8 +4677,8 @@ accion(
       // escribirlo a mano, uno por uno.
       `<label>Hashtags · para la descripción</label>` +
       `<textarea readonly style="min-height:70px">${escapar(metadatos.hashtagsDe(m.etiquetas).join(' '))}</textarea>` +
-      `<p class="nota chica">YouTube enseña los tres primeros encima del título, y a partir de quince los ignora todos: por eso son doce.</p>` +
-      `<label>Etiquetas · para el campo de tags (${m.etiquetas.join(', ').length} de ${metadatos.TOPE_ETIQUETAS} caracteres)</label>` +
+      `<p class="nota chica">Ya van al final de la descripción, así que con pegar la descripción es suficiente. Están aquí sueltos por si los quieres aparte.</p>` +
+      `<label>Etiquetas · para el campo de tags</label>` +
       `<textarea readonly style="min-height:70px">${escapar(m.etiquetas.join(', '))}</textarea>`;
   },
   'paso5',

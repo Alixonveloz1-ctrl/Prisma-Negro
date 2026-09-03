@@ -18,7 +18,6 @@ const ESQUEMA = {
   properties: {
     titulos: { type: 'array', items: { type: 'string' } },
     descripcion: { type: 'string' },
-    etiquetas: { type: 'array', items: { type: 'string' } },
     tituloEscenas: {
       type: 'array',
       items: {
@@ -28,7 +27,7 @@ const ESQUEMA = {
       },
     },
   },
-  required: ['titulos', 'descripcion', 'etiquetas', 'tituloEscenas'],
+  required: ['titulos', 'descripcion', 'tituloEscenas'],
 };
 
 /** `754.2` → `12:34`. Con horas cuando hace falta. */
@@ -84,7 +83,10 @@ export function tiemposDeEscenas(tomas, escenas) {
  */
 export function textoDePublicacion(m, titulo) {
   if (!m) return '';
-  const etiquetas = hashtagsDe(m.etiquetas);
+  // DOS COPIAS Y NO CINCO. Son dos campos distintos de YouTube y no hay forma de
+  // juntarlos más: la descripción —que ya lleva los hashtags dentro— y el campo
+  // de etiquetas, que va sin almohadilla. El documento dice exactamente dónde va
+  // cada una para no tener que acordarse.
   return [
     `TÍTULO`,
     (m.titulos || [])[0] || titulo || '',
@@ -92,13 +94,10 @@ export function textoDePublicacion(m, titulo) {
     (m.titulos || []).length > 1 ? 'OTROS TÍTULOS' : '',
     ...(m.titulos || []).slice(1),
     (m.titulos || []).length > 1 ? '' : '',
-    'DESCRIPCIÓN',
+    'DESCRIPCIÓN — pégala tal cual, los hashtags ya van dentro',
     m.descripcion || '',
     '',
-    'HASHTAGS',
-    etiquetas.join(' '),
-    '',
-    'ETIQUETAS (para el campo de tags, separadas por coma)',
+    'ETIQUETAS — para el campo de etiquetas de YouTube, no para la descripción',
     (m.etiquetas || []).join(', '),
   ]
     .filter((x) => x !== '' || true)
@@ -121,10 +120,13 @@ export function textoDePublicacion(m, titulo) {
  * quince etiquetas leyendo el guion, y leyendo el guion solo se pueden sacar
  * nombres del guion.
  *
- * Así que el grueso va escrito aquí, es el mismo para todos los episodios —un
- * canal se busca por su género, no por su capítulo— y no cuesta una llamada. Las
- * del episodio van después y son pocas: sirven para el que ya llegó, no para el
- * que todavía no.
+ * Así que están escritas aquí, son las mismas para todos los episodios —un canal
+ * se busca por su género, no por su capítulo— y no cuestan una llamada: el modelo
+ * ya no las escribe.
+ *
+ * Y son DIEZ. «Diez hashtag, diez etiquetas, no quiero más, solo las esenciales
+ * que sean genéricas de este tipo de contenido.» Ninguna lista larga rinde más
+ * que su cabeza: las de abajo no las busca nadie y diluyen las de arriba.
  *
  * NINGUNA dice que el caso sea real. El canal es ficción documental y lo declara
  * en la descripción y al final del video; etiquetarlo como «casos reales» sería
@@ -137,42 +139,14 @@ export const ETIQUETAS_DEL_CANAL = [
   'true crime',
   'true crime en español',
   'documental de crimen',
-  'documental true crime',
   'casos sin resolver',
   'misterios sin resolver',
   'crimen sin resolver',
   'documental de misterio',
   'historias de crimen',
-  'documental narrado',
   'documental completo en español',
-  'investigación criminal',
   'suspenso',
-  'misterio',
-  'crimen y misterio',
 ];
-
-/** El tope del campo de etiquetas de YouTube. Lo que pase de ahí lo corta él. */
-export const TOPE_ETIQUETAS = 500;
-
-/**
- * Las del canal delante, las del episodio detrás, sin repetir y sin pasarse del
- * tope. Cortadas aquí y no por YouTube: cortando él, la última queda a medias.
- */
-export function mezclarEtiquetas(delEpisodio = []) {
-  const vistas = new Set();
-  const salida = [];
-  let largo = 0;
-  for (const e of [...ETIQUETAS_DEL_CANAL, ...delEpisodio]) {
-    const t = String(e || '').trim().toLowerCase();
-    if (!t || vistas.has(t)) continue;
-    const cuesta = (salida.length ? 2 : 0) + t.length;
-    if (largo + cuesta > TOPE_ETIQUETAS) continue;
-    vistas.add(t);
-    salida.push(t);
-    largo += cuesta;
-  }
-  return salida;
-}
 
 /**
  * Los hashtags, listos para pegar.
@@ -180,10 +154,10 @@ export function mezclarEtiquetas(delEpisodio = []) {
  * «Las etiquetas están saliendo sin hashtag. De nada me sirve, igual tengo que
  *  hacer trabajo manual poniéndole hashtag uno por uno.»
  *
- * Y son doce, no las treinta: YouTube enseña los tres primeros encima del título
- * y a partir de quince los ignora TODOS. Poner treinta es quedarse sin ninguno.
+ * Diez, los mismos que las etiquetas. YouTube enseña los tres primeros encima del
+ * título y a partir de quince los ignora TODOS.
  */
-export const HASHTAGS_MAXIMOS = 12;
+export const HASHTAGS_MAXIMOS = 10;
 export const hashtagsDe = (etiquetas = []) =>
   [...new Set((etiquetas || []).map(comoHashtag).filter(Boolean))].slice(0, HASHTAGS_MAXIMOS);
 
@@ -228,10 +202,8 @@ export async function generarMetadatos({ tema, guion, tomas, escenas, fichas = [
         `Tema: ${tema}\n\nGUION:\n${guion.slice(0, 12000)}\n\n` +
         `Escenas: ${tiempos.marcas.map((m) => `[${m.n}] ${m.titulo}`).join(', ')}\n\n` +
         `Devuelve: 4 títulos alternativos (máx. 70 caracteres), una descripción de ` +
-        `2 o 3 párrafos, 8 etiquetas DEL EPISODIO —nombres, lugares y objetos que ` +
-        `salen en él—, y un título corto para cada escena (para la lista de ` +
-        `capítulos). Las etiquetas de género del canal ya están puestas: no las ` +
-        `repitas.`,
+        `2 o 3 párrafos, y un título corto para cada escena (para la lista de ` +
+        `capítulos). Las etiquetas no las escribes tú: son las del canal.`,
       esquema: ESQUEMA,
       temperatura: 0.7,
     },
@@ -252,8 +224,8 @@ export async function generarMetadatos({ tema, guion, tomas, escenas, fichas = [
 
   return {
     titulos: j.titulos || [],
-    // Las del canal delante: ver `ETIQUETAS_DEL_CANAL`.
-    etiquetas: mezclarEtiquetas(j.etiquetas || []),
+    // Las del canal y nada más: ver `ETIQUETAS_DEL_CANAL`.
+    etiquetas: ETIQUETAS_DEL_CANAL,
     descripcion: [
       // LA DECLARACIÓN VA LA PRIMERA. Ver la cabecera de `DECLARACION_DE_FICCION`:
       // el episodio se ve igual que un documental, y eso es exactamente lo que
@@ -264,6 +236,13 @@ export async function generarMetadatos({ tema, guion, tomas, escenas, fichas = [
       'Capítulos:',
       ...capitulos.map((c) => `${c.marca} ${c.titulo}`),
       pieDeFuentes ? '\nFuentes:\n' + pieDeFuentes : '',
+      // Y LOS HASHTAGS DENTRO, AL FINAL.
+      //
+      // «No tengo por qué copiarlas y pegarlas individualmente.» Los hashtags van
+      // en la descripción: si viven en una caja aparte, hay que pegarlos a mano
+      // en su sitio cada vez. Yendo dentro, pegar la descripción los pone donde
+      // van — y donde YouTube los lee.
+      '\n' + hashtagsDe(ETIQUETAS_DEL_CANAL).join(' '),
     ]
       .filter((x) => x !== null)
       .join('\n')

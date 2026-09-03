@@ -302,10 +302,10 @@ async function funcionesPuras() {
     apuntarAlMaterialQueHay: mtj.apuntarAlMaterialQueHay,
     construirHojaDe: mtj.hojaDe,
     porTipo: mtj.porTipo,
-    mezclarEtiquetas: met.mezclarEtiquetas,
     hashtagsDe: met.hashtagsDe,
     ETIQUETAS_DEL_CANAL: met.ETIQUETAS_DEL_CANAL,
-    TOPE_ETIQUETAS: met.TOPE_ETIQUETAS,
+    HASHTAGS_MAXIMOS: met.HASHTAGS_MAXIMOS,
+    textoDePublicacion: met.textoDePublicacion,
     clavesDeLaHoja: hoj.clavesDeLaHoja,
   };
 }

@@ -939,63 +939,67 @@ export const invariantes = [
 
   {
     nombre: 'las-etiquetas-son-del-genero-y-salen-con-almohadilla',
-    dice: '«Esas etiquetas no sirven, porque son específicas del episodio. Tienen que ser genéricas de documentales de crimen, para que puedan realmente tener impacto. De nada me sirven etiquetas específicas cuando es un canal nuevo que nadie conoce y un episodio nuevo que nadie conoce.» Y es aritmética: «tetrápodo hueco» lo busca cero personas al mes, porque el episodio lo acaba de inventar esta herramienta. Encima salían sin almohadilla, así que había que ponérsela a mano una por una. Y ninguna puede decir que el caso sea real: el canal declara que es ficción, y etiquetarlo de otra forma diría en el buscador lo contrario que el video.',
+    dice: '«Esas etiquetas no sirven, porque son específicas del episodio. Tienen que ser genéricas de documentales de crimen, para que puedan realmente tener impacto. De nada me sirven etiquetas específicas cuando es un canal nuevo que nadie conoce y un episodio nuevo que nadie conoce.» Y es aritmética: «tetrápodo hueco» lo busca cero personas al mes, porque el episodio lo acaba de inventar esta herramienta. Encima salían sin almohadilla —«igual tengo que hacer trabajo manual poniéndole hashtag uno por uno»— y en una caja aparte de la descripción, que es donde van. Diez y diez: ninguna lista larga rinde más que su cabeza. Y ninguna puede decir que el caso sea real, porque el video declara que es ficción.',
     comprobar(ctx) {
       const fallos = [];
-      const { mezclarEtiquetas, hashtagsDe, ETIQUETAS_DEL_CANAL, TOPE_ETIQUETAS } = ctx.fn;
-      const delEpisodio = ['tetrápodo hueco', 'misterio Nueva Escocia', 'cuerpo en hormigón'];
-      const mezcla = mezclarEtiquetas(delEpisodio);
+      const { hashtagsDe, ETIQUETAS_DEL_CANAL, HASHTAGS_MAXIMOS, textoDePublicacion } = ctx.fn;
 
-      // 1 · LAS DEL GÉNERO DELANTE. Es lo que se busca, y lo primero pesa más.
-      if (mezcla[0] !== ETIQUETAS_DEL_CANAL[0]) {
-        fallos.push(`La primera etiqueta es «${mezcla[0]}» y no una del género: las del episodio no las busca nadie.`);
+      // 1 · DIEZ, Y DEL GÉNERO. Ni una del episodio: no las busca nadie.
+      if (ETIQUETAS_DEL_CANAL.length !== 10) {
+        fallos.push(`Las etiquetas del canal son ${ETIQUETAS_DEL_CANAL.length} y se pidieron diez.`);
       }
-      const cuantasDelCanal = mezcla.filter((e) => ETIQUETAS_DEL_CANAL.includes(e)).length;
-      if (cuantasDelCanal < 10) {
-        fallos.push(`Solo ${cuantasDelCanal} etiquetas del canal llegan a la lista: el grueso tiene que ser del género.`);
+      if (HASHTAGS_MAXIMOS !== 10) {
+        fallos.push(`Los hashtags son ${HASHTAGS_MAXIMOS} y se pidieron diez.`);
       }
-      // Y las del episodio no se tiran: sirven para el que ya llegó.
-      if (!mezcla.includes('tetrápodo hueco')) {
-        fallos.push('Las etiquetas del episodio se pierden por el camino.');
-      }
-
-      // 2 · SIN PASARSE DEL TOPE, cortadas aquí. Cortando YouTube, la última queda
-      //     a medias y no vale para nada.
-      const largas = mezclarEtiquetas(Array.from({ length: 60 }, (_, i) => `etiqueta larguísima número ${i}`));
-      if (largas.join(', ').length > TOPE_ETIQUETAS) {
-        fallos.push(`La lista se pasa del tope de YouTube: ${largas.join(', ').length} de ${TOPE_ETIQUETAS}.`);
+      // Y el modelo ya no las escribe: si se le siguen pidiendo, vuelven las del
+      // episodio por la puerta de atrás.
+      const t = fuente(ctx, 'app/fases/metadatos.js');
+      if (/required: \[[^\]]*'etiquetas'/.test(t)) {
+        fallos.push('Al modelo se le siguen pidiendo etiquetas: leyendo el guion solo salen nombres del guion.');
       }
 
-      // 3 · NINGUNA DICE QUE EL CASO SEA REAL. El video declara que es ficción.
+      // 2 · NINGUNA DICE QUE EL CASO SEA REAL. El video declara que es ficción.
       for (const e of ETIQUETAS_DEL_CANAL) {
         if (/\breal(es)?\b|hechos reales|caso real/i.test(e)) {
           fallos.push(`La etiqueta «${e}» dice que el caso es real, y el episodio declara que es ficción.`);
         }
       }
 
-      // 4 · Y CON ALMOHADILLA, LISTOS PARA PEGAR. Ni uno más de los que YouTube
-      //     mira: pasando de quince los ignora todos, y ponerlos a mano es el
-      //     trabajo que esto vino a quitar.
-      const tags = hashtagsDe(mezcla);
-      if (!tags.length || tags.some((t) => !t.startsWith('#'))) {
+      // 3 · CON ALMOHADILLA, SIN ESPACIOS Y SIN TILDES, o no funcionan.
+      const tags = hashtagsDe(ETIQUETAS_DEL_CANAL);
+      if (tags.length !== ETIQUETAS_DEL_CANAL.length || tags.some((x) => !x.startsWith('#'))) {
         fallos.push(`Los hashtags no salen con almohadilla: ${tags.slice(0, 3).join(' ')}`);
       }
-      if (tags.length > 15) {
-        fallos.push(`Salen ${tags.length} hashtags: pasando de quince, YouTube los ignora todos.`);
-      }
-      if (tags.some((t) => /[áéíóúñ\s]/i.test(t))) {
-        fallos.push(`Un hashtag lleva espacios o tildes y no funciona: ${tags.find((t) => /[áéíóúñ\s]/i.test(t))}`);
+      if (tags.some((x) => /[áéíóúñ\s]/i.test(x))) {
+        fallos.push(`Un hashtag lleva espacios o tildes y no funciona: ${tags.find((x) => /[áéíóúñ\s]/i.test(x))}`);
       }
 
-      // 5 · Y LAS DOS FORMAS SALEN EN PANTALLA, que es de donde se copian.
-      const pan = fuente(ctx, 'app/main.js');
-      if (!/hashtagsDe\(m\.etiquetas\)/.test(pan)) {
-        fallos.push('La pantalla no enseña los hashtags: hay que escribirlos a mano uno por uno.');
+      // 4 · Y VIENEN PUESTOS DONDE VAN. «No tengo por qué copiarlas y pegarlas
+      //     individualmente»: los hashtags viven DENTRO de la descripción, así que
+      //     pegar la descripción los pone en su sitio. El documento del paquete
+      //     lleva las dos cosas, y no repite los hashtags fuera.
+      if (!/hashtagsDe\(ETIQUETAS_DEL_CANAL\)\.join\(' '\)/.test(t)) {
+        fallos.push('La descripción no termina en los hashtags: hay que pegarlos a mano en su sitio cada vez.');
+      }
+      const doc = textoDePublicacion(
+        { titulos: ['Un título'], descripcion: `Dos frases.\n\n${tags.join(' ')}`, etiquetas: ETIQUETAS_DEL_CANAL },
+        'Episodio',
+      );
+      for (const [que, re] of [
+        ['el título', /TÍTULO/],
+        ['la descripción', /DESCRIPCIÓN/],
+        ['las etiquetas', /ETIQUETAS/],
+        ['los hashtags', /#truecrime/],
+      ]) {
+        if (!re.test(doc)) fallos.push(`El documento que se baja con el video no lleva ${que}.`);
+      }
+      if ((doc.match(/#truecrime\b/g) || []).length > 1) {
+        fallos.push('El documento repite los hashtags fuera de la descripción: dos sitios para lo mismo y uno sobra.');
       }
       return fallos;
     },
     // Se rompe como estaba: las etiquetas son las que salieron del guion, y ya.
-    romper: (ctx) => conFuncion(ctx, 'mezclarEtiquetas', (delEpisodio = []) => delEpisodio),
+    romper: (ctx) => conFuncion(ctx, 'ETIQUETAS_DEL_CANAL', ['tetrápodo hueco', 'misterio nueva escocia']),
   },
 
   {
