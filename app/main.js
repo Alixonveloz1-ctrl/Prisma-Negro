@@ -911,7 +911,8 @@ function cuentasDeFases() {
     ['cf-voz', 'Voz', t.filter((x) => x.audio === 'ok' && !(x.corteExacto === false && x.corteForzado === true)).length, t.length],
     ['cf-imagenes', 'Imágenes', img.filter((x) => x.imagen === 'ok').length, img.length],
     ['cf-clips', 'Clips', clips.filter((x) => x.video === 'ok').length, clips.length],
-    ['cf-musica', 'Música', mus.filter((e) => e.estado === 'ok').length, mus.length],
+    // `hecha`, no `estado === 'ok'`: una música rescatada lleva su clave entera.
+    ['cf-musica', 'Música', mus.filter((e) => e.hecha).length, mus.length],
   ];
 }
 
@@ -1138,7 +1139,16 @@ function pintarPasos() {
   const hay = {
     caso: !!pieza().caso,
     guion: !!pieza().guion.trim() && t.length > 0,
-    generado: t.length > 0 && t.every((x) => x.audio === 'ok') && t.every((x) => x.reusa !== null || x.imagen === 'ok'),
+    // UNA TOMA TIENE FOTOGRAMA de tres maneras: propio, repitiendo el de otra, o
+    // heredado —su imagen vive bajo otro nombre y la toma lo lleva apuntado—. Sin
+    // contar la tercera, un episodio entero rescatado dejaba el botón de Montar
+    // bloqueado con la revisión diciendo «todo listo: 250 materiales».
+    generado:
+      t.length > 0 &&
+      t.every((x) => x.audio === 'ok') &&
+      // Y con clip vigente tampoco hace falta imagen propia: el montaje monta el
+      // clip. Es la misma cuenta que hace la hoja, y tiene que decir lo mismo.
+      t.every((x) => x.reusa !== null || x.imagen === 'ok' || !!x.heredado || clipVigente(x, t)),
     montado: !!pieza().montaje,
   };
 

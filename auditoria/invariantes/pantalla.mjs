@@ -2338,6 +2338,72 @@ export const invariantes = [
   },
 
   {
+    nombre: 'un-episodio-rescatado-se-puede-montar',
+    dice: '«¿Pero cómo lo voy a montar si no me deja?» La revisión decía «Todo listo: 250 materiales» y el botón de Montar seguía bloqueado, con la música en «0/8» teniendo las ocho pagadas y en su sitio. Los dos contadores de la pantalla solo sabían leer una de las formas de tener material: `imagen: ok` y `musica: ok`. La tercera —la clave entera, que es como queda apuntado el material que vive bajo otro nombre— no la contaban. Así que el montaje encontraba las 250 y la pantalla no dejaba lanzarlo.',
+    async comprobar(ctx) {
+      const { humoDeLaPantalla, proyectoYaEmpezado } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+      const fallos = [];
+
+      // Un episodio ENTERO rescatado: nada suyo bajo su nombre, todo apuntado.
+      const proyecto = proyectoYaEmpezado();
+      const z = proyecto.piezas.find((x) => x.tomas?.length) || proyecto.piezas[0];
+      const fuera = 'p2925';
+      const materiales = [];
+      z.tomas = z.tomas.map((t) => {
+        const n = String(t.i).padStart(3, '0');
+        const c = { ...t, reusa: null, audio: 'ok', imagen: null, heredadoAudio: `${fuera}/t${n}/audio` };
+        // Una de cada tres NO tiene imagen ni apuntada: tiene CLIP, y el montaje
+        // monta el clip. Si eso bloqueara, un episodio con clips no se montaría.
+        if (t.i % 3 === 1) {
+          c.movimiento = true;
+          c.video = 'ok';
+          c.heredadoVid = `${fuera}/t${n}/vid`;
+          materiales.push(c.heredadoVid);
+        } else {
+          c.heredado = `${fuera}/t${n}/img`;
+          materiales.push(c.heredado);
+        }
+        materiales.push(c.heredadoAudio);
+        return c;
+      });
+      z.escenas = (z.escenas?.length ? z.escenas : [{ n: 0 }]).map((e) => {
+        const clave = `${fuera}/mus/${String(e.n).padStart(3, '0')}`;
+        materiales.push(clave);
+        return { ...e, musica: clave };
+      });
+
+      const p = await humoDeLaPantalla({ parche, proyecto, materiales });
+      fallos.push(...p.fallos);
+
+      if (p.deshabilitado('b-montar')) {
+        fallos.push(
+          'Con todas las tomas apuntando a su material y el material en el almacén, el botón ' +
+            'de Montar sigue bloqueado: la revisión dice «todo listo» y la pantalla no deja lanzarlo.',
+        );
+      }
+      // Y el contador de música tiene que contarlas. «0/8» con las ocho pagadas
+      // manda a generarlas otra vez, que es pagar dos veces.
+      const musica = p.texto('cf-musica');
+      if (/^0\//.test(musica)) {
+        fallos.push(`La música rescatada no cuenta como hecha: «${musica}». El botón de Música se ofrecería a generarla otra vez.`);
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: una toma solo tiene imagen si la tiene con su nombre.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) => {
+        const antes = "t.every((x) => x.reusa !== null || x.imagen === 'ok' || !!x.heredado || clipVigente(x, t)),";
+        if (!t.includes(antes)) {
+          throw new Error('El sabotaje del botón de Montar ya no encuentra su sitio: apúntalo otra vez o se está demostrando el aire.');
+        }
+        return t.replace(antes, "t.every((x) => x.reusa !== null || x.imagen === 'ok'),");
+      }),
+  },
+
+  {
     nombre: 'revisar-que-hay-generado-no-desmarca-lo-que-vive-en-otra-carpeta',
     dice: 'Preguntarle al almacén qué hay generado listaba UNA carpeta —la del episodio— y desmarcaba todo lo que no apareciera ahí. Pero el material de una toma no vive siempre bajo su episodio: puede estar heredado de otra pieza, o guardado con el nombre de antes (el del proyecto, o el número previo a volver a repartir el guion). Así que el botón que existe para decir la verdad borraba el apunte de dónde estaba lo pagado y lo daba por no generado: la salida de eso es pagarlo otra vez. Y la música, cuyo campo puede SER la clave entera, se componía a mano — preguntando por un archivo que no existe y borrando el apunte.',
     async comprobar(ctx) {

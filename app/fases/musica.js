@@ -11,6 +11,18 @@
 import { llamar } from '../api.js';
 import { claveMusica } from '../../comun/claves.mjs';
 
+/**
+ * ¿ESTA ESCENA TIENE SU MÚSICA? Sí también cuando está guardada con otro nombre.
+ *
+ * `escena.musica` vale «ok» cuando la música vive bajo el nombre del episodio, y
+ * vale LA CLAVE ENTERA cuando vive en otro sitio —material rescatado, o de otra
+ * pieza—. La hoja de montaje ya entiende las dos formas. Aquí solo se entendía la
+ * primera, y eso ponía el contador a «0/8» con las ocho pagadas y en su sitio: el
+ * botón de Montar se quedaba bloqueado y el de Música se ofrecía a generarlas
+ * otra vez.
+ */
+export const tieneMusica = (e) => typeof e?.musica === 'string' && e.musica.length > 0;
+
 export function planificar(escenas, tomas, config, { soloLasQueFaltan = true } = {}) {
   if (!config?.musica?.activa) return [];
   return escenas
@@ -20,10 +32,11 @@ export function planificar(escenas, tomas, config, { soloLasQueFaltan = true } =
         ...e,
         segundos: suyas.reduce((s, t) => s + (t.segundos || 0), 0),
         estado: e.musica,
+        hecha: tieneMusica(e),
       };
     })
     .filter((e) => e.segundos > 0)
-    .filter((e) => (soloLasQueFaltan ? e.estado !== 'ok' : true));
+    .filter((e) => (soloLasQueFaltan ? !e.hecha : true));
 }
 
 /**

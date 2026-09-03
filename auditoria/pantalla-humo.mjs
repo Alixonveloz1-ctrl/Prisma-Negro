@@ -664,6 +664,8 @@ export async function humoDeLaPantalla({
     /** Cuántas opciones tiene un desplegable después de arrancar. */
     opcionesDe: (id) => elementos.get(id)?.children.length || 0,
     texto: (id) => elementos.get(id)?.textContent || '',
+    /** Si un botón del HTML está bloqueado. Los que pinta la app van en `botonesDe`. */
+    deshabilitado: (id) => elementos.get(id)?.disabled === true,
     html: (id) => elementos.get(id)?.innerHTML || '',
     /** Cuántas fichas pintó la aplicación dentro de una caja. */
     hijosDe: (id) => elementos.get(id)?.children.length || 0,
