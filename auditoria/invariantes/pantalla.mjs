@@ -982,7 +982,10 @@ export const invariantes = [
       // que borrar la explicación.
       for (const suelta of main.matchAll(/=\s*URL\.createObjectURL\(blob\)/g)) {
         const alrededor = main.slice(Math.max(0, suelta.index - 500), suelta.index);
-        if (!/function urlDeMaterial|function verClip/.test(alrededor)) {
+        // O la suelta el almacén de URLs, o la suelta ella misma ahí mismo. Lo que
+        // no vale es abrirla y que no la suelte nadie, que es la fuga original.
+        const despues = main.slice(suelta.index, suelta.index + 400);
+        if (!/function urlDeMaterial|function verClip/.test(alrededor) && !/revokeObjectURL/.test(despues)) {
           fallos.push('Hay una imagen que abre su URL fuera del almacén: esa no la suelta nadie.');
           break;
         }
@@ -2344,6 +2347,60 @@ export const invariantes = [
           '    if (mejor.texto !== t.texto) return t;\n    if (mejor.texto === t.texto) {',
         ),
       ),
+  },
+
+  {
+    nombre: 'lo-ya-montado-se-puede-recoger-despues',
+    dice: '«Recuerda que utilizo mi celular, entonces no puedo dejarlo simplemente quieto allí, montando. Si fuera una computadora, es otra cosa.» El montaje de media hora tarda media hora y un teléfono no aguanta media hora con la pestaña abierta y despierta. El video terminado se queda esperando en el almacén, pero no había forma de recogerlo más tarde: la única bajada era la del episodio abierto, y solo si esa misma pestaña había visto terminar el montaje. Si no, la pantalla no sabía que existía.',
+    async comprobar(ctx) {
+      const { humoDeLaPantalla, proyectoYaEmpezado } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+      const fallos = [];
+
+      // Dos videos montados en el almacén, de dos episodios, y ninguno de ellos
+      // visto terminar por esta pestaña. Más ruido que no es un video final.
+      const proyecto = proyectoYaEmpezado();
+      const otro = 'p2925';
+      const materiales = [
+        `${proyecto.piezas[0].id}/final`,
+        `${otro}/final`,
+        `${otro}/t000/img`,
+        `${otro}/voz`,
+      ];
+
+      const p = await humoDeLaPantalla({ parche, proyecto, materiales, pulsa: ['b-montados'] });
+      fallos.push(...p.fallos);
+
+      const dice = p.textoDentro('lista-montados');
+      if (/Todavía no hay ningún video montado/.test(dice) || !dice.trim()) {
+        fallos.push('Con dos videos montados en el almacén, la lista sale vacía: el video terminado no se puede recoger más tarde.');
+        return fallos;
+      }
+      if (p.hijosDe('lista-montados') < 2) {
+        fallos.push(`La lista solo enseña ${p.hijosDe('lista-montados')} de los dos videos montados que hay.`);
+      }
+      // Y con su bajada: una lista que no baja nada no sirve de nada.
+      if (!p.botonesDe('lista-montados').some((b) => /bajar/i.test(b.texto))) {
+        fallos.push('Los videos montados se enseñan y no se pueden bajar.');
+      }
+      // Lo que NO es un video final no entra: bajar la voz suelta creyendo que es
+      // el episodio es media hora de descarga para nada.
+      if (/t000\/img|\/voz/.test(dice)) {
+        fallos.push('La lista mete material que no es el video final.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: solo se conoce lo que esta pestaña vio terminar.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) => {
+        const antes = "m.bytes > 0 && String(m.clave).endsWith('/final')";
+        if (!t.includes(antes)) {
+          throw new Error('El sabotaje de la lista de montados ya no encuentra su sitio: apúntalo otra vez o se está demostrando el aire.');
+        }
+        return t.replace(antes, 'false');
+      }),
   },
 
   {

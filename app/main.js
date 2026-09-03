@@ -4672,6 +4672,82 @@ accion(
   'paso5',
 );
 
+/**
+ * LO QUE YA ESTÁ MONTADO, PREGUNTADO AL ALMACÉN.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Recuerda que utilizo mi celular, entonces no puedo dejarlo simplemente quieto
+ *  allí, montando. Si fuera una computadora, es otra cosa.»
+ *
+ * Y es verdad: el montaje de media hora de documental tarda media hora, y un
+ * teléfono no se queda media hora con la pestaña abierta y despierta. El video
+ * terminado se queda en el almacén esperando, pero no había forma de RECOGERLO
+ * más tarde: la única bajada era la del episodio abierto, y solo si esta misma
+ * pestaña había visto terminar el montaje.
+ *
+ * Esto es la otra mitad de recuperar un montaje al volver: la lista de lo que
+ * hay montado —de este episodio y de los demás—, con su fecha, su tamaño y su
+ * bajada. Se le pregunta al almacén, que es el que lo sabe.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+accion(
+  'b-montados',
+  async () => {
+    const caja = $('lista-montados');
+    caja.innerHTML = '<p class="nota chica">Preguntando al almacén…</p>';
+    const r = await llamar('listar', { prefijo: '' });
+    const finales = (r.materiales || [])
+      .filter((m) => m.bytes > 0 && String(m.clave).endsWith('/final'))
+      .sort((a, b) => String(b.actualizado || '').localeCompare(String(a.actualizado || '')));
+
+    if (!finales.length) {
+      caja.innerHTML = '<p class="nota chica">Todavía no hay ningún video montado en el almacén.</p>';
+      return;
+    }
+
+    caja.innerHTML = '';
+    for (const m of finales) {
+      const id = String(m.clave).split('/')[0];
+      const z = (P.piezas || []).find((x) => x.id === id);
+      const cuando = m.actualizado ? new Date(m.actualizado).toLocaleString('es') : '';
+      const fila = document.createElement('div');
+      fila.className = 'ficha';
+      fila.innerHTML =
+        `<p><b>${escapar(z?.titulo || z?.caso?.titulo || `Episodio ${id}`)}</b></p>` +
+        `<p class="nota chica">${(m.bytes / 1048576).toFixed(0)} MB${cuando ? ` · ${escapar(cuando)}` : ''}</p>`;
+      const b = document.createElement('button');
+      b.className = 'btn chico';
+      b.textContent = 'Bajar el video';
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        try {
+          const video = await montajeFase.bajarFinal({
+            pieza: { id },
+            alAvanzar: (hecho, total) =>
+              (b.textContent = `${(hecho / 1048576).toFixed(0)} de ${(total / 1048576).toFixed(0)} MB`),
+          });
+          if (!video) throw new Error('El video ya no está en el almacén.');
+          const url = URL.createObjectURL(video);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${(z?.titulo || id).replace(/[^\w -]/g, '')}.mp4`;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+          b.textContent = 'Bajado';
+        } catch (e) {
+          b.textContent = 'Bajar el video';
+          avisar('paso6', e.message, 'malo');
+        } finally {
+          b.disabled = false;
+        }
+      });
+      fila.appendChild(b);
+      caja.appendChild(fila);
+    }
+  },
+  'paso6',
+);
+
 accion(
   'b-bajar',
   async () => {
