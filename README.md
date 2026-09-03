@@ -70,13 +70,37 @@ En un proyecto de Google Cloud, con Vertex AI, Cloud Storage y Cloud Run activad
 
 ### 2. El montador
 
+Un solo comando, y se puede dar **desde el teléfono**: [Cloud Shell](https://shell.cloud.google.com)
+abre una terminal en el navegador, ya dentro de tu cuenta y con `gcloud` puesto.
+
 ```sh
-gcloud builds submit montador/ --tag REGION-docker.pkg.dev/PROYECTO/repo/montador
-gcloud run jobs create prisma-negro-montador \
-  --image REGION-docker.pkg.dev/PROYECTO/repo/montador \
-  --region REGION --memory 8Gi --cpu 4 --task-timeout 3600s \
+cd montador
+gcloud run jobs deploy prisma-negro-montador --source . \
+  --region us-central1 --memory 8Gi --cpu 4 --task-timeout 3600s \
   --service-account LA-CUENTA-DE-SERVICIO
 ```
+
+`--source .` construye la imagen y crea el job de una vez; la primera vez `gcloud`
+pide permiso para activar Cloud Build y Artifact Registry, y se le dice que sí.
+`us-central1` y `prisma-negro-montador` son los valores que la aplicación busca por
+defecto: con otros, hay que ponerlos en `CLOUD_RUN_REGION` y `CLOUD_RUN_JOB`.
+
+Para tener los dos archivos en Cloud Shell, sin instalar nada:
+
+```sh
+mkdir -p montador && cd montador
+curl -fO https://TU-APP.vercel.app/montador/montar.sh
+curl -fO https://TU-APP.vercel.app/montador/Dockerfile
+```
+
+Y si el despliegue de la aplicación no los sirve, `git clone` del repositorio y
+`cd Prisma-Negro/montador`.
+
+> **AL CAMBIAR DE CUENTA DE GOOGLE CLOUD hay que volver a dar este comando.** El
+> montador vive en tu nube, no en la aplicación: una cuenta nueva empieza sin él.
+> Todo lo demás —lo generado, la biblioteca— está en el bucket y no se toca. El
+> diagnóstico de Ajustes lo dice con estas palabras: «el contenedor de montaje no
+> está desplegado con ese nombre».
 
 No hace falta volver a tocarlo aunque cambien las fases: todo lo que necesita le
 llega como datos. Si algún día tienes que editar `montar.sh` para que el generador
