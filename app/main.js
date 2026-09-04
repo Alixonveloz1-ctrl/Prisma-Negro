@@ -12,7 +12,7 @@
 // Los pasos que todavía no tocan salen apagados, para que no haya que adivinar cuál
 // es el siguiente.
 
-import { llamar, ponerClave, ponerModeloTexto, ponerModelos, ponerRitmoMinimo, ritmoActual } from './api.js';
+import { llamar, ponerClave, ponerModeloTexto, ponerModelos, ponerRitmoMinimo, ritmoActual, alEscribirMaterial } from './api.js';
 import * as estado from './estado.js';
 import { Cola } from './cola.js';
 import {
@@ -2409,6 +2409,43 @@ function urlDeMaterial(clave, blob) {
 }
 
 /**
+ * UNA IMAGEN REHECHA SE VE REHECHA.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Hay imágenes que han salido mal, las regenero, y se sigue mostrando la misma
+ *  imagen primera que había salido mal.»
+ *
+ * La imagen nueva SÍ llegaba: se generaba, se subía, la copia local se tiraba y
+ * se bajaba la nueva. Lo que no se tiraba era la URL de objeto de la galería:
+ * el almacén de arriba guarda una por clave para no fugar memoria, y con la
+ * clave en pantalla nadie la soltaba. La tarjeta seguía enseñando el blob viejo
+ * con el nuevo ya en el teléfono.
+ *
+ * Se suelta aquí, avisados por la única puerta por la que pasa toda escritura.
+ * No se revoca en el acto: si la tarjeta está en pantalla se quedaría en blanco
+ * a mitad de una tanda. Se aparta, y el siguiente repintado —que la sustituye—
+ * la revoca.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+const urlesCaducadas = [];
+
+function soltarUrl(clave) {
+  const url = urlesDeMaterial.get(clave);
+  if (!url) return;
+  urlesDeMaterial.delete(clave);
+  urlesCaducadas.push(url);
+}
+
+alEscribirMaterial((clave) => {
+  soltarUrl(clave);
+  // Y la previa preparada tampoco vale: tenía dentro la versión anterior.
+  if (preparada) {
+    preparada = null;
+    pintarTiras();
+  }
+});
+
+/**
  * EL CLIP QUE SE ESTÁ VIENDO, y solo uno.
  *
  * ─────────────────────────────────────────────────────────────────────────────
@@ -2465,8 +2502,9 @@ async function verClip({ tarjeta, hueco, clave, boton }) {
   }
 }
 
-/** Suelta todo lo que ya no está en pantalla. */
+/** Suelta todo lo que ya no está en pantalla, y lo que caducó al reescribirse. */
 function soltarUrles(enUso, dentroDe = '') {
+  for (const url of urlesCaducadas.splice(0)) URL.revokeObjectURL(url);
   for (const [clave, url] of urlesDeMaterial) {
     if (enUso.has(clave)) continue;
     // SOLO LO DE ESTA GALERÍA. El Archivo y el episodio comparten este almacén, y
@@ -3230,6 +3268,10 @@ async function emparejarAMano(iRecibe, numeroDueña) {
 
 function informar(r, que, donde = 'paso4') {
   pintarPasos();
+  // Y las listas de la Previa, que enseñan lo que la tanda acaba de reescribir.
+  // Sin esto, tras rehacer una fase entera la galería seguía con las tarjetas
+  // de antes hasta el siguiente repintado grande.
+  pintarPorTipo();
   // Lo que el freno descubrió en esta tanda se queda con el proyecto.
   recordarRitmo();
   if (r.detenida) {
@@ -3824,9 +3866,12 @@ function pintarPorTipo() {
 
 async function refrescar(clave) {
   await local.borrarMaterial(clave);
-  // Y LA PREVIA PREPARADA YA NO VALE: tenía dentro la versión anterior de ese
-  // material, y el Montado la seguiría tocando como si fuera la nueva. «No sé
-  // si es que no abre la nueva generación y solo se queda con la misma.»
+  // Y LA URL DE PANTALLA Y LA PREVIA PREPARADA YA NO VALEN: tenían dentro la
+  // versión anterior de ese material, y la galería y el Montado la seguirían
+  // enseñando como si fuera la nueva. «No sé si es que no abre la nueva
+  // generación y solo se queda con la misma.» La puerta ya avisó al escribir;
+  // esto es por si alguien refresca una clave que no pasó por ella.
+  soltarUrl(clave);
   if (preparada) {
     preparada = null;
     pintarTiras();

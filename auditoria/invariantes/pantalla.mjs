@@ -2172,6 +2172,55 @@ export const invariantes = [
   },
 
   {
+    nombre: 'una-imagen-rehecha-se-ve-rehecha',
+    dice: '«Hay imágenes que han salido mal, las regenero, y se sigue mostrando la misma imagen primera que había salido mal.» La imagen nueva SÍ llegaba: se generaba, se subía, la copia local se tiraba y se bajaba la nueva. Lo que no se tiraba era la URL de objeto de la galería —guardada por clave para no fugar memoria—, así que la tarjeta seguía enseñando el blob viejo con el nuevo ya en el teléfono. Ahora escribir un material avisa desde la única puerta por la que pasa toda escritura, y la pantalla aparta esa URL y tira la previa preparada: rehacer una, rehacer una fase entera o generar por primera vez, da igual.',
+    comprobar(ctx) {
+      const api = fuente(ctx, 'app/api.js');
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      // 1 · La puerta avisa, justo donde tira la copia local.
+      const i = api.indexOf('if (r.ok && cuerpo.ok)');
+      const fin = api.indexOf('return cuerpo;', i);
+      const puerta = i < 0 || fin < 0 ? '' : api.slice(i, fin);
+      if (!/export function alEscribirMaterial/.test(api)) fallos.push('No hay forma de enterarse de que se escribió un material.');
+      if (!/avisarEscritura\(escrita\)/.test(puerta)) fallos.push('La puerta no avisa de que escribió un material: la pantalla no se entera.');
+
+      // 2 · La pantalla escucha, y aparta la URL y tira la previa.
+      const k = main.indexOf('alEscribirMaterial((clave) => {');
+      const oyente = k < 0 ? '' : main.slice(k, main.indexOf('\n});', k));
+      if (!oyente) return [...fallos, 'La pantalla no escucha las escrituras: la galería sigue enseñando el blob viejo.'];
+      if (!/soltarUrl\(clave\)/.test(oyente)) {
+        fallos.push('Al reescribir un material no se suelta su URL de objeto: la galería sigue enseñando la imagen vieja.');
+      }
+      if (!/preparada = null/.test(oyente)) fallos.push('Al reescribir un material la previa preparada sigue valiendo: el Montado enseña lo viejo.');
+
+      // 3 · Soltar es olvidar la clave Y revocar la URL —en el siguiente
+      // repintado, para no dejar en blanco una tarjeta a mitad de tanda—.
+      const s = main.indexOf('function soltarUrl(');
+      const cuerpo = s < 0 ? '' : main.slice(s, main.indexOf('\n}\n', s));
+      if (!/urlesDeMaterial\.delete\(clave\)/.test(cuerpo) || !/urlesCaducadas\.push\(url\)/.test(cuerpo)) {
+        fallos.push('Soltar la URL de una clave no la olvida o no la aparta: o vuelve la vieja, o fuga.');
+      }
+      if (!/for \(const url of urlesCaducadas\.splice\(0\)\) URL\.revokeObjectURL\(url\);/.test(main)) {
+        fallos.push('Las URL apartadas no se revocan nunca: el blob viejo se queda vivo.');
+      }
+
+      // 4 · Y tras una tanda entera, las listas de la Previa se repintan: si no,
+      // las tarjetas de antes se quedan hasta el siguiente repintado grande.
+      const j = main.indexOf('function informar(');
+      const inf = j < 0 ? '' : main.slice(j, main.indexOf('\n}\n', j));
+      if (!/pintarPorTipo\(\);/.test(inf)) fallos.push('Tras rehacer una fase entera, la galería sigue con las tarjetas de antes.');
+      return fallos;
+    },
+    // Se rompe como estaba: la puerta avisa y nadie suelta la URL.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace('alEscribirMaterial((clave) => {\n  soltarUrl(clave);', 'alEscribirMaterial((clave) => {'),
+      ),
+  },
+
+  {
     nombre: 'los-botones-se-pulsan-y-no-revientan',
     dice: '«Can\'t find variable: dueña», en pantalla, al darle a Preparar. Lo puso una limpieza que borró la declaración y dejó el uso. `node --check` no lo ve —es sintaxis válida— y el arnés tampoco lo veía: ARRANCABA la aplicación y ahí se quedaba, y `preparar()` solo corre cuando alguien pulsa. Un fallo de programación en cualquier manejador viajaba entero hasta el teléfono. Ahora el arnés PULSA, y un error que solo puede ser un fallo de programación —una variable que no existe, algo que no es función— no pasa de aquí.',
     async comprobar(ctx) {

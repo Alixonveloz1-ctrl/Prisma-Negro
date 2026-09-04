@@ -13,6 +13,29 @@ import * as local from './local.js';
 
 const PUERTA = '/api/ia';
 
+// ── Quien quiera enterarse de que un material se REESCRIBIÓ ──────────────────
+//
+// La pantalla guarda copias suyas de cada material —la URL de objeto de cada
+// imagen de la galería, la previa preparada— que dejan de valer en cuanto la
+// clave se escribe otra vez. Se avisa desde la única puerta por la que pasa
+// toda escritura, así que da igual si fue rehacer una, rehacer una fase entera
+// o generar por primera vez.
+const oyentesDeEscritura = new Set();
+
+export function alEscribirMaterial(fn) {
+  oyentesDeEscritura.add(fn);
+}
+
+function avisarEscritura(clave) {
+  for (const f of oyentesDeEscritura) {
+    try {
+      f(clave);
+    } catch {
+      // Un oyente roto no tumba la llamada que acaba de salir bien.
+    }
+  }
+}
+
 // ── El ritmo, que se ajusta solo ──────────────────────────────────────────────
 //
 // Vertex no limita por «cuántas a la vez» sino POR MINUTO. La cola va de una en
@@ -458,6 +481,8 @@ export async function llamar(modo, datos = {}, { reintentos = 2, senal, alEspera
       // Puesto aquí, una fase nueva no puede olvidarse de hacerlo.
       const escrita = datos.guardarEn || (modo === 'subir' ? datos.clave : '');
       if (escrita) await local.borrarMaterial(escrita).catch(() => {});
+      // Y se avisa: la copia local no es la única copia que hay que tirar.
+      if (escrita) avisarEscritura(escrita);
       aflojar();
       return cuerpo;
     }
