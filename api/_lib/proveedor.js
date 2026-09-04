@@ -840,15 +840,19 @@ export async function vozGemini({ texto: t, nombreVoz, estilo = '', modelo: pedi
 }
 
 // ── Música ────────────────────────────────────────────────────────────────────
-// Una pieza por escena (§4.8), a partir de una descripción de atmósfera derivada de
-// la ficha de escena.
+// Una pista para el episodio, a partir de la paleta del canal y el ánimo que
+// decide el director. Lyria 2 da clips de unos 30 s, fijos.
 
-export async function musica({ instruccion, segundos = 30 }) {
+export async function musica({ instruccion, evitar = '' }) {
   const eleccion = process.env.MODELO_MUSICA || PREDETERMINADO.musica;
   const datos = await conGrafias('musica', eleccion, (id) =>
     pedir(`${rutaDe(id)}:predict`, {
-      instances: [{ prompt: instruccion }],
-      parameters: { sample_count: 1, duration_seconds: Math.min(Math.max(segundos, 10), 120) },
+      // Lyria 2: `prompt` y `negative_prompt` en la instancia, `sample_count` en
+      // los parámetros. No admite duración —se le pedían 120 s y devolvía 30—.
+      // Lo que NO se quiere va en `negative_prompt`, no dentro del prompt:
+      // nombrarlo ahí —«no drums, no techno»— es pedirlo.
+      instances: [{ prompt: instruccion, ...(evitar ? { negative_prompt: evitar } : {}) }],
+      parameters: { sample_count: 1 },
     }),
   );
 

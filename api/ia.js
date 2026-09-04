@@ -241,7 +241,8 @@ async function despachar(modo, c) {
     case 'musica': {
       const m = await proveedor.musica({
         instruccion: exigir(c, 'instruccion'),
-        segundos: c.segundos,
+        // La lista de lo que se evita, aparte de la instrucción.
+        evitar: c.evitar,
       });
       if (c.guardarEn) {
         const g = await almacen.subir(c.guardarEn, Buffer.from(m.datos, 'base64'), m.tipo);

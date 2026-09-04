@@ -2676,7 +2676,7 @@ export const invariantes = [
       if (!/on repeat under the whole film/.test(unica)) {
         fallos.push('La instrucción no dice que la pista se repite bajo el episodio entero: el generador le pondría entrada y final.');
       }
-      if (!/no intro, no build-up, no ending/.test(unica)) {
+      if (!/the same at the end as at the beginning/.test(unica)) {
         fallos.push('La instrucción no prohíbe la entrada y el final: la pista va a ir a algún sitio y en bucle se nota.');
       }
 
@@ -4790,19 +4790,25 @@ export const invariantes = [
       const hecha = planificarMusica([{ n: 0, musica: 'ok' }, { n: 1 }, { n: 2 }], tomas, cfg);
       if (hecha.length) fallos.push('Con la pista generada, el botón de Música se ofrece a generarla otra vez.');
 
-      // Lo más larga que da el generador, y ni un segundo menos.
-      if (DURACION_MAXIMA_MUSICA !== 120) fallos.push(`La pista se pide de ${DURACION_MAXIMA_MUSICA} s y el generador da 120.`);
-      if (!/segundos: DURACION_MAXIMA/.test(fuente(ctx, 'app/fases/musica.js'))) {
-        fallos.push('La música no se pide con la duración máxima del generador.');
+      // Lo que da el generador por llamada, dicho con verdad: Lyria 2 devuelve
+      // clips de unos 30 s, fijos. Se pedían 120 y volvían 30, y la pantalla
+      // anunciaba dos minutos que no existían.
+      if (DURACION_MAXIMA_MUSICA !== 30) {
+        fallos.push(`La pista se anuncia de ${DURACION_MAXIMA_MUSICA} s y el generador da unos 30, fijos.`);
+      }
+      if (/duration_seconds/.test(fuente(ctx, 'api/_lib/proveedor.js'))) {
+        fallos.push('Se pide al generador una duración que no admite: la pista de dos minutos era de treinta segundos.');
       }
 
-      // Y la hoja: una escena de música que abarca la pieza, sin relevos.
+      // Y la hoja: una escena de música que abarca la pieza, sin relevos entre
+      // pistas distintas (el fundido de la pista consigo misma es otra cosa: es
+      // lo que la hace repetible).
       if (ctx.hoja.escenas.length !== 1) fallos.push(`La hoja lleva ${ctx.hoja.escenas.length} escenas de música: habrá relevos.`);
       if (Math.abs((ctx.hoja.escenas[0]?.duracion || 0) - ctx.hoja.total) > 0.05) {
         fallos.push('La escena de música de la hoja no dura lo que la pieza.');
       }
-      if (/acrossfade/.test(ctx.guion)) fallos.push('El montaje sigue haciendo relevos de música.');
-      if (!/stream_loop -1/.test(ctx.guion)) fallos.push('La pista única no se repite: se acaba a los dos minutos.');
+      if (/\[\d+:a\]\[\d+:a\]acrossfade/.test(ctx.guion)) fallos.push('El montaje sigue haciendo relevos entre pistas de música.');
+      if (!/-stream_loop \d+ -i unidad\.wav/.test(ctx.guion)) fallos.push('La pista única no se repite: se acaba a los treinta segundos.');
       return fallos;
     },
     // Se rompe como estaba: una pista por escena.
@@ -4816,7 +4822,7 @@ export const invariantes = [
     nombre: 'la-musica-es-del-canal-no-del-director',
     dice: '«Se supone que es una música de fondo suave que tiene que ir con el estilo del video, y me está generando una música tecno que no tiene nada que ver.» Los instrumentos los escribía el director caso por caso, y para un caso de internet escribió electrónica: la ficha viajaba tal cual al generador. Pero el lecho no es del caso, es del canal, como el aspecto de las imágenes. El director elige el ánimo; los instrumentos, el tempo y lo prohibido son del canal, y un ánimo que traiga un estilo de fuera se descarta entero.',
     comprobar(ctx) {
-      const { atmosferaDe, PALETA_DEL_CANAL } = ctx.fn;
+      const { atmosferaDe, evitarDe, PALETA_DEL_CANAL, FUERA_DEL_CANAL } = ctx.fn;
       const fallos = [];
       const tomas = [{ i: 0, escena: 0, plano: {} }];
       const director = {
@@ -4833,16 +4839,35 @@ export const invariantes = [
       for (const suyo of ['808', 'pulsing bass', 'club vibe', 'acoustic instruments']) {
         if (p.includes(suyo)) fallos.push(`Lo que escribió el director («${suyo}») viaja tal cual al generador.`);
       }
-      // 2 · Y lo prohibido, con todas las letras: sin ritmo, sin electrónica, lento.
+
+      // 2 · LO QUE NO SE QUIERE NO SE NOMBRA EN LA INSTRUCCIÓN. «No drums, no
+      // techno» es pedir drums y techno: el generador oye las palabras, no el
+      // «no». Así salía tecno pidiendo lo contrario.
+      const nombrado = FUERA_DEL_CANAL.exec(p) || /\b(vocal\w*|lyric\w*|drum\w*|percussion)\b/i.exec(p);
+      if (nombrado) fallos.push(`La instrucción nombra lo que no quiere («${nombrado[0]}»): el generador lo oye como un encargo.`);
+
+      // 3 · Eso va por la lista de lo que se evita, y la lista LLEGA al generador
+      // como tal: la fase la manda, la función la pasa, el proveedor la pone en
+      // su sitio. Y no se le pide una duración que no admite.
+      const ev = evitarDe();
+      for (const w of ['techno', 'drums', 'vocals', 'synthesizers']) {
+        if (!ev.includes(w)) fallos.push(`La lista de lo que se evita no lleva «${w}».`);
+      }
+      if (!/evitar: evitarDe\(\)/.test(fuente(ctx, 'app/fases/musica.js'))) fallos.push('La fase de música no manda la lista de lo que se evita.');
+      if (!/evitar: c\.evitar/.test(fuente(ctx, 'api/ia.js'))) fallos.push('La función no pasa la lista de lo que se evita al proveedor.');
+      if (!/negative_prompt: evitar/.test(fuente(ctx, 'api/_lib/proveedor.js'))) {
+        fallos.push('El proveedor no manda la lista de lo que se evita: se queda en el camino.');
+      }
+
+      // 4 · Y lo que sí se quiere, con todas las letras.
       for (const [qué, re] of [
-        ['sin ritmo', /No beat/],
-        ['sin electrónica', /techno/],
         ['lenta', /slow/i],
         ['acústica y orquestal', /acoustic and orchestral/],
+        ['de fondo, debajo de la voz', /under a spoken voice-over/],
       ]) {
         if (!re.test(p)) fallos.push(`La instrucción no pide la música ${qué}.`);
       }
-      // 3 · Un ánimo del canal sí pasa: el ánimo es lo que el director decide.
+      // 5 · Un ánimo del canal sí pasa: el ánimo es lo que el director decide.
       const sobrio = atmosferaDe({ n: 0 }, tomas, { musica: { enIngles: { mood: 'cold dread, patient', instruments: 'x', avoid: '' } } });
       if (!/Mood: cold dread, patient\./.test(sobrio)) {
         fallos.push('Un ánimo sobrio del director no llega al generador: se pierde lo único que decide.');

@@ -369,6 +369,42 @@ export const invariantes = [
   },
 
   {
+    nombre: 'la-pista-se-repite-sin-costura',
+    dice: 'El generador da un clip de unos 30 s y la pieza dura media hora: la pista se repite setenta veces. Con `-stream_loop` a secas cada vuelta es un salto —la onda no coincide donde acaba con donde empieza— y se oye un corte cada medio minuto. La pista se hace REPETIBLE antes de repetirla: la cabeza del clip se funde sobre su cola, y la unidad que sale termina en la misma muestra en la que empieza.',
+    comprobar(ctx) {
+      const g = ctx.guion;
+      const fallos = [];
+      const s = ctx.hoja.ajustes?.solapeBucle;
+      if (!(s >= 2 && s <= 6)) fallos.push(`El solape del bucle es de ${s} s: tiene que rondar los tres.`);
+
+      const unidad = g.split('\n').find((l) => /^ffmpeg/.test(l.trim()) && /unidad\.wav$/.test(l.trim()));
+      if (!unidad) return [...fallos, 'El montaje no fabrica la unidad repetible: la pista se repite a secas.'];
+      // El clip se lee DOS VECES: partido con `asplit`, el fundido se queda
+      // esperando y la unidad sale vacía (probado con ffmpeg de verdad).
+      if ((unidad.match(/ -i '[^']*_mus_\d+\.wav'/g) || []).length !== 2) {
+        fallos.push('La unidad repetible no lee el clip dos veces: partido con asplit, sale vacía.');
+      }
+      if (/asplit/.test(unidad)) fallos.push('La unidad repetible parte el clip con asplit: el fundido se queda esperando y sale vacía.');
+      for (const [que, re] of [
+        ['recorta la cabeza', /atrim=0:/],
+        ['funde la cabeza sobre la cola', /acrossfade=d=/],
+      ]) {
+        if (!re.test(unidad)) fallos.push(`La unidad repetible no ${que}.`);
+      }
+      // Y el bucle tiene cuenta: con la unidad vacía, «-1» no termina nunca.
+      if (!/-stream_loop \d+ -i unidad\.wav/.test(g)) fallos.push('Lo que se repite no es la unidad repetible, o el bucle no tiene cuenta y una unidad vacía lo colgaría para siempre.');
+      if (/-stream_loop (-1|\d+) -i '[^']*_mus_\d+\.wav'/.test(g)) fallos.push('El clip se repite a secas: un corte cada medio minuto.');
+      return fallos;
+    },
+    // Se rompe como estaba: el clip crudo, repetido a secas.
+    romper: (ctx) => {
+      const roto = ctx.guion.replace(/-stream_loop \d+ -i unidad\.wav/, "-stream_loop -1 -i 'p01_mus_000.wav'");
+      if (roto === ctx.guion) throw new Error('El sabotaje de «la-pista-se-repite-sin-costura» ya no encuentra el bucle de la unidad.');
+      return { ...ctx, guion: roto };
+    },
+  },
+
+  {
     nombre: 'la-marca-se-incrusta-dentro-de-cada-toma',
     dice: 'La marca del canal va DENTRO de la codificación de cada toma. Al final, sobre la pieza montada, obligaría a recodificarla entera (§5.7).',
     comprobar(ctx) {

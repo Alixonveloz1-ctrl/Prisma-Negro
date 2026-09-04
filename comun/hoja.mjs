@@ -17,6 +17,9 @@ export const PREDETERMINADO = {
   alto: 1080,
   // §5.4: con fundidos cortos el relevo de la música se oye como un tajo.
   fundidoMusica: 2.5,
+  // El solape con el que la pista se hace REPETIBLE: la cabeza del clip se
+  // funde sobre su cola, y la repetición cae en un punto continuo de la onda.
+  solapeBucle: 3,
   // El nivel del lecho de música ANTES de que la voz lo agache. Estaba escrito a
   // mano aquí y otra vez en la previa, y el ajuste del proyecto no lo leía nadie:
   // «la música ni se escucha, apenas se medio escucha a lo lejos», y subirla era
@@ -194,6 +197,7 @@ export function construirHoja({ pieza, tomas, escenas = [], config = {} }) {
     firma: config.firma === null ? null : `${pieza}/firma`,
     ajustes: {
       fundidoMusica: c.fundidoMusica,
+      solapeBucle: c.solapeBucle,
       volumenMusica: c.volumenMusica,
       ampliacionCamara: c.ampliacionCamara,
       crf: c.crf,
@@ -524,19 +528,58 @@ export function guionFfmpeg(hoja) {
   if (conMusica.length) {
     p('# ── 4. La música, un lecho continuo con fundidos largos (§5.4) ──');
     const d = a.fundidoMusica;
-    conMusica.forEach((e, n) => {
-      const largo = (e.duracion + d).toFixed(3);
-      // Si la pieza generada es más corta que la escena, se repite. Mejor eso que un
-      // silencio a mitad de escena.
-      p(
-        `ffmpeg -y -v error -stream_loop -1 -i ${sh(nombreLocal(e.musica))} ` +
-          `-t ${largo} -ac 2 -ar ${a.muestreo} -c:a pcm_s16le mus_${String(n).padStart(3, '0')}.wav`,
-      );
-    });
-
     if (conMusica.length === 1) {
+      // LA REPETICIÓN SIN COSTURA.
+      //
+      // ───────────────────────────────────────────────────────────────────────
+      // El generador da un clip de unos 30 s y la pieza dura media hora: la
+      // pista se repite setenta veces. Con `-stream_loop` a secas cada vuelta
+      // es un salto, porque la onda no coincide donde acaba con donde empieza:
+      // un corte cada medio minuto.
+      //
+      // Así que la pista se hace REPETIBLE antes de repetirla: se parte en
+      // cabeza (los primeros segundos) y cuerpo (el resto), y la cabeza se
+      // funde sobre el final del cuerpo. La unidad que sale termina en la
+      // misma muestra en la que empieza —el punto de repetición es continuo—.
+      // Cuesta el largo del solape; a cambio no hay setenta cortes.
+      // ───────────────────────────────────────────────────────────────────────
+      const s = a.solapeBucle;
+      // El fundido, un pelo más corto que la cabeza: el fundido no puede ser
+      // más largo que lo que se funde.
+      const cruce = (s - 0.05).toFixed(2);
+      // EL CLIP SE LEE DOS VECES, no se parte con `asplit`: partido, el fundido
+      // espera a que termine el cuerpo mientras la cabeza no puede avanzar, y
+      // la unidad salía VACÍA —probado—. Y con la unidad vacía, un bucle sin
+      // fin no termina nunca: por eso el bucle de abajo tiene cuenta.
+      const clip = sh(nombreLocal(conMusica[0].musica));
+      p(
+        `ffmpeg -y -v error -i ${clip} -i ${clip} -filter_complex ` +
+          sh(
+            `[1:a]atrim=${s},asetpts=PTS-STARTPTS[q];` +
+              `[0:a]atrim=0:${s},asetpts=PTS-STARTPTS[c];` +
+              `[q][c]acrossfade=d=${cruce}:c1=tri:c2=tri[unidad]`,
+          ) +
+          ` -map ${sh('[unidad]')} -ac 2 -ar ${a.muestreo} -c:a pcm_s16le unidad.wav`,
+      );
+      // Cuatrocientas vueltas de una unidad de medio minuto son más de tres
+      // horas: sobra para cualquier episodio, y si la unidad saliera vacía el
+      // bucle termina y el paso siguiente falla con su registro (§7.6) en vez
+      // de colgarse para siempre.
+      p(
+        `ffmpeg -y -v error -stream_loop 400 -i unidad.wav ` +
+          `-t ${(conMusica[0].duracion + d).toFixed(3)} -ac 2 -ar ${a.muestreo} -c:a pcm_s16le mus_000.wav`,
+      );
       p('cp mus_000.wav musica_cruda.wav');
     } else {
+      conMusica.forEach((e, n) => {
+        const largo = (e.duracion + d).toFixed(3);
+        // Si la pieza generada es más corta que la escena, se repite. Mejor eso
+        // que un silencio a mitad de escena.
+        p(
+          `ffmpeg -y -v error -stream_loop -1 -i ${sh(nombreLocal(e.musica))} ` +
+            `-t ${largo} -ac 2 -ar ${a.muestreo} -c:a pcm_s16le mus_${String(n).padStart(3, '0')}.wav`,
+        );
+      });
       const ent = conMusica.map((_, n) => `-i mus_${String(n).padStart(3, '0')}.wav`).join(' ');
       const pasos = [];
       let previo = '[0:a]';

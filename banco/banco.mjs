@@ -163,7 +163,10 @@ function proyectoSintetico() {
   return {
     id: 'p01',
     tomas,
-    escenas: [{ n: 0 }, { n: 1 }, { n: 2 }],
+    // Con la pista hecha: así el lecho de música —la unidad repetible, el bucle,
+    // la compresión lateral— pasa por ffmpeg de verdad. Sin `musica` aquí, ese
+    // camino no se ejecutaba nunca antes de un montaje real.
+    escenas: [{ n: 0, musica: 'ok' }, { n: 1 }, { n: 2 }],
     config: {},
   };
 }

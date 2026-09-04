@@ -305,6 +305,8 @@ async function funcionesPuras() {
     pistaDe: mus.pistaDe,
     PISTA_UNICA: mus.PISTA_UNICA,
     PALETA_DEL_CANAL: mus.PALETA_DEL_CANAL,
+    FUERA_DEL_CANAL: mus.FUERA_DEL_CANAL,
+    evitarDe: mus.evitarDe,
     musicaDeLaPista: hoj.musicaDeLaPista,
     DURACION_MAXIMA_MUSICA: mus.DURACION_MAXIMA,
     suavizarBordes: aud.suavizarBordes,

@@ -3773,7 +3773,7 @@ function pintarPorTipo() {
     cajaMus.appendChild(
       filaAudio({
         titulo: `La pista de fondo · ${reloj(musica.DURACION_MAXIMA)}`,
-        texto: `Una sola, repetida debajo de los ${reloj(total)} del episodio.`,
+        texto: `Una sola, de lo que da el generador por llamada, repetida sin costura debajo de los ${reloj(total)} del episodio.`,
         cargar: p.hecha ? () => materialLocal(p.clave, 'audio/wav') : null,
         alRehacer: () => rehacerMusica(),
       }),
@@ -3824,6 +3824,13 @@ function pintarPorTipo() {
 
 async function refrescar(clave) {
   await local.borrarMaterial(clave);
+  // Y LA PREVIA PREPARADA YA NO VALE: tenía dentro la versión anterior de ese
+  // material, y el Montado la seguiría tocando como si fuera la nueva. «No sé
+  // si es que no abre la nueva generación y solo se queda con la misma.»
+  if (preparada) {
+    preparada = null;
+    pintarTiras();
+  }
 }
 
 async function rehacerVoz(i) {
@@ -4049,14 +4056,12 @@ async function bombearFilaDeClips() {
 }
 
 async function rehacerMusica() {
-  // LA PISTA ÚNICA, otra vez: dos minutos debajo del episodio entero. Los
-  // segundos salen de las tomas, no de la previa preparada: rehacer música tiene
-  // que funcionar sin haber preparado nada.
+  // LA PISTA ÚNICA, otra vez: un clip nuevo del generador, que el montaje
+  // repite debajo del episodio entero.
   const z = pieza();
-  const segundos = z.tomas.reduce((s, t) => s + (t.segundos || 0), 0);
   avisar('previa', 'Rehaciendo la pista de fondo…');
   const r = await musica.generarMusicaDeEscena({
-    escena: { n: musica.PISTA_UNICA, segundos: segundos || 30 },
+    escena: { n: musica.PISTA_UNICA },
     tomas: z.tomas,
     pieza: idMaterial(),
     tratamiento: z.tratamiento,

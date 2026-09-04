@@ -86,7 +86,14 @@ export function planificar(escenas, tomas, config, { soloLasQueFaltan = true } =
  */
 export const PALETA_DEL_CANAL = {
   instruments: 'low sustained strings, a solo cello, sparse piano notes, faint ambient texture',
-  avoid: 'electronic dance music, techno, synthesizers, drum machines, drums, percussion, pulsing rhythm, lead melody, vocals',
+  // LO QUE SE EVITA VA POR SU PROPIA LISTA al generador, nunca dentro de la
+  // instrucción: nombrarlo ahí —«no drums, no techno»— es pedirlo, porque el
+  // generador oye las palabras y no el «no». Así salía tecno pidiendo lo
+  // contrario.
+  avoid:
+    'vocals, lyrics, singing, spoken word, electronic dance music, techno, EDM, synthesizers, ' +
+    'drum machines, drums, percussion, beat, pulsing rhythm, groove, upbeat, lead melody, ' +
+    'catchy hook, swells, crescendos, drops, sudden silences, intro, outro',
 };
 /** Palabras que delatan un estilo que no es el del canal. */
 export const FUERA_DEL_CANAL =
@@ -96,22 +103,24 @@ export function atmosferaDe(escena, tomas, tratamiento = null) {
   const en = tratamiento?.musica?.enIngles;
   const mood = limpiar(en?.mood);
 
+  // SOLO LO QUE SE QUIERE. Ni una palabra de lo que no: eso va en `evitarDe`.
   return [
-    'Cinematic true-crime documentary underscore, acoustic and orchestral. No vocals, no lyrics, no spoken word.',
+    'Cinematic true-crime documentary underscore, acoustic and orchestral, instrumental.',
     `Mood: ${mood && !FUERA_DEL_CANAL.test(mood) ? mood : 'restrained tension, unresolved, cold, somber'}.`,
     `Instruments: ${PALETA_DEL_CANAL.instruments}.`,
-    'Very slow tempo. No beat, no rhythm, no groove.',
+    'Very slow, still and sustained: long held notes that drift.',
     // Una sola pista para todo el episodio, repetida: tiene que poder empezar
     // donde acaba sin que se note, y no puede ir a ningún sitio. Sin la palabra
     // «loop», que al generador le suena a electrónica.
-    'It plays on repeat under the whole film, so keep one slow, even texture from the first second to the last: no intro, no build-up, no ending, no section changes.',
+    'It plays on repeat under the whole film: one slow, even texture from the first second to the last, the same at the end as at the beginning.',
     // La música va DEBAJO de la narración: si tiene melodía marcada, compite con la
     // voz y no hay compresión lateral que lo arregle (§5.6).
-    'This is a bed under a voice-over: no lead melody, no prominent hook.',
-    'Flat, constant dynamics. No swells, no drops, no sudden silences.',
-    `Avoid: ${PALETA_DEL_CANAL.avoid}.`,
+    'A quiet bed under a spoken voice-over: soft, sparse, in the background, flat and constant.',
   ].join(' ');
 }
+
+/** La lista de lo que se evita, para el generador: la del canal, siempre la misma. */
+export const evitarDe = () => PALETA_DEL_CANAL.avoid;
 
 /**
  * La pista del episodio: su clave y si está hecha.
@@ -144,8 +153,14 @@ export function limpiar(texto) {
   return s.replace(/\s+/g, ' ').slice(0, 200);
 }
 
-/** El tope del generador de música. Más de esto lo recorta él. */
-export const DURACION_MAXIMA = 120;
+/**
+ * Lo que da el generador POR LLAMADA.
+ *
+ * Lyria 2 devuelve clips de unos 30 s, fijos, y no admite pedir más: se pedían
+ * 120 y volvían 30, y la pantalla anunciaba dos minutos que no existían. La
+ * pista se hace repetible y se repite en el montaje (ver `comun/hoja.mjs`).
+ */
+export const DURACION_MAXIMA = 30;
 
 export async function generarMusicaDeEscena({ escena, tomas, pieza, tratamiento = null, senal, alEsperar }) {
   const clave = claveMusica(pieza, escena.n);
@@ -154,10 +169,8 @@ export async function generarMusicaDeEscena({ escena, tomas, pieza, tratamiento 
     'musica',
     {
       instruccion: atmosferaDe(escena, tomas, tratamiento),
-      // LO MÁS LARGA QUE DA EL GENERADOR, que son dos minutos: cuanto más larga,
-      // menos vueltas da en media hora y menos se nota la costura. El montaje la
-      // repite (`-stream_loop`).
-      segundos: DURACION_MAXIMA,
+      // Lo que NO se quiere, por su propia lista. Ver `PALETA_DEL_CANAL`.
+      evitar: evitarDe(),
       guardarEn: clave,
     },
     { senal, alEsperar },
@@ -165,7 +178,7 @@ export async function generarMusicaDeEscena({ escena, tomas, pieza, tratamiento 
 
   // §7.12: ningún valor de retorno de una escritura se ignora.
   if (!r.guardado?.bytes) {
-    throw new Error(`La música de la escena ${escena.n} no quedó confirmada en el almacén.`);
+    throw new Error('La pista de fondo no quedó confirmada en el almacén.');
   }
 
   return { n: escena.n, musica: 'ok', clave, bytes: r.guardado.bytes };
