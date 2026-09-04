@@ -1726,7 +1726,8 @@ export const invariantes = [
       for (const [id, espera] of [
         ['cuenta-voz', '8/12'],
         ['cuenta-imagenes', '6/11'],
-        ['cuenta-musica', '1/2'],
+        // La música es UNA pista para el episodio, hecha en el proyecto sembrado.
+        ['cuenta-musica', '1/1'],
         ['cuenta-clips', '1/1'],
       ]) {
         if (r.texto(id) !== espera) {
@@ -2122,6 +2123,52 @@ export const invariantes = [
     // Se rompe como estaba: el botón del Inicio no abre nada.
     romper: (ctx) =>
       editando(ctx, 'app/main.js', (t) => t.replace("accion('b-inicio-nuevo', empezarEpisodioNuevo, 'inicio');", '')),
+  },
+
+  {
+    nombre: 'la-previa-y-el-inventario-cuentan-una-sola-pista',
+    dice: '«Se supone que está generando solamente una música, porque sale listado ese montón de músicas. Y cuando le doy a revisar qué hay generado, dice que faltan ocho músicas.» Generaba una —la pista única, bajo el número 0— y las dos pantallas que la cuentan seguían contando como antes, una música por escena: la Previa listaba ocho filas con siete «falta», y el inventario preguntaba al almacén por ocho archivos que ya no se generan. La pista es una, con la clave que decide la hoja de montaje, y todo el que la cuenta cuenta esa.',
+    async comprobar(ctx) {
+      const { humoDeLaPantalla, proyectoYaEmpezado } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+      const fallos = [];
+
+      // Dos escenas; la pista hecha bajo el número 0 y presente en el almacén.
+      const proyecto = proyectoYaEmpezado();
+      const z = proyecto.piezas[0];
+      const r = await humoDeLaPantalla({ parche, proyecto, materiales: [`${z.id}/mus/000`], pulsa: ['b-inventario'] });
+      fallos.push(...r.fallos);
+
+      // 1 · La Previa: una fila, la pista, hecha.
+      const filas = r.hijosDe('lista-musica');
+      if (filas !== 1) fallos.push(`La Previa lista ${filas} músicas: tiene que ser la pista, una.`);
+      if (r.texto('cuenta-musica') !== '1/1') {
+        fallos.push(`La cuenta de música de la Previa dice «${r.texto('cuenta-musica')}» y no «1/1».`);
+      }
+      if (!/pista/i.test(r.textoDentro('lista-musica'))) fallos.push('La Previa no dice que es la pista de fondo.');
+
+      // 2 · El inventario: Música 1/1, sin «faltan».
+      const dicho = r.html('aviso-paso4').replace(/<[^>]+>/g, '');
+      if (!/Música 1\/1/.test(dicho)) fallos.push(`El inventario no cuenta una música hecha de una: «${dicho.slice(0, 140)}».`);
+      if (/Música \d+\/\d+ — faltan/.test(dicho)) fallos.push('El inventario sigue diciendo que faltan músicas con la pista hecha.');
+
+      // 3 · Y no desmarcó la pista que está en el almacén.
+      const guardado = r.proyectoGuardado()?.piezas?.find((x) => x.id === z.id);
+      if (guardado && !guardado.escenas?.find((e) => e.n === 0)?.musica) {
+        fallos.push('El inventario desmarcó la pista que sí está en el almacén.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: una fila por escena en la Previa.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace(
+          '  const filasDeMusica = t.length ? [pista] : [];',
+          "  const filasDeMusica = pieza().escenas.map((e) => ({ clave: `${idMaterial()}/mus/${String(e.n).padStart(3, '0')}`, hecha: e.musica === 'ok' }));",
+        ),
+      ),
   },
 
   {

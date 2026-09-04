@@ -278,7 +278,11 @@ export async function dirigirPieza({ caso, fichas, minutos = 10, genero = null, 
         `- musica: atmosfera, instrumentacion, queEvitar. Y DENTRO, «enIngles» con ` +
         `mood, instruments y avoid ESCRITOS EN INGLÉS: el generador de música solo ` +
         `entiende inglés y rechaza la petición si ve español. Vocabulario musical ` +
-        `concreto: «low sustained cello», «tape hiss», «no percussion».\n` +
+        `concreto: «low sustained cello», «tape hiss», «no percussion». LA PALETA ES ` +
+        `DEL CANAL, no del caso: cuerdas graves, chelo, piano escaso, textura ` +
+        `ambiental, muy lento y sin ritmo. Tú eliges el ánimo dentro de eso. Nada ` +
+        `electrónico, nada de beat ni de tecno aunque el caso sea de internet: la ` +
+        `aplicación lo descarta.\n` +
         `- ritmo: segundosPorToma (10-18) y proporcionMovimiento (0-0.3).\n` +
         `- abierto: qué deja abierto este episodio A PROPÓSITO. Un hilo suelto que ` +
         `nadie explicó, un detalle que nunca cuadró. UNO O DOS, no cuatro. NO metas ` +

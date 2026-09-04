@@ -41,7 +41,7 @@ import * as previa from './previa.js';
 import * as local from './local.js';
 import { material } from './material.js';
 import { deBase64 } from './imagenes.js';
-import { claveToma, claveMusica, claveVoz, claveFotograma, claveClip, clipVigente } from '../comun/claves.mjs';
+import { claveToma, claveVoz, claveFotograma, claveClip, clipVigente } from '../comun/claves.mjs';
 
 const $ = (id) => document.getElementById(id);
 
@@ -3053,19 +3053,20 @@ accion('b-inventario', async () => {
       });
     }
   }
-  for (const e of z.escenas) {
-    // `escena.musica` puede SER la clave entera —así apunta la hoja a una música
-    // guardada con otro nombre—. Componerla a mano aquí preguntaba por un archivo
-    // que no existe y borraba el apunte.
-    const suya = typeof e.musica === 'string' && e.musica.includes('/');
-    aMirar.push({
-      clave: suya ? e.musica : claveMusica(idMaterial(), e.n),
-      dice: `música ${e.n}`,
-      tiene: !!e.musica,
-      // Y si está, NO se toca: escribir «ok» encima de la clave entera la perdería.
-      poner: (v) => (e.musica = v),
-    });
-  }
+  // LA PISTA, UNA. La música es una sola para el episodio entero y vive bajo el
+  // número 0 —o donde apunte la escena 0, si se rescató—. Preguntar por una
+  // música por escena decía «faltan 8 músicas» con la pista hecha y sonando.
+  // La clave la decide la hoja de montaje, no se compone aquí a mano: componerla
+  // preguntaba por archivos que no existen y borraba el apunte. Y si está, NO se
+  // toca: escribir «ok» encima de la clave entera la perdería.
+  const pista = musica.pistaDe(z.escenas, idMaterial());
+  const cero = escenaCero(z);
+  aMirar.push({
+    clave: pista.clave,
+    dice: 'la pista de fondo',
+    tiene: pista.hecha,
+    poner: (v) => (cero.musica = v),
+  });
 
   // Y APARTE, LO QUE HAY QUE COMPROBAR AUNQUE NO SE PUEDA CORREGIR.
   //
@@ -3089,10 +3090,7 @@ accion('b-inventario', async () => {
     });
     verificar.push({ clave: claveVoz(idMaterial(), t), de: 'Voz' });
   }
-  for (const e of z.escenas) {
-    const suya = typeof e.musica === 'string' && e.musica.includes('/');
-    verificar.push({ clave: suya ? e.musica : claveMusica(idMaterial(), e.n), de: 'Música' });
-  }
+  verificar.push({ clave: pista.clave, de: 'Música' });
 
   const hay = new Set();
   const carpetas = new Set(
@@ -3758,19 +3756,26 @@ function pintarPorTipo() {
     g.appendChild(d);
   }
 
-  // ── Música, escena a escena ──
-  const escenas = pieza().escenas;
-  $('cuenta-musica').textContent = escenas.length ? `${escenas.filter((e) => e.musica === 'ok').length}/${escenas.length}` : '';
+  // ── La pista de fondo: UNA para todo el episodio ──
+  //
+  // «Se supone que está generando solamente una música, porque sale listado ese
+  //  montón de músicas.» Generaba una; la lista seguía siendo la de antes, una
+  //  fila por escena con siete «falta». Aquí va la pista, y nada más.
+  const pista = musica.pistaDe(pieza().escenas, idMaterial());
+  const total = t.reduce((s, x) => s + (x.segundos || 0), 0);
+  const filasDeMusica = t.length ? [pista] : [];
+  $('cuenta-musica').textContent = filasDeMusica.length
+    ? `${filasDeMusica.filter((p) => p.hecha).length}/${filasDeMusica.length}`
+    : '';
   const cajaMus = $('lista-musica');
-  cajaMus.innerHTML = escenas.length ? '' : '<p class="nota">Todavía no hay escenas.</p>';
-  for (const e of escenas) {
-    const segundos = t.filter((x) => x.escena === e.n).reduce((s, x) => s + (x.segundos || 0), 0);
+  cajaMus.innerHTML = filasDeMusica.length ? '' : '<p class="nota">Todavía no hay tomas.</p>';
+  for (const p of filasDeMusica) {
     cajaMus.appendChild(
       filaAudio({
-        titulo: `Escena ${e.n} · ${reloj(segundos)}`,
-        texto: e.titulo || '',
-        cargar: e.musica === 'ok' ? () => materialLocal(claveMusica(idMaterial(), e.n), 'audio/wav') : null,
-        alRehacer: () => rehacerMusica(e.n),
+        titulo: `La pista de fondo · ${reloj(musica.DURACION_MAXIMA)}`,
+        texto: `Una sola, repetida debajo de los ${reloj(total)} del episodio.`,
+        cargar: p.hecha ? () => materialLocal(p.clave, 'audio/wav') : null,
+        alRehacer: () => rehacerMusica(),
       }),
     );
   }
@@ -4043,21 +4048,36 @@ async function bombearFilaDeClips() {
   }
 }
 
-async function rehacerMusica(n) {
-  // Los segundos salen de las tomas de la escena, no de la previa preparada:
-  // rehacer música tiene que funcionar sin haber preparado nada.
-  const segundos = pieza().tomas.filter((t) => t.escena === n).reduce((s, t) => s + (t.segundos || 0), 0);
-  const escena = { n, segundos: segundos || 30 };
-  avisar('previa', `Rehaciendo la música de la escena ${n}…`);
-  await musica.generarMusicaDeEscena({
-    escena,
-    tomas: pieza().tomas,
+async function rehacerMusica() {
+  // LA PISTA ÚNICA, otra vez: dos minutos debajo del episodio entero. Los
+  // segundos salen de las tomas, no de la previa preparada: rehacer música tiene
+  // que funcionar sin haber preparado nada.
+  const z = pieza();
+  const segundos = z.tomas.reduce((s, t) => s + (t.segundos || 0), 0);
+  avisar('previa', 'Rehaciendo la pista de fondo…');
+  const r = await musica.generarMusicaDeEscena({
+    escena: { n: musica.PISTA_UNICA, segundos: segundos || 30 },
+    tomas: z.tomas,
     pieza: idMaterial(),
-    tratamiento: pieza().tratamiento,
+    tratamiento: z.tratamiento,
   });
-  await refrescar(`${idMaterial()}/mus/${String(n).padStart(3, '0')}`);
-  pintarPorTipo();
-  avisar('previa', 'Música rehecha: escúchala en su fila. El montado se actualiza al preparar.', 'bueno');
+  // Queda anotada en la escena 0 —creada si el reparto no la tiene—: la pista
+  // rehecha vive bajo el nombre de este episodio, apuntara donde apuntara antes.
+  escenaCero(z).musica = r.musica;
+  await guardar();
+  await refrescar(r.clave);
+  pintarTodo();
+  avisar('previa', 'Pista rehecha: escúchala en su fila. El montado se actualiza al preparar.', 'bueno');
+}
+
+/** La escena 0, donde se anota la pista única; se crea si el reparto no la tiene. */
+function escenaCero(z) {
+  let e = z.escenas.find((x) => x.n === musica.PISTA_UNICA);
+  if (!e) {
+    e = { n: musica.PISTA_UNICA };
+    z.escenas.push(e);
+  }
+  return e;
 }
 
 /**

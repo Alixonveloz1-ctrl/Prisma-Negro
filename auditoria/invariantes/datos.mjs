@@ -2673,10 +2673,10 @@ export const invariantes = [
       // que no salieran iguales; con una sola pista, eso se fue.)
       const tr = { musica: { enIngles: { mood: 'cold dread', instruments: 'low cello', avoid: 'drums' } } };
       const unica = atmosferaDe({ n: 0 }, tomas, tr);
-      if (!/loop seamlessly/.test(unica)) {
-        fallos.push('La instrucción no pide una pista que se repita sin costura: se va a oír el corte cada dos minutos.');
+      if (!/on repeat under the whole film/.test(unica)) {
+        fallos.push('La instrucción no dice que la pista se repite bajo el episodio entero: el generador le pondría entrada y final.');
       }
-      if (!/no intro, no ending/.test(unica)) {
+      if (!/no intro, no build-up, no ending/.test(unica)) {
         fallos.push('La instrucción no prohíbe la entrada y el final: la pista va a ir a algún sitio y en bucle se nota.');
       }
 
@@ -4810,6 +4810,51 @@ export const invariantes = [
       conFuncion(ctx, 'planificarMusica', (escenas, tomas) =>
         escenas.map((e) => ({ ...e, segundos: 10, hecha: false })),
       ),
+  },
+
+  {
+    nombre: 'la-musica-es-del-canal-no-del-director',
+    dice: '«Se supone que es una música de fondo suave que tiene que ir con el estilo del video, y me está generando una música tecno que no tiene nada que ver.» Los instrumentos los escribía el director caso por caso, y para un caso de internet escribió electrónica: la ficha viajaba tal cual al generador. Pero el lecho no es del caso, es del canal, como el aspecto de las imágenes. El director elige el ánimo; los instrumentos, el tempo y lo prohibido son del canal, y un ánimo que traiga un estilo de fuera se descarta entero.',
+    comprobar(ctx) {
+      const { atmosferaDe, PALETA_DEL_CANAL } = ctx.fn;
+      const fallos = [];
+      const tomas = [{ i: 0, escena: 0, plano: {} }];
+      const director = {
+        musica: {
+          enIngles: { mood: 'energetic modern club vibe', instruments: 'techno synths, 808 drums, pulsing bass', avoid: 'acoustic instruments' },
+        },
+      };
+      const p = atmosferaDe({ n: 0 }, tomas, director);
+
+      // 1 · Los instrumentos son los del canal, diga lo que diga el director.
+      if (!p.includes(`Instruments: ${PALETA_DEL_CANAL.instruments}`)) {
+        fallos.push('Los instrumentos no son los del canal: los pone el director, caso por caso.');
+      }
+      for (const suyo of ['808', 'pulsing bass', 'club vibe', 'acoustic instruments']) {
+        if (p.includes(suyo)) fallos.push(`Lo que escribió el director («${suyo}») viaja tal cual al generador.`);
+      }
+      // 2 · Y lo prohibido, con todas las letras: sin ritmo, sin electrónica, lento.
+      for (const [qué, re] of [
+        ['sin ritmo', /No beat/],
+        ['sin electrónica', /techno/],
+        ['lenta', /slow/i],
+        ['acústica y orquestal', /acoustic and orchestral/],
+      ]) {
+        if (!re.test(p)) fallos.push(`La instrucción no pide la música ${qué}.`);
+      }
+      // 3 · Un ánimo del canal sí pasa: el ánimo es lo que el director decide.
+      const sobrio = atmosferaDe({ n: 0 }, tomas, { musica: { enIngles: { mood: 'cold dread, patient', instruments: 'x', avoid: '' } } });
+      if (!/Mood: cold dread, patient\./.test(sobrio)) {
+        fallos.push('Un ánimo sobrio del director no llega al generador: se pierde lo único que decide.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: la ficha del director, tal cual.
+    romper: (ctx) =>
+      conFuncion(ctx, 'atmosferaDe', (escena, tomas, tr) => {
+        const en = tr?.musica?.enIngles || {};
+        return `Instrumental documentary score. Mood: ${en.mood}. Instruments: ${en.instruments}. Avoid: ${en.avoid}.`;
+      }),
   },
 
   {

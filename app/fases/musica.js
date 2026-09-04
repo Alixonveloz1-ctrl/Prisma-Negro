@@ -1,15 +1,13 @@
-// Fase 8 — Música (§4.8 del plano).
+// Fase 8 — Música (§4.8 del plano, corregido por el uso).
 //
-//   «Una pieza por escena. Se genera con un modelo de música a partir de una
-//    descripción de atmósfera derivada de la ficha de escena.»
-//
-// El montaje la arma como un LECHO CONTINUO del largo de la pieza, escena por
-// escena, con fundidos largos entre piezas de 1,5 a 3,5 s (§5.4). Con fundidos
-// cortos el relevo se oye como un tajo. Eso vive en `comun/hoja.mjs`; aquí solo se
-// genera el material.
+// El plano decía «una pieza por escena». Se hizo así, y sonaba a ocho músicas
+// distintas en un video: ahora es UNA pista para el episodio entero, la más
+// larga que da el generador, y el montaje la repite debajo de la pieza
+// (`comun/hoja.mjs`). Aquí solo se genera el material y se dice cuál es.
 
 import { llamar } from '../api.js';
 import { claveMusica } from '../../comun/claves.mjs';
+import { musicaDeLaPista } from '../../comun/hoja.mjs';
 
 /**
  * ¿ESTA ESCENA TIENE SU MÚSICA? Sí también cuando está guardada con otro nombre.
@@ -71,23 +69,65 @@ export function planificar(escenas, tomas, config, { soloLasQueFaltan = true } =
  * inventa nada — se manda un lecho genérico bueno, todo en inglés, y ya está.
  * ─────────────────────────────────────────────────────────────────────────────
  */
+/**
+ * LA PALETA ES DEL CANAL, NO DEL CASO.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Se supone que es una música de fondo suave que tiene que ir con el estilo del
+ *  video, y me está generando una música tecno que no tiene nada que ver.»
+ *
+ * Los instrumentos los escribía el director caso por caso, y para un caso de
+ * internet escribió electrónica: la ficha viajaba tal cual al generador. Pero el
+ * lecho no es del caso, es del canal —como el aspecto de las imágenes—. El
+ * director elige el ÁNIMO; los instrumentos, el tempo y lo prohibido son fijos.
+ * Y si el ánimo trae un estilo de fuera —beat, synth, techno—, se descarta
+ * entero y va el del canal.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export const PALETA_DEL_CANAL = {
+  instruments: 'low sustained strings, a solo cello, sparse piano notes, faint ambient texture',
+  avoid: 'electronic dance music, techno, synthesizers, drum machines, drums, percussion, pulsing rhythm, lead melody, vocals',
+};
+/** Palabras que delatan un estilo que no es el del canal. */
+export const FUERA_DEL_CANAL =
+  /\b(techno|edm|electro\w*|synth\w*|beat\w*|drum\w*|club|dance|trap|hip.?hop|glitch\w*|808|bass|pulsing|pulse|groove|dubstep|house|trance|lo-?fi|upbeat|energetic|driving|rhythmic)\b/i;
+
 export function atmosferaDe(escena, tomas, tratamiento = null) {
   const en = tratamiento?.musica?.enIngles;
+  const mood = limpiar(en?.mood);
 
   return [
-    'Instrumental documentary score. No vocals, no lyrics, no spoken word.',
-    `Mood: ${limpiar(en?.mood) || 'restrained tension, unresolved, cold'}.`,
-    `Instruments: ${limpiar(en?.instruments) || 'low sustained strings, soft synth pad, subtle drone'}.`,
-    // Una sola pista para todo el episodio, en bucle: tiene que poder empezar
-    // donde acaba sin que se note, y no puede ir a ningún sitio.
-    'One continuous bed for the whole film, meant to loop seamlessly: same texture start to end, no intro, no ending, no section changes.',
+    'Cinematic true-crime documentary underscore, acoustic and orchestral. No vocals, no lyrics, no spoken word.',
+    `Mood: ${mood && !FUERA_DEL_CANAL.test(mood) ? mood : 'restrained tension, unresolved, cold, somber'}.`,
+    `Instruments: ${PALETA_DEL_CANAL.instruments}.`,
+    'Very slow tempo. No beat, no rhythm, no groove.',
+    // Una sola pista para todo el episodio, repetida: tiene que poder empezar
+    // donde acaba sin que se note, y no puede ir a ningún sitio. Sin la palabra
+    // «loop», que al generador le suena a electrónica.
+    'It plays on repeat under the whole film, so keep one slow, even texture from the first second to the last: no intro, no build-up, no ending, no section changes.',
     // La música va DEBAJO de la narración: si tiene melodía marcada, compite con la
     // voz y no hay compresión lateral que lo arregle (§5.6).
     'This is a bed under a voice-over: no lead melody, no prominent hook.',
-    'Flat, constant dynamics. No build-ups, no drops, no sudden silences.',
-    'No marked percussion, no drum beat.',
-    `Avoid: ${limpiar(en?.avoid) || 'percussion, orchestral swells, anything attention-grabbing'}.`,
+    'Flat, constant dynamics. No swells, no drops, no sudden silences.',
+    `Avoid: ${PALETA_DEL_CANAL.avoid}.`,
   ].join(' ');
+}
+
+/**
+ * La pista del episodio: su clave y si está hecha.
+ *
+ * La clave es la que usa la hoja de montaje —la que apunte la escena 0, o la de
+ * este episodio bajo el número 0—, para que la Previa, el inventario y el montaje
+ * hablen del MISMO archivo. Si la escena 0 tiene la música apagada, se devuelve
+ * igualmente la clave propia: así el inventario puede reencontrarla.
+ */
+export function pistaDe(escenas, pieza) {
+  const cero = (escenas || []).find((e) => e.n === PISTA_UNICA);
+  return {
+    n: PISTA_UNICA,
+    clave: musicaDeLaPista(escenas || [], pieza) || claveMusica(pieza, PISTA_UNICA),
+    hecha: tieneMusica(cero),
+  };
 }
 
 /**

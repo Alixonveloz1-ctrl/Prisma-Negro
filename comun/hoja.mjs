@@ -40,8 +40,13 @@ const q = (n, fps) => Math.round(n * fps) / fps;
  * suma acumulada de duraciones ya cuadradas, video y audio no pueden derivar el uno
  * del otro a lo largo de las 134 tomas.
  */
-/** La clave de la pista única: la declarada en la escena 0, o la de la pieza. */
-function musicaDeLaPista(escenas, pieza) {
+/**
+ * La clave de la pista única: la declarada en la escena 0, o la de la pieza.
+ *
+ * Exportada porque es LA definición de qué archivo es la música del episodio: la
+ * Previa y el inventario tienen que hablar del mismo archivo que el montaje.
+ */
+export function musicaDeLaPista(escenas, pieza) {
   const decl = escenas.find((x) => x.n === 0) || {};
   if (decl.musica === null) return null;
   const propia = typeof decl.musica === 'string' && decl.musica.includes('/') ? decl.musica : null;
