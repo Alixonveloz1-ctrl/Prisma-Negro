@@ -204,9 +204,23 @@ async function despachar(modo, c) {
             // estimación.
             marcas: c.marcas,
           });
-      // La narración se devuelve al navegador porque ahí se mide su duración real y
-      // se corta por los silencios (§4.5). Un bloque de 45 s en PCM a 24 kHz son
-      // ~2,1 MB: cabe en la respuesta. Bloques más largos no, y por eso son de 45 s.
+      // EL AUDIO VA AL ALMACÉN, NO EN LA RESPUESTA.
+      //
+      // Se devolvía en la respuesta, y la respuesta tiene un tope de 4,5 MB: un
+      // bloque de 45 s en PCM a 24 kHz son ~2,1 MB, así que los bloques eran de
+      // 45 s. Cada bloque es una actuación nueva del modelo de voz, y cuarenta y
+      // siete actuaciones en media hora se oyen. Guardado en el almacén y bajado
+      // por trozos —el camino que ya usan las imágenes— el bloque puede durar lo
+      // que aguante el modelo. Lo demás no cambia: el navegador lo baja, mide y
+      // corta por los silencios igual que antes (§4.5).
+      //
+      // Sin `guardarEn` sigue volviendo en la respuesta: es lo que usa la prueba
+      // de voz de los ajustes, que es corta.
+      if (c.guardarEn) {
+        const { datos, ...resto } = a;
+        const g = await almacen.subir(c.guardarEn, Buffer.from(datos, 'base64'), a.tipo || 'audio/wav');
+        return { ...resto, guardado: g, referencia: almacen.referenciaDe(c.guardarEn) };
+      }
       return a;
     }
 

@@ -158,15 +158,20 @@ Lo que se sustituye es un bloque, y se añaden cuatro.
 
 ```
 EL MATERIAL
-Trabajas sobre fichas construidas: el caso es una obra de ficción, declarada como
-tal en la cabecera del episodio. Eso cambia una cosa y solo una: el detalle
-concreto que la escena necesite lo pones tú. La hora exacta, la temperatura de
-esa mañana, la marca de las botas, la edad del capataz, el número estampado en
-la ficha de latón. Nada de eso tiene que estar en el material.
+Trabajas sobre fichas construidas: el caso es una obra de ficción. Eso se declara
+en la descripción del video, NUNCA en la narración: no escribas ningún aviso de
+que es ficción, ni al principio ni al final ni en medio. La historia transcurre
+como una historia normal, de principio a fin. Eso cambia una cosa y solo una:
+el detalle concreto que la escena necesite lo pones tú. La hora exacta, la
+temperatura de esa mañana, la marca de las botas, la edad del capataz, el número
+estampado en la ficha de latón. Nada de eso tiene que estar en el material.
 El límite es la coherencia: no puedes contradecir una ficha, y un nombre, una
 fecha o una edad se escriben una vez y no cambian en todo el episodio. Un
 detalle inventado que choca con otro anterior no es color, es lo único que
 destruye la pieza entera.
+Cada ficha viene con su ROL entre paréntesis —victima, sospechoso, testigo,
+objeto, lugar, fecha, pistafalsa, revelacion—: eso te dice qué papel juega en el
+caso y en qué bloque toca sacarla. La revelación no se adelanta.
 
 EL GANCHO — solo el primer acto, y son cuarenta segundos. Tiene dos partes.
 LA ACCIÓN. Empieza EN SEGUNDA PERSONA y dentro de ella, antes de contextualizar
@@ -180,6 +185,52 @@ hallazgo tan inesperado como real que en 2007 conmocionó a todo un condado».
 El día y el mes no; el sitio por su nombre tampoco. Eso viene después de la
 cabecera. Y cierras anunciando el título del episodio.
 
+DE LO QUE VA EN EL REMATE, NADA SE ADELANTA A LA ACCIÓN:
+  · EL NOMBRE de quien hace. Nada de «Eres Liam MacTiernan». Eres el que está
+    ahí, y punto. El nombre llega cuando ya importe quién es.
+  · EL SITIO por su nombre. Nada de «en Port MacLeod». Estás EN un rompeolas,
+    no en un rompeolas que se llama de alguna manera. Y tampoco va en el remate:
+    ahí caben «un condado», «una ciudad del norte», no el nombre.
+  · EL DÍA Y EL MES. Nunca, ni en la acción ni en el remate. «El 12 de octubre
+    de 2024» es ficha; «en 2024» es la escala que el remate necesita.
+El año, y solo el año, va en el remate. Antes de eso el gancho es una acción, no
+una ficha.
+
+EL MOTOR — sin esto el episodio es correcto y aburrido, y aburrido se apaga
+El caso es inventado, y esa es la ventaja: se puede construir para que nadie lo
+suelte. Se construye así, y no es opcional:
+- LA SOLUCIÓN FALSA. A mitad del episodio aparece una explicación que encaja
+  con TODO lo que se sabe: un sospechoso con acceso, motivo y un rastro; o una
+  familia que reconoce al muerto por la ropa, el oficio y un diente que falta.
+  El espectador la da por buena. Se le dedica tiempo, se la sigue en serio, y
+  entonces UNA prueba concreta la tumba —un ADN negativo, una fecha que no
+  cuadra, una coartada comprobada— y todo vuelve a cero. Esa caída es el
+  momento del episodio. Sin ella no hay episodio.
+- EL SECRETO HUMANO. Lo que resuelve el caso nunca es solo «quién»: es un
+  secreto de las personas que reordena todo lo anterior. Un informe médico que
+  dice que el marido era estéril y la pareja tenía un hijo. Un recibo de
+  préstamo con una firma. Un embarazo de tres semanas. Esa pieza cambia el
+  motivo, y con el motivo cambia el sentido de cada escena que ya se contó.
+- EL SALTO EN EL TIEMPO. El caso se archiva. Pasan años —diez, doce, treinta—.
+  Se cuenta qué fue de los que esperaban. Y vuelve por algo que antes no
+  existía: una técnica nueva, un papel que ahora se puede leer, alguien que
+  por fin habla. Lo que lo resuelve estaba guardado desde el principio.
+- LA VUELTA A INTERROGAR. Quien mintió al principio vuelve a la mesa, y esta
+  vez con las pruebas delante. Se cuenta cómo se le cambia la cara: primero
+  niega, luego calla, luego habla. Esa escena se escribe entera.
+- CADA CUATRO O CINCO MINUTOS, ALGO QUE SE DABA POR CIERTO DEJA DE SERLO. Si en
+  cinco minutos no ha cambiado nada de lo que el espectador creía, el guion
+  está parado aunque avance.
+- NO SE PUEDE ADIVINAR. El culpable verdadero no puede ser el primer nombre que
+  suena, ni el segundo. Hasta el último tercio, quien lo hizo tiene que
+  parecer secundario o descartado.
+- LA PRECISIÓN ES LA CREDIBILIDAD. Hora exacta del hallazgo y de la llamada
+  (9:17, 9:26, 11:05). Edad de cada persona la primera vez que aparece. Un
+  objeto concreto como columna del caso —un recibo, una ficha de latón, una
+  corbata, un buscapersonas— que aparece pronto, se guarda, y decide al final.
+  Y los números del cierre: cuántos años de condena, cuántos cumplió, a dónde
+  se fue.
+
 LOS TESTIMONIOS
 Cada dos o tres minutos entra alguien: quien encontró el cuerpo, el perito, el
 detective, un familiar. Habla en primera persona, en presente, con voz de
@@ -190,6 +241,7 @@ Se marcan así, en su propio párrafo, y la línea de arriba dice quién es:
     Habíamos revisado el árbol desde afuera. Tenía humedad y la corteza
     levantada, pero eso es normal en árboles viejos.
 El narrador lo presenta antes por su nombre y su cargo. No lo repitas después.
+Esa línea que empieza por «> » NO SE NARRA: es la ficha del que habla.
 
 EL CIERRE
 Resuelve el caso, devuelve el nombre, cierra con la familia. Y deja UNA cosa sin

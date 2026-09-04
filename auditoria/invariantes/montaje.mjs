@@ -349,16 +349,23 @@ export const invariantes = [
 
   {
     nombre: 'los-fundidos-de-musica-son-largos',
-    dice: 'Entre piezas de música, fundidos de 1,5 a 3,5 s. Con fundidos cortos el relevo se oye como un tajo (§5.4).',
+    dice: 'Entre piezas de música, fundidos de 1,5 a 3,5 s. Con fundidos cortos el relevo se oye como un tajo (§5.4). Con la pista única ya no hay relevos en la hoja normal, pero el camino de una pieza por escena sigue existiendo (`musicaPorEscena`), y el fundido que usaría es el ajuste de la hoja.',
     comprobar(ctx) {
       const fallos = [];
+      const d = ctx.hoja.ajustes?.fundidoMusica;
+      if (!(d >= 1.5 && d <= 3.5)) fallos.push(`El fundido de música de la hoja es de ${d} s: fuera del rango 1,5–3,5.`);
+      // Y el guion tiene que usar ESE ajuste en el relevo, no un número suelto.
+      const src = fuente(ctx, 'comun/hoja.mjs');
+      if (!/const d = a\.fundidoMusica;/.test(src) || !/acrossfade=d=\$\{d\}/.test(src)) {
+        fallos.push('El relevo de música no usa el fundido de la hoja: llevaría un número suelto.');
+      }
       for (const m of ctx.guion.matchAll(/acrossfade=d=([\d.]+)/g)) {
-        const d = Number(m[1]);
-        if (d < 1.5 || d > 3.5) fallos.push(`Fundido de música de ${d} s: fuera del rango 1,5–3,5.`);
+        const x = Number(m[1]);
+        if (x < 1.5 || x > 3.5) fallos.push(`Fundido de música de ${x} s: fuera del rango 1,5–3,5.`);
       }
       return fallos;
     },
-    romper: (ctx) => ({ ...ctx, guion: ctx.guion.replace(/acrossfade=d=[\d.]+/g, 'acrossfade=d=0.3') }),
+    romper: (ctx) => ({ ...ctx, hoja: { ...ctx.hoja, ajustes: { ...ctx.hoja.ajustes, fundidoMusica: 0.3 } } }),
   },
 
   {
@@ -1015,6 +1022,49 @@ export const invariantes = [
       conFuncion(ctx, 'guionFfmpeg', (hoja) =>
         ctx.fn.guionFfmpeg({ ...hoja, ajustes: { ...hoja.ajustes, volumenMusica: 0.55 } }),
       ),
+  },
+
+  {
+    nombre: 'el-recorrido-de-camara-se-ve',
+    dice: '«El movimiento de las imágenes que son sin video casi ni se nota. Parece que fueran imágenes estáticas.» Un 18 % de zoom en trece segundos es un 1,4 % por segundo: en un teléfono, una foto quieta. Y los barridos iban a zoom fijo, deslizando sin acercarse. Ahora el zoom recorre un 32 % y los barridos llevan un acercamiento debajo: dos movimientos a la vez es lo que hace que una foto respire. Sigue siendo lineal —sin tirones— y sigue ampliando antes (§4.7).',
+    comprobar(ctx) {
+      const fallos = [];
+      // El guion está entrecomillado para el shell: dentro de la cadena, cada
+      // comilla simple va como '\'' (cerrar, comilla escapada, abrir). Se vuelve
+      // a la comilla sola para leer las expresiones tal como las ve ffmpeg.
+      const g = ctx.guion.replace(/'\\''/g, "'");
+      const zooms = [...g.matchAll(/zoompan=z='1\+(0\.\d+)\*on\//g)].map((m) => Number(m[1]));
+      const alejamientos = [...g.matchAll(/zoompan=z='(\d\.\d+)-(0\.\d+)\*on\//g)].map((m) => Number(m[2]));
+      const barridos = [...g.matchAll(/zoompan=z='(\d\.\d+)\+(0\.\d+)\*on\/\d+':x='\(iw-iw\/zoom\)/g)];
+      const barridosQuietos = [...g.matchAll(/zoompan=z='\d(\.\d+)?':x='\(iw-iw\/zoom\)/g)];
+      // Y en la hoja tiene que haber barridos, o la parte de los barridos no
+      // vigilaría nada: el proyecto de prueba lleva paneos a propósito.
+      const conBarrido = (ctx.hoja.tomas || []).filter(
+        (t) => !t.movimiento && ['izquierda', 'derecha', 'arriba', 'abajo'].includes(t.camara),
+      ).length;
+
+      if (!zooms.length) fallos.push('No encuentro ningún acercamiento en el guion: la comprobación estaría mirando al vacío.');
+      for (const r of [...zooms, ...alejamientos]) {
+        if (r < 0.3) fallos.push(`El zoom recorre un ${Math.round(r * 100)} %: en un teléfono es una foto quieta.`);
+        if (r > 0.45) fallos.push(`El zoom recorre un ${Math.round(r * 100)} %: se nota como un tirón.`);
+      }
+      if (barridosQuietos.length) {
+        fallos.push(`${barridosQuietos.length} barridos van a zoom fijo: se deslizan sin acercarse, que es lo que más se parece a no moverse.`);
+      }
+      if (!conBarrido) fallos.push('El proyecto de prueba no tiene ningún barrido: la parte de los barridos estaría mirando al vacío.');
+      if (conBarrido && barridos.length !== conBarrido) {
+        fallos.push(`${conBarrido} tomas piden barrido y ${barridos.length} llevan barrido con acercamiento.`);
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: 18 % de zoom, y los barridos a zoom fijo.
+    romper: (ctx) => ({
+      ...ctx,
+      guion: ctx.guion
+        .replace(/1\+0\.3200\*on\//g, '1+0.1800*on/')
+        .replace(/1\.32-0\.3200\*on\//g, '1.18-0.1800*on/')
+        .replace(/1\.18\+0\.1400\*on\/\d+/g, '1.18'),
+    }),
   },
 
   {

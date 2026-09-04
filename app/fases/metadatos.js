@@ -193,10 +193,14 @@ export async function generarMetadatos({ tema, guion, tomas, escenas, fichas = [
     {
       sistema:
         'Escribes los metadatos de publicación de un documental para YouTube y ' +
-        'Facebook. Títulos concretos y honestos: nada de cebo, nada de "lo que nadie ' +
-        'te contó", nada de MAYÚSCULAS de más. La descripción empieza por dos frases ' +
-        'que dicen de qué va, sin rodeos. NO escribas tú las marcas de tiempo: se ' +
-        'añaden después con los tiempos reales.' +
+        'Facebook. EL TÍTULO ES UNA IMAGEN Y UN TIEMPO: un objeto o un lugar concreto ' +
+        'más cuánto duró — «La novia que estuvo 30 años en una pared», «El hombre del ' +
+        'árbol», «100 años en un pozo», «Apareció en el tanque de la comisaría». Nada ' +
+        'de cebo, nada de "lo que nadie te contó", nada de MAYÚSCULAS. La descripción ' +
+        'son tres o cuatro párrafos: empieza por dos frases que dicen de qué va, sin ' +
+        'rodeos; plantea las dos o tres preguntas del caso; y NO cuenta el final ni ' +
+        'el secreto central. NO escribas tú las marcas de tiempo: se añaden después ' +
+        'con los tiempos reales.' +
         // Sin esto, la descripción de un episodio construido dice «un caso real
         // que conmocionó a la comarca»: el modelo lee un guion que suena a
         // documental y escribe lo que ve. La declaración de ficción va aparte y
@@ -295,28 +299,6 @@ export const DECLARACION_DE_FICCION =
   'cualquier parecido con hechos o personas reales es casualidad. Las imágenes ' +
   'están generadas y las personas que se ven son intérpretes de una dramatización.';
 
-/**
- * LA DECLARACIÓN QUE SE NARRA, y va antes que nada.
- *
- * ─────────────────────────────────────────────────────────────────────────────
- * La de arriba va en la descripción, y eso es lo que se creía suficiente. El canal
- * de referencia hace algo más, y es lo PRIMERO que se oye en el vídeo, antes
- * incluso de «Imagina esta escena»:
- *
- *   «Todo el contenido de este episodio fue producido y reconstruido por
- *    Crímenes Imperfectos, Expedientes X.»
- *
- * Una descripción se despliega; una línea narrada la oye todo el mundo, incluido
- * quien llega por una recomendación y no lee nada. Es la protección más barata que
- * existe y dura nueve segundos.
- *
- * Va compuesta aquí, en el código, por el mismo motivo que la otra: una frase
- * generada puede salir distinta, más suave, o no salir.
- * ─────────────────────────────────────────────────────────────────────────────
- */
-export const DECLARACION_NARRADA =
-  'Todo el contenido de este episodio fue producido y reconstruido por Prisma ' +
-  'Negro. El caso, las personas y los lugares son obra de ficción.';
 
 /**
  * ¿Es ficción? SIEMPRE, y la función se queda para que la afirmación tenga un

@@ -28,8 +28,11 @@ import { deBase64 } from './imagenes.js';
  * porque sin ella revisar dos veces un documental de ochenta tomas son ciento
  * sesenta descargas.
  */
-export async function material(clave, tipo, { senal } = {}) {
-  const guardado = await local.leerMaterial(clave);
+export async function material(clave, tipo, { senal, sinCopia = false } = {}) {
+  // `sinCopia`: el audio de un bloque de narración se REHACE bajo la misma clave,
+  // y la copia local devolvería el de antes. Lo que se rehace no se lee de la
+  // copia ni se guarda en ella.
+  const guardado = sinCopia ? null : await local.leerMaterial(clave);
   if (guardado) return guardado;
 
   const partes = [];
@@ -45,7 +48,7 @@ export async function material(clave, tipo, { senal } = {}) {
   } while (total && desde < total);
 
   const blob = new Blob(partes, { type: tipo });
-  await local.guardarMaterial(clave, blob);
+  if (!sinCopia) await local.guardarMaterial(clave, blob);
   return blob;
 }
 

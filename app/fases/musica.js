@@ -23,38 +23,33 @@ import { claveMusica } from '../../comun/claves.mjs';
  */
 export const tieneMusica = (e) => typeof e?.musica === 'string' && e.musica.length > 0;
 
+/**
+ * UNA SOLA PISTA PARA TODO EL EPISODIO.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Es ilógico tener ocho pistas diferentes en un solo video, porque ni siquiera
+ *  se parecen: unas bien fuertes, otras bajitas. Una pista es más que
+ *  suficiente: hacerla lo más larga posible, lo más larga que permita el
+ *  generador, y repetirla de fondo.»
+ *
+ * Había una pieza por escena, con un arco por posición. Ocho generaciones
+ * distintas son ocho atmósferas distintas, y ocho relevos que se notan por mucho
+ * fundido que lleven. Un lecho no es una banda sonora: es un fondo que no se
+ * mira. Una pista, la más larga que da el generador, en bucle.
+ *
+ * La escena sigue existiendo para todo lo demás —los capítulos, el guion, la
+ * dirección—; solo la música deja de ir por escena. Se pide bajo el número 0.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export const PISTA_UNICA = 0;
+
 export function planificar(escenas, tomas, config, { soloLasQueFaltan = true } = {}) {
   if (!config?.musica?.activa) return [];
-  return escenas
-    .map((e) => {
-      const suyas = tomas.filter((t) => t.escena === e.n);
-      return {
-        ...e,
-        segundos: suyas.reduce((s, t) => s + (t.segundos || 0), 0),
-        estado: e.musica,
-        hecha: tieneMusica(e),
-      };
-    })
-    .filter((e) => e.segundos > 0)
-    .filter((e) => (soloLasQueFaltan ? !e.hecha : true));
-}
-
-/**
- * Dónde cae esta escena dentro de la pieza, dicho en inglés.
- *
- * Sin esto todas las escenas pedían exactamente lo mismo y el documental sonaba
- * plano de principio a fin: el mismo lecho debajo de la apertura, del giro y del
- * cierre. La posición no la inventa nadie —sale de contar escenas—, así que no
- * cuesta una llamada y no se contamina de español.
- */
-function arcoDe(escena, tomas) {
-  const total = Math.max(1, ...tomas.map((t) => Number(t.escena) || 0));
-  const donde = (Number(escena.n) || 1) / total;
-
-  if (donde <= 0.2) return 'Opening section: sparse and almost empty, one sustained note, a lot of air.';
-  if (donde <= 0.55) return 'Middle section: steady and unchanged, patient, no development.';
-  if (donde <= 0.85) return 'Late section: a little denser and lower, tension held but never released.';
-  return 'Closing section: thinning out, receding, ending unresolved.';
+  const total = tomas.reduce((s, t) => s + (t.segundos || 0), 0);
+  if (!(total > 0)) return [];
+  const e = escenas.find((x) => x.n === PISTA_UNICA) || { n: PISTA_UNICA };
+  const unica = { ...e, n: PISTA_UNICA, segundos: total, estado: e.musica, hecha: tieneMusica(e) };
+  return soloLasQueFaltan && unica.hecha ? [] : [unica];
 }
 
 /**
@@ -83,7 +78,9 @@ export function atmosferaDe(escena, tomas, tratamiento = null) {
     'Instrumental documentary score. No vocals, no lyrics, no spoken word.',
     `Mood: ${limpiar(en?.mood) || 'restrained tension, unresolved, cold'}.`,
     `Instruments: ${limpiar(en?.instruments) || 'low sustained strings, soft synth pad, subtle drone'}.`,
-    arcoDe(escena, tomas),
+    // Una sola pista para todo el episodio, en bucle: tiene que poder empezar
+    // donde acaba sin que se note, y no puede ir a ningún sitio.
+    'One continuous bed for the whole film, meant to loop seamlessly: same texture start to end, no intro, no ending, no section changes.',
     // La música va DEBAJO de la narración: si tiene melodía marcada, compite con la
     // voz y no hay compresión lateral que lo arregle (§5.6).
     'This is a bed under a voice-over: no lead melody, no prominent hook.',
@@ -107,6 +104,9 @@ export function limpiar(texto) {
   return s.replace(/\s+/g, ' ').slice(0, 200);
 }
 
+/** El tope del generador de música. Más de esto lo recorta él. */
+export const DURACION_MAXIMA = 120;
+
 export async function generarMusicaDeEscena({ escena, tomas, pieza, tratamiento = null, senal, alEsperar }) {
   const clave = claveMusica(pieza, escena.n);
 
@@ -114,11 +114,10 @@ export async function generarMusicaDeEscena({ escena, tomas, pieza, tratamiento 
     'musica',
     {
       instruccion: atmosferaDe(escena, tomas, tratamiento),
-      // Se genera algo más corta que la escena a propósito: el montaje la repite si
-      // hace falta (`-stream_loop`). Un lecho sin melodía protagonista se repite sin
-      // que se note, y pagar dos minutos de música para una escena de dos minutos es
-      // tirar dinero.
-      segundos: Math.min(90, Math.max(20, Math.round(escena.segundos * 0.5))),
+      // LO MÁS LARGA QUE DA EL GENERADOR, que son dos minutos: cuanto más larga,
+      // menos vueltas da en media hora y menos se nota la costura. El montaje la
+      // repite (`-stream_loop`).
+      segundos: DURACION_MAXIMA,
       guardarEn: clave,
     },
     { senal, alEsperar },

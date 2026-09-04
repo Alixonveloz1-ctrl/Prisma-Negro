@@ -21,7 +21,6 @@ import { comoInstruccion } from './director.js';
 import { comoLista } from './investigacion.js';
 // La declaración se compone en el código, no se le pide al modelo: una frase
 // generada puede salir distinta, más suave, o no salir.
-import { DECLARACION_NARRADA } from './metadatos.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // «No es un noticiero, es un documental, pero tiene que ser entretenido.»
@@ -113,11 +112,13 @@ CÓMO NO SE CUENTA — y esto es lo que lo convierte en noticiero
 
 const MATERIAL_CONSTRUIDO = `
 EL MATERIAL
-Trabajas sobre fichas construidas: el caso es una obra de ficción, declarada como
-tal en la cabecera del episodio. Eso cambia una cosa y solo una: el detalle
-concreto que la escena necesite lo pones tú. La hora exacta, la temperatura de
-esa mañana, la marca de las botas, la edad del capataz, el número estampado en
-la ficha de latón. Nada de eso tiene que estar en el material.
+Trabajas sobre fichas construidas: el caso es una obra de ficción. Eso se declara
+en la descripción del video, NUNCA en la narración: no escribas ningún aviso de
+que es ficción, ni al principio ni al final ni en medio. La historia transcurre
+como una historia normal, de principio a fin. Eso cambia una cosa y solo una:
+el detalle concreto que la escena necesite lo pones tú. La hora exacta, la
+temperatura de esa mañana, la marca de las botas, la edad del capataz, el número
+estampado en la ficha de latón. Nada de eso tiene que estar en el material.
 El límite es la coherencia: no puedes contradecir una ficha, y un nombre, una
 fecha o una edad se escriben una vez y no cambian en todo el episodio. Un
 detalle inventado que choca con otro anterior no es color, es lo único que
@@ -148,6 +149,41 @@ DE LO QUE VA EN EL REMATE, NADA SE ADELANTA A LA ACCIÓN:
     de 2024» es ficha; «en 2024» es la escala que el remate necesita.
 El año, y solo el año, va en el remate. Antes de eso el gancho es una acción, no
 una ficha.
+
+EL MOTOR — sin esto el episodio es correcto y aburrido, y aburrido se apaga
+El caso es inventado, y esa es la ventaja: se puede construir para que nadie lo
+suelte. Se construye así, y no es opcional:
+- LA SOLUCIÓN FALSA. A mitad del episodio aparece una explicación que encaja
+  con TODO lo que se sabe: un sospechoso con acceso, motivo y un rastro; o una
+  familia que reconoce al muerto por la ropa, el oficio y un diente que falta.
+  El espectador la da por buena. Se le dedica tiempo, se la sigue en serio, y
+  entonces UNA prueba concreta la tumba —un ADN negativo, una fecha que no
+  cuadra, una coartada comprobada— y todo vuelve a cero. Esa caída es el
+  momento del episodio. Sin ella no hay episodio.
+- EL SECRETO HUMANO. Lo que resuelve el caso nunca es solo «quién»: es un
+  secreto de las personas que reordena todo lo anterior. Un informe médico que
+  dice que el marido era estéril y la pareja tenía un hijo. Un recibo de
+  préstamo con una firma. Un embarazo de tres semanas. Esa pieza cambia el
+  motivo, y con el motivo cambia el sentido de cada escena que ya se contó.
+- EL SALTO EN EL TIEMPO. El caso se archiva. Pasan años —diez, doce, treinta—.
+  Se cuenta qué fue de los que esperaban. Y vuelve por algo que antes no
+  existía: una técnica nueva, un papel que ahora se puede leer, alguien que
+  por fin habla. Lo que lo resuelve estaba guardado desde el principio.
+- LA VUELTA A INTERROGAR. Quien mintió al principio vuelve a la mesa, y esta
+  vez con las pruebas delante. Se cuenta cómo se le cambia la cara: primero
+  niega, luego calla, luego habla. Esa escena se escribe entera.
+- CADA CUATRO O CINCO MINUTOS, ALGO QUE SE DABA POR CIERTO DEJA DE SERLO. Si en
+  cinco minutos no ha cambiado nada de lo que el espectador creía, el guion
+  está parado aunque avance.
+- NO SE PUEDE ADIVINAR. El culpable verdadero no puede ser el primer nombre que
+  suena, ni el segundo. Hasta el último tercio, quien lo hizo tiene que
+  parecer secundario o descartado.
+- LA PRECISIÓN ES LA CREDIBILIDAD. Hora exacta del hallazgo y de la llamada
+  (9:17, 9:26, 11:05). Edad de cada persona la primera vez que aparece. Un
+  objeto concreto como columna del caso —un recibo, una ficha de latón, una
+  corbata, un buscapersonas— que aparece pronto, se guarda, y decide al final.
+  Y los números del cierre: cuántos años de condena, cuántos cumplió, a dónde
+  se fue.
 
 LOS TESTIMONIOS
 Cada dos o tres minutos entra alguien: quien encontró el cuerpo, el perito, el
@@ -360,7 +396,11 @@ export async function escribirGuion({
     alAvanzar?.(n + 1, actos.length);
   }
 
-  const guion = conDeclaracionNarrada(partes.join('\n\n'));
+  // SIN AVISO NARRADO, ni delante ni detrás. «El video tiene que transcurrir como
+  // una historia normal, de principio a fin.» La declaración de ficción va en la
+  // descripción del video, que es donde la ve quien la busca; narrada, era
+  // nueve segundos de aviso legal pegados a la historia.
+  const guion = partes.join('\n\n');
   const salieron = contarPalabras(guion);
 
   // Un guion que no llega ni de lejos a lo pedido no es «un guion corto»: es un
@@ -377,42 +417,6 @@ export async function escribirGuion({
 }
 
 export const contarPalabras = (t) => (String(t).trim().match(/\S+/g) || []).length;
-
-/**
- * LA DECLARACIÓN, NARRADA, AL FINAL.
- *
- * ─────────────────────────────────────────────────────────────────────────────
- * Estuvo al principio —es donde la pone el canal de referencia, antes incluso de
- * «Imagina esta escena»— y duró un episodio:
- *
- *   «¿Por qué está iniciando con ese mensaje diciendo que esto es ficción? Eso no
- *    es necesario decirlo. Ya eso lo especificaremos en el canal, en la página, o
- *    un mensaje, más bien, al final del vídeo, no al principio.»
- *
- * Y tiene razón en lo que cuesta: nueve segundos de aviso legal delante del
- * gancho es lo único que hay entre el espectador y la acción, y el gancho es
- * donde se gana o se pierde. Al final protege igual —se dice, queda dicho— y no
- * se paga con la apertura.
- *
- * VA EN SU PROPIA ESCENA. Pegada al último párrafo se metería dentro de la toma
- * de la duda abierta, que es la frase que existe para que se discuta en los
- * comentarios: un aviso legal detrás, en la misma imagen, se la come. Con su
- * «## » propio es una placa de cierre, que es lo que es.
- *
- * Se compone aquí y no se le pide al modelo, por lo mismo que la de la
- * descripción: una frase generada puede salir distinta, más suave, o no salir.
- *
- * Idempotente: un guion que ya la trae —porque se reescribió un acto y el resto
- * venía guardado— no la recibe dos veces.
- * ─────────────────────────────────────────────────────────────────────────────
- */
-export const ESCENA_DEL_AVISO = 'Aviso';
-
-export function conDeclaracionNarrada(guion) {
-  const t = String(guion || '');
-  if (!t.trim() || t.includes(DECLARACION_NARRADA)) return t;
-  return `${t.replace(/\s+$/, '')}\n\n## ${ESCENA_DEL_AVISO}\n\n${DECLARACION_NARRADA}\n`;
-}
 
 /**
  * QUÉ ADELANTA EL GANCHO QUE NO DEBERÍA.

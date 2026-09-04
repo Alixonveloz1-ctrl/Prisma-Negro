@@ -68,8 +68,25 @@ export const PREDETERMINADA = {
   },
 
   narracion: {
-    // §4.5: el episodio se reparte en bloques de unos 45 segundos.
-    segundosPorBloque: 45,
+    // EL BLOQUE MÁS LARGO QUE SE PUEDA, y no cuarenta y cinco segundos.
+    //
+    // ─────────────────────────────────────────────────────────────────────
+    // «Cada vez que termina un bloque cambia el tono de la voz, y no hay nada
+    //  que podamos hacer para que lo mejore. Necesitamos aprovechar el máximo
+    //  de texto que nos permita cada generación para que el cambio de tono sea
+    //  lo mínimo posible.»
+    //
+    // Los 45 s no los pedía el modelo de voz: los pedía la RESPUESTA de la
+    // función, que tiene un tope de 4,5 MB y por la que volvía el audio entero
+    // en base64. Ahora el audio del bloque se guarda en el almacén y el
+    // navegador lo baja por trozos —el camino que ya usan las imágenes—, así
+    // que el bloque puede ser tan largo como aguante el modelo. Cuarenta y
+    // siete cambios de tono en treinta minutos pasan a ser unos diez.
+    //
+    // Lo que sigue limitando es el texto por llamada del servicio de voz
+    // (`topeBytesPorLlamada`): tres minutos de narración son unos 2.600 bytes.
+    // ─────────────────────────────────────────────────────────────────────
+    segundosPorBloque: 180,
     // §6: la voz limita el texto por llamada. Presupuesto en BYTES: una tilde son
     // dos, y en español eso no es un detalle.
     topeBytesPorLlamada: 4000,
@@ -359,7 +376,7 @@ export function normalizar(cruda) {
   );
   c.segmentacion.caracteresPorSegundo = numero(c.segmentacion.caracteresPorSegundo, 8, 25, 14.5);
 
-  c.narracion.segundosPorBloque = numero(c.narracion.segundosPorBloque, 15, 90, 45);
+  c.narracion.segundosPorBloque = numero(c.narracion.segundosPorBloque, 15, 240, 180);
   // El tope no se sube nunca por encima de lo que aguanta el servicio, aunque un
   // proyecto viejo lo traiga más alto.
   c.narracion.topeBytesPorLlamada = entero(c.narracion.topeBytesPorLlamada, 500, 4000, 4000);

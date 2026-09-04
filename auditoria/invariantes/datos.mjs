@@ -2667,13 +2667,17 @@ export const invariantes = [
         }
       }
 
-      // Y no puede salir lo mismo para todas las escenas: se pagaría una pieza por
-      // escena para que todas sonaran idénticas, y el documental sale plano.
+      // Es UNA pista para el episodio entero, en bucle, así que la instrucción
+      // tiene que pedir que se pueda repetir sin costura y sin ir a ningún sitio.
+      // (Antes había un arco por escena —apertura, medio, cierre— y se comprobaba
+      // que no salieran iguales; con una sola pista, eso se fue.)
       const tr = { musica: { enIngles: { mood: 'cold dread', instruments: 'low cello', avoid: 'drums' } } };
-      const arranque = atmosferaDe({ n: 1 }, tomas, tr);
-      const cierre = atmosferaDe({ n: 3 }, tomas, tr);
-      if (arranque === cierre) {
-        fallos.push('La apertura y el cierre piden exactamente lo mismo: se paga dos veces la misma música.');
+      const unica = atmosferaDe({ n: 0 }, tomas, tr);
+      if (!/loop seamlessly/.test(unica)) {
+        fallos.push('La instrucción no pide una pista que se repita sin costura: se va a oír el corte cada dos minutos.');
+      }
+      if (!/no intro, no ending/.test(unica)) {
+        fallos.push('La instrucción no prohíbe la entrada y el final: la pista va a ir a algún sitio y en bucle se nota.');
       }
 
       // El director tiene que estar OBLIGADO a escribirla en inglés; si el esquema
@@ -3045,7 +3049,7 @@ export const invariantes = [
       // 2 · LA LICENCIA, CON SU LÍMITE.
       for (const [qué, re] of [
         ['que el caso es ficción declarada', /ficci[oó]n, declarada|obra de ficci[oó]n/i],
-        ['que el detalle concreto lo pone el guion', /el detalle\s+concreto que la escena necesite lo pones t[uú]/i],
+        ['que el detalle concreto lo pone el guion', /el\s+detalle\s+concreto que la escena necesite lo pones t[uú]/i],
         ['que el límite es la coherencia', /El l[ií]mite es la coherencia/],
         ['que un nombre o una fecha no cambian', /se escriben una vez y no cambian/],
         ['el gancho en segunda persona del primer acto', /EL GANCHO/],
@@ -4738,54 +4742,108 @@ export const invariantes = [
   },
 
   {
-    nombre: 'la-declaracion-de-ficcion-se-narra-y-va-la-primera',
-    dice: 'La declaración de ficción vivía SOLO en la descripción del vídeo, que es donde la ve quien la busca; narrada la oye todo el mundo. Estuvo al principio —es donde la pone el canal de referencia— y duró un episodio: «¿por qué está iniciando con ese mensaje diciendo que esto es ficción? Un mensaje, más bien, al final del vídeo, no al principio». Nueve segundos de aviso legal delante del gancho es lo único que hay entre el espectador y la acción, y el gancho es donde se gana o se pierde. Al final protege igual y no se paga con la apertura. Va en su propia escena: pegada al último párrafo se metería en la toma de la duda abierta, que existe para que se discuta en los comentarios.',
+    nombre: 'los-cortes-de-voz-llevan-rampa',
+    dice: '«Cada vez que termina un audio de voz y comienza el siguiente, se escucha el corte, se escucha un golpe raro.» Un corte cae en un silencio, pero un silencio de voz no es cero: es ruido de sala, y pegar dos ruidos de sala distintos a bocajarro da un chasquido. Diez milisegundos de rampa a cada lado del corte lo quitan y no se oyen.',
     comprobar(ctx) {
-      const { conDeclaracionNarrada, DECLARACION_NARRADA, segmentar } = ctx.fn;
+      const { suavizarBordes } = ctx.fn;
       const fallos = [];
-      const gui = fuente(ctx, 'app/fases/guion.js');
-
-      if (!/ficci[oó]n/i.test(DECLARACION_NARRADA)) {
-        fallos.push(`La declaración narrada no dice que es ficción: «${DECLARACION_NARRADA}»`);
+      const f = 24000;
+      const trozo = new Int16Array(f).fill(10000); // un segundo a nivel constante
+      const con = suavizarBordes(trozo, f, 1);
+      const rampa = Math.round(f * 0.01);
+      if (con.length !== trozo.length) fallos.push('La rampa cambia la duración del trozo.');
+      if (Math.abs(con[0]) > 100 || Math.abs(con[con.length - 1]) > 100) {
+        fallos.push(`El trozo empieza en ${con[0]} y acaba en ${con[con.length - 1]}: sin rampa, eso es un chasquido.`);
       }
-
-      // 1 · Se narra, va la ÚLTIMA, y no delante del gancho.
-      const guion = '## Gancho\nImagina esta escena. Te han contratado para talar robles.\n\n## El cierre\nEl caso quedó cerrado. ¿Quién lo metió ahí dentro?';
-      const con = conDeclaracionNarrada(guion);
-      if (!con.includes(DECLARACION_NARRADA)) {
-        fallos.push('El guion sale sin la declaración narrada: solo la vería quien despliegue la descripción.');
+      if (con[rampa] !== 10000 || con[con.length - 1 - rampa] !== 10000) {
+        fallos.push('La rampa se come más de diez milisegundos: se oiría como un mordisco en la voz.');
       }
-      if (con.indexOf(DECLARACION_NARRADA) < con.indexOf('Imagina esta escena')) {
-        fallos.push('La declaración va delante del gancho: nueve segundos de aviso legal antes de la acción.');
+      if (con[Math.floor(rampa / 2)] < 4000 || con[Math.floor(rampa / 2)] > 6000) {
+        fallos.push('La rampa no es lineal.');
       }
-      const r = segmentar(con);
-      const suya = r.tomas.find((t) => t.texto.includes(DECLARACION_NARRADA));
-      if (!suya) fallos.push('La declaración no cae en ninguna toma: no se narraría.');
-      else if (suya.i !== r.tomas.length - 1) {
-        fallos.push(`La declaración no es la última toma, es la ${suya.i} de ${r.tomas.length}.`);
-      }
-      // Y SOLA. Pegada a la duda abierta se la come: van en la misma imagen.
-      else if (/¿Qui[eé]n lo metió/.test(suya.texto)) {
-        fallos.push('La declaración comparte toma con la duda abierta: el aviso legal se come el cierre.');
-      }
-
-      // 2 · Y no se pone dos veces cuando se reescribe un acto y el resto venía
-      // guardado.
-      if (conDeclaracionNarrada(con) !== con) {
-        fallos.push('Volver a pasar el guion añade la declaración otra vez.');
-      }
-
-      // 3 · La compone el código, no el modelo.
-      if (!/const guion = conDeclaracionNarrada\(/.test(gui)) {
-        fallos.push('El guion terminado no pasa por conDeclaracionNarrada: la declaración depende de que alguien se acuerde.');
-      }
-      if (new RegExp(DECLARACION_NARRADA.slice(0, 40)).test(gui.replace(/export const[\s\S]*?;\n/, ''))) {
-        fallos.push('La declaración se le pide al modelo: puede salir distinta, más suave, o no salir.');
+      if (trozo[0] !== 10000) fallos.push('La rampa modifica el bloque original, que comparte muestras con la toma vecina.');
+      // Y el reparto la usa.
+      if (!/suavizarBordes\(muestras\.subarray\(t\.inicio, t\.fin\)/.test(fuente(ctx, 'comun/audio.mjs'))) {
+        fallos.push('El reparto del bloque no pasa los trozos por la rampa.');
       }
       return fallos;
     },
-    // Se rompe como estaba: la declaración solo en la descripción.
-    romper: (ctx) => conFuncion(ctx, 'conDeclaracionNarrada', (g) => g),
+    // Se rompe como estaba: el trozo se copia tal cual.
+    romper: (ctx) => conFuncion(ctx, 'suavizarBordes', (t) => new Int16Array(t)),
+  },
+
+  {
+    nombre: 'una-sola-pista-de-musica-para-todo-el-episodio',
+    dice: '«Es ilógico tener ocho pistas diferentes en un solo video, porque ni siquiera se parecen: unas bien fuertes, otras bajitas. Una pista es más que suficiente: lo más larga que permita el generador, y repetirla de fondo.» Había una pieza por escena con un arco por posición: ocho generaciones, ocho atmósferas, ocho relevos. Ahora se pide UNA, de la duración máxima del generador, bajo el número 0, y la hoja la pone en bucle debajo de la pieza entera.',
+    comprobar(ctx) {
+      const { planificarMusica, DURACION_MAXIMA_MUSICA } = ctx.fn;
+      const fallos = [];
+      const tomas = [0, 1, 2, 3, 4, 5].map((i) => ({ i, escena: Math.floor(i / 2), segundos: 10 }));
+      const escenas = [{ n: 0 }, { n: 1 }, { n: 2 }];
+      const cfg = { musica: { activa: true } };
+
+      const todas = planificarMusica(escenas, tomas, cfg, { soloLasQueFaltan: false });
+      if (todas.length !== 1) fallos.push(`Se planifican ${todas.length} pistas para tres escenas: tiene que ser una.`);
+      if (todas[0]?.n !== 0) fallos.push(`La pista única no es la 0: es la ${todas[0]?.n}.`);
+      if (todas[0]?.segundos !== 60) fallos.push(`La pista única no abarca la pieza entera: ${todas[0]?.segundos} s de 60.`);
+      // Hecha una vez, no se vuelve a pedir.
+      const hecha = planificarMusica([{ n: 0, musica: 'ok' }, { n: 1 }, { n: 2 }], tomas, cfg);
+      if (hecha.length) fallos.push('Con la pista generada, el botón de Música se ofrece a generarla otra vez.');
+
+      // Lo más larga que da el generador, y ni un segundo menos.
+      if (DURACION_MAXIMA_MUSICA !== 120) fallos.push(`La pista se pide de ${DURACION_MAXIMA_MUSICA} s y el generador da 120.`);
+      if (!/segundos: DURACION_MAXIMA/.test(fuente(ctx, 'app/fases/musica.js'))) {
+        fallos.push('La música no se pide con la duración máxima del generador.');
+      }
+
+      // Y la hoja: una escena de música que abarca la pieza, sin relevos.
+      if (ctx.hoja.escenas.length !== 1) fallos.push(`La hoja lleva ${ctx.hoja.escenas.length} escenas de música: habrá relevos.`);
+      if (Math.abs((ctx.hoja.escenas[0]?.duracion || 0) - ctx.hoja.total) > 0.05) {
+        fallos.push('La escena de música de la hoja no dura lo que la pieza.');
+      }
+      if (/acrossfade/.test(ctx.guion)) fallos.push('El montaje sigue haciendo relevos de música.');
+      if (!/stream_loop -1/.test(ctx.guion)) fallos.push('La pista única no se repite: se acaba a los dos minutos.');
+      return fallos;
+    },
+    // Se rompe como estaba: una pista por escena.
+    romper: (ctx) =>
+      conFuncion(ctx, 'planificarMusica', (escenas, tomas) =>
+        escenas.map((e) => ({ ...e, segundos: 10, hecha: false })),
+      ),
+  },
+
+  {
+    nombre: 'la-historia-transcurre-sin-aviso-de-ficcion-narrado',
+    dice: '«No necesitamos decir desde un principio que el video es ficción. Eso ya lo estamos colocando en la descripción. El video tiene que transcurrir como una historia normal, de principio a fin.» La declaración narrada estuvo al principio —nueve segundos de aviso legal delante del gancho— y luego al final. Ahora no se narra: va en la descripción, que es donde la ve quien la busca, y la narración es solo la historia. Y al modelo se le prohíbe por su nombre escribir un aviso, porque con «el caso es ficción» en el encargo lo escribía él.',
+    comprobar(ctx) {
+      const { sistemaDelGuion } = ctx.fn;
+      const fallos = [];
+      const gui = fuente(ctx, 'app/fases/guion.js');
+
+      // 1 · El encargo lo prohíbe con todas las letras.
+      const sistema = sistemaDelGuion();
+      // Con \s+ porque el encargo va a ochenta columnas y la frase puede partirse.
+      if (!/no escribas ningún\s+aviso/i.test(sistema)) {
+        fallos.push('El encargo no le prohíbe al modelo escribir un aviso de ficción: lo escribe él, al principio.');
+      }
+      // 2 · Y el código no lo añade por su cuenta.
+      if (/conDeclaracionNarrada|DECLARACION_NARRADA/.test(gui)) {
+        fallos.push('El guion sigue pasando por la declaración narrada.');
+      }
+      if (!/const guion = partes\.join\(/.test(gui)) {
+        fallos.push('El guion terminado no es la unión de los actos y nada más.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: el encargo dice que el caso es ficción y no dice que
+    // no se escriba, así que el modelo abre con el aviso.
+    romper: (ctx) =>
+      conFuncion(ctx, 'sistemaDelGuion', () => {
+        const entero = ctx.fn.sistemaDelGuion();
+        const roto = entero.replace(/no escribas ningún\s+aviso/i, 'escribe un aviso');
+        if (roto === entero) throw new Error('El sabotaje de «la-historia-transcurre-sin-aviso-de-ficcion-narrado» ya no encaja con el encargo.');
+        return roto;
+      }),
   },
 
   {

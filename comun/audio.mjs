@@ -377,6 +377,31 @@ export function repartirPorTiempos(audio, tiempos) {
   return trozos;
 }
 
+/** Milisegundos de rampa a cada lado de un corte. Diez no se oyen; el chasquido sí. */
+export const RAMPA_MS = 10;
+
+/**
+ * Copia un trozo con una rampa lineal de entrada y otra de salida.
+ *
+ * Copia, no modifica en sitio: el trozo es una vista sobre el bloque entero, y
+ * dos tomas seguidas comparten la muestra del corte.
+ */
+export function suavizarBordes(trozo, frecuencia, canales = 1, ms = RAMPA_MS) {
+  const salida = new Int16Array(trozo);
+  const tramos = salida.length / canales;
+  const rampa = Math.min(Math.round((frecuencia * ms) / 1000), Math.floor(tramos / 2));
+  if (rampa <= 0) return salida;
+  for (let i = 0; i < rampa; i++) {
+    const g = i / rampa;
+    for (let c = 0; c < canales; c++) {
+      salida[i * canales + c] = Math.round(salida[i * canales + c] * g);
+      const j = (tramos - 1 - i) * canales + c;
+      salida[j] = Math.round(salida[j] * g);
+    }
+  }
+  return salida;
+}
+
 export function repartirBloque(audio, objetivos, opciones = {}) {
   const { silencioInicialMs = 120, tiempos = null } = opciones;
   const { muestras, frecuencia, canales = 1 } = audio;
@@ -388,7 +413,12 @@ export function repartirBloque(audio, objetivos, opciones = {}) {
       : repartir(audio, objetivos, opciones);
 
   return trozos.map((t, k) => {
-    const cuerpo = muestras.subarray(t.inicio, t.fin);
+    // LOS BORDES DEL CORTE, SUAVIZADOS. «Cada vez que termina un audio de voz y
+    // comienza el siguiente, se escucha el corte, se escucha un golpe raro.» Un
+    // corte cae en un silencio, pero un silencio de voz no es cero: es ruido de
+    // sala, y pegar dos ruidos de sala distintos a bocajarro da un chasquido.
+    // Diez milisegundos de rampa a cada lado lo quitan y no se oyen.
+    const cuerpo = suavizarBordes(muestras.subarray(t.inicio, t.fin), frecuencia, canales);
     let salida = cuerpo;
     if (k === 0 && silencioInicialMs > 0) {
       const dedal = silencioDe(silencioInicialMs, frecuencia, canales);

@@ -31,6 +31,7 @@ import { llamar } from '../api.js';
 import { bloquesDeNarracion } from '../cola.js';
 import { leerWav, escribirWav, repartirBloque } from '../../comun/audio.mjs';
 import { claveToma } from '../../comun/claves.mjs';
+import { material } from '../material.js';
 import { deBase64, aBase64 } from '../imagenes.js';
 
 /**
@@ -61,13 +62,21 @@ export function planificar(tomas, config, { soloLasQueFaltan = true } = {}) {
  * de eso se encarga quien llama, y por eso puede escribir cada unidad antes de
  * pasar a la siguiente (§4).
  */
+/** La clave del audio ENTERO de un bloque, antes de cortarlo: `p07/b017/audio`. */
+export const claveBloque = (pieza, bloque) =>
+  `${pieza}/b${String(bloque.tomas[0]?.i ?? 0).padStart(3, '0')}/audio`;
+
 export async function narrarBloque({ bloque, pieza, config, senal, alEsperar }) {
   const n = config.narracion;
+  const clave = claveBloque(pieza, bloque);
 
   const r = await llamar(
     'voz',
     {
       texto: bloque.texto,
+      // Al almacén, no a la respuesta: así el bloque puede durar tres minutos.
+      // Ver `segundosPorBloque` en `app/config.js`.
+      guardarEn: clave,
       // Los textos toma a toma. Con ellos el servicio de voz devuelve el segundo
       // exacto en que acaba cada uno, y el reparto deja de adivinarse.
       // `.trim()` igual que al componer `bloque.texto`: lo que se marca tiene que
@@ -83,7 +92,13 @@ export async function narrarBloque({ bloque, pieza, config, senal, alEsperar }) 
     { senal, alEsperar },
   );
 
-  const audio = leerWav(await (await fetch(`data:audio/wav;base64,${r.datos}`)).arrayBuffer());
+  // §7.12: ningún valor de retorno de una escritura se ignora.
+  if (!r.guardado?.bytes) throw new Error('El audio del bloque no quedó confirmado en el almacén.');
+  // Sin copia local: un bloque rehecho lleva la misma clave, y la copia sería el
+  // audio de antes.
+  const entero = await material(clave, 'audio/wav', { senal, sinCopia: true });
+  if (!entero) throw new Error('El audio del bloque se subió y no se pudo bajar.');
+  const audio = leerWav(await entero.arrayBuffer());
 
   // SIN MARCAS, EL BLOQUE VA AL MÁXIMO Y EL CORTE ES GLOBAL.
   //
@@ -91,9 +106,10 @@ export async function narrarBloque({ bloque, pieza, config, senal, alEsperar }) 
   // Las voces de Gemini cambian de tono EN CADA LLAMADA — probado muchas veces:
   // ni la temperatura lo quita del todo—. Narrar toma a toma era el peor mundo:
   // ochenta y tres llamadas, ochenta y tres tonos. La continuidad viene de
-  // aprovechar al máximo cada llamada: bloques de 45 s (el tope que cabe en la
-  // respuesta), así el tono se mantiene el mayor tiempo posible y solo puede
-  // cambiar en el relevo de bloque — que además nunca cruza una escena.
+  // aprovechar al máximo cada llamada: bloques de tres minutos —el audio va al
+  // almacén y ya no lo limita la respuesta—, así el tono se mantiene el mayor
+  // tiempo posible y solo puede cambiar en el relevo de bloque, que además nunca
+  // cruza una escena.
   //
   // Y el reparto del bloque ya no adivina corte a corte: elige TODOS los cortes a
   // la vez, la combinación de silencios reales que mejor cuadra con las tomas

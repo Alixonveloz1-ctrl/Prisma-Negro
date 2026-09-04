@@ -2890,8 +2890,15 @@ accion('b-musica', async () => {
       }),
     {
       alTerminarUno: async (res) => {
-        const e = pieza().escenas.find((x) => x.n === res.n);
-        if (e) e.musica = 'ok';
+        // La pista única se anota en la escena 0. Si el reparto no tiene una
+        // escena con ese número, se crea: sin anotarla, la música pagada no
+        // constaría y el botón la volvería a pedir.
+        let e = pieza().escenas.find((x) => x.n === res.n);
+        if (!e) {
+          e = { n: res.n };
+          pieza().escenas.push(e);
+        }
+        e.musica = 'ok';
         await guardar();
       },
     },

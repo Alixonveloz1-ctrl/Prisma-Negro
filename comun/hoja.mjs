@@ -40,6 +40,14 @@ const q = (n, fps) => Math.round(n * fps) / fps;
  * suma acumulada de duraciones ya cuadradas, video y audio no pueden derivar el uno
  * del otro a lo largo de las 134 tomas.
  */
+/** La clave de la pista única: la declarada en la escena 0, o la de la pieza. */
+function musicaDeLaPista(escenas, pieza) {
+  const decl = escenas.find((x) => x.n === 0) || {};
+  if (decl.musica === null) return null;
+  const propia = typeof decl.musica === 'string' && decl.musica.includes('/') ? decl.musica : null;
+  return propia || `${pieza}/mus/000`;
+}
+
 export function construirHoja({ pieza, tomas, escenas = [], config = {} }) {
   const c = { ...PREDETERMINADO, ...config };
   if (!pieza) throw new Error('La hoja de montaje necesita saber de qué pieza es.');
@@ -132,7 +140,7 @@ export function construirHoja({ pieza, tomas, escenas = [], config = {} }) {
     porEscena.set(f.escena, e);
   }
 
-  const filasEscena = [...porEscena.values()]
+  const porEscenaConMusica = [...porEscena.values()]
     .sort((a, b) => a.inicio - b.inicio)
     .map((e) => {
       const decl = escenas.find((x) => x.n === e.n) || {};
@@ -151,6 +159,25 @@ export function construirHoja({ pieza, tomas, escenas = [], config = {} }) {
         musica: decl.musica === null ? null : propia || `${pieza}/mus/${String(e.n).padStart(3, '0')}`,
       };
     });
+
+  // UN SOLO LECHO PARA TODO EL EPISODIO.
+  //
+  // ─────────────────────────────────────────────────────────────────────────
+  // «Es ilógico tener ocho pistas diferentes en un solo video, porque ni
+  //  siquiera se parecen. Una pista, lo más larga que permita el generador, y
+  //  repetirla de fondo.»
+  //
+  // La música iba por escena: ocho generaciones, ocho atmósferas, ocho relevos
+  // con fundido que se notan igual. Ahora la hoja lleva UNA escena de música que
+  // abarca la pieza entera, con la pista número 0 en bucle. Las escenas siguen
+  // existiendo para los capítulos y para el guion; solo la música deja de ir
+  // por escena. `null` en la escena 0 sigue siendo apagar la música a propósito.
+  // ─────────────────────────────────────────────────────────────────────────
+  const primera = porEscenaConMusica[0];
+  const filasEscena =
+    c.musicaPorEscena === true || !primera
+      ? porEscenaConMusica
+      : [{ n: 0, inicio: 0, duracion: q(reloj, c.fps), musica: musicaDeLaPista(escenas, pieza) }];
 
   return {
     version: 1,
@@ -564,6 +591,11 @@ export function guionFfmpeg(hoja) {
   return L.join('\n') + '\n';
 }
 
+/** Cuánto se acerca la cámara a lo largo de una toma fija: ×1,32. */
+export const ZOOM_RECORRIDO = 1.32;
+/** En los barridos, el zoom con el que se empieza; termina en `ZOOM_RECORRIDO`. */
+export const Z_BARRIDO_INICIO = 1.18;
+
 /**
  * El recorrido de cámara de una toma fija (§4.7).
  *
@@ -573,8 +605,27 @@ export function guionFfmpeg(hoja) {
  */
 function zoompan(camara, frames, W, H, fps) {
   const n = Math.max(frames, 1);
-  const Z = 1.18; // recorrido de zoom: más que esto se nota como un tirón
+  // EL RECORRIDO SE TIENE QUE VER.
+  //
+  // ─────────────────────────────────────────────────────────────────────────
+  // «El movimiento de las imágenes que son sin video casi ni se nota. Parece
+  //  que fueran imágenes estáticas, prácticamente.»
+  //
+  // Y era así: un 18 % de zoom repartido en trece segundos es un 1,4 % por
+  // segundo, y en la pantalla de un teléfono eso es una foto quieta. Los
+  // barridos iban además a zoom FIJO: la imagen se deslizaba sin acercarse, que
+  // es lo que más se parece a no moverse.
+  //
+  // Ahora el zoom recorre un 32 %, y los barridos llevan un acercamiento lento
+  // debajo: dos movimientos a la vez es lo que hace que una foto respire. Sigue
+  // siendo lineal en `on` —sin tirones— y sigue partiendo de una imagen ampliada
+  // antes (§4.7), así que no pixela.
+  // ─────────────────────────────────────────────────────────────────────────
+  const Z = ZOOM_RECORRIDO;
   const centro = { x: `iw/2-(iw/zoom/2)`, y: `ih/2-(ih/zoom/2)` };
+  // En los barridos, el zoom va de Z_BARRIDO_INICIO a Z mientras la ventana cruza
+  // el margen entero; el margen se calcula con el zoom del momento.
+  const zoomDeBarrido = `${Z_BARRIDO_INICIO}+${(Z - Z_BARRIDO_INICIO).toFixed(4)}*on/${n}`;
   let z = '1';
   let x = centro.x;
   let y = centro.y;
@@ -587,19 +638,19 @@ function zoompan(camara, frames, W, H, fps) {
       z = `${Z}-${(Z - 1).toFixed(4)}*on/${n}`;
       break;
     case 'izquierda':
-      z = `${Z}`;
+      z = zoomDeBarrido;
       x = `(iw-iw/zoom)*(1-on/${n})`;
       break;
     case 'derecha':
-      z = `${Z}`;
+      z = zoomDeBarrido;
       x = `(iw-iw/zoom)*on/${n}`;
       break;
     case 'arriba':
-      z = `${Z}`;
+      z = zoomDeBarrido;
       y = `(ih-ih/zoom)*(1-on/${n})`;
       break;
     case 'abajo':
-      z = `${Z}`;
+      z = zoomDeBarrido;
       y = `(ih-ih/zoom)*on/${n}`;
       break;
     default:

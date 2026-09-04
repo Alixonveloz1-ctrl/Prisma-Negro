@@ -1489,27 +1489,50 @@ export const invariantes = [
   },
 
   {
-    nombre: 'bloques-de-narracion-que-caben-en-la-respuesta',
-    dice: 'Un bloque de narración cabe en los 4,5 MB de la respuesta. Con bloques de escena entera no cabe, y el error dice «tiempo agotado», que es mentira (§7.1, §4.5).',
+    nombre: 'los-bloques-de-narracion-van-por-el-almacen-y-duran-minutos',
+    dice: '«Cada vez que termina un bloque cambia el tono de la voz, y no hay nada que podamos hacer. Necesitamos aprovechar el máximo de texto que nos permita cada generación.» Los 45 segundos por bloque no los pedía el modelo de voz: los pedía la RESPUESTA de la función, con su tope de 4,5 MB, por la que volvía el audio entero en base64. Cuarenta y siete actuaciones distintas en media hora. Ahora el audio del bloque se guarda en el almacén y se baja por trozos —el camino de las imágenes— y el bloque dura lo que aguante el modelo. Un bloque rehecho lleva la misma clave, así que se baja SIN la copia local: la copia sería el audio de antes.',
     comprobar(ctx) {
-      const s = ctx.config.narracion.segundosPorBloque;
-      // PCM 16 bits, 24 kHz, mono → 48.000 bytes/s. En base64 crece un tercio.
-      const bytes = s * 24000 * 2 * (4 / 3);
-      const tope = 4.5 * 1024 * 1024;
       const fallos = [];
-      if (bytes > tope * 0.8) {
-        fallos.push(
-          `Bloques de ${s} s dan ~${(bytes / 1024 / 1024).toFixed(1)} MB en base64 y el tope es 4,5 MB.`,
-        );
-      }
+      const { claveBloque, tipoDe } = ctx.fn;
+
+      // 1 · Minutos, no segundos. Y no más de lo que el texto por llamada permite.
+      const s = ctx.config.narracion.segundosPorBloque;
+      if (s < 150) fallos.push(`Los bloques son de ${s} s: cuarenta cambios de tono en media hora.`);
       if (ctx.config.narracion.topeBytesPorLlamada > 4000) {
-        fallos.push('El tope de bytes por llamada de voz pasa de 4.000.');
+        fallos.push('El tope de bytes por llamada de voz pasa de 4.000: el servicio de voz lo rechaza.');
+      }
+
+      // 2 · La función SUBE el audio cuando se le pide dónde, en vez de devolverlo.
+      const ia = fuente(ctx, 'api/ia.js');
+      const a = ia.indexOf("case 'voz':");
+      const b = a < 0 ? -1 : ia.indexOf('case ', a + 10);
+      const voz = a < 0 || b < 0 ? '' : ia.slice(a, b);
+      if (!voz) {
+        fallos.push('No encuentro el modo de voz de la función: esta comprobación estaría mirando al vacío.');
+      } else if (!/c\.guardarEn/.test(voz) || !/almacen\.subir\(c\.guardarEn/.test(voz)) {
+        fallos.push('La voz vuelve por la respuesta de la función: el bloque no puede pasar de 45 s.');
+      }
+
+      // 3 · El navegador pide guardar y baja por trozos, sin copia local.
+      const nar = fuente(ctx, 'app/fases/narracion.js');
+      if (!/guardarEn: clave/.test(nar)) fallos.push('La narración no pide que el bloque se guarde en el almacén.');
+      if (!/material\(clave, 'audio\/wav', \{[^}]*sinCopia: true/.test(nar)) {
+        fallos.push('El bloque no se baja por trozos sin copia local: o no cabe, o un bloque rehecho suena como el de antes.');
+      }
+      if (/data:audio\/wav;base64/.test(nar)) fallos.push('La narración sigue leyendo el audio de la respuesta.');
+
+      // 4 · Y la clave del bloque es una clave válida del almacén, de tipo audio.
+      const k = claveBloque('p07', { tomas: [{ i: 17 }] });
+      if (k !== 'p07/b017/audio') fallos.push(`La clave del bloque no es la esperada: «${k}».`);
+      try {
+        if (tipoDe(k) !== 'audio') fallos.push(`La clave del bloque no es de audio: ${tipoDe(k)}.`);
+      } catch (e) {
+        fallos.push(`El almacén no acepta la clave del bloque: ${e.message}`);
       }
       return fallos;
     },
-    // Es exactamente el cambio que alguien haría «para que haya menos llamadas», y
-    // que devuelve el §7.1 con su mensaje engañoso.
-    romper: (ctx) => conConfig(ctx, (c) => (c.narracion.segundosPorBloque = 150)),
+    // Se rompe como estaba: bloques de 45 s.
+    romper: (ctx) => conConfig(ctx, (c) => (c.narracion.segundosPorBloque = 45)),
   },
 
   // ── §7.13: la anchura es una invariante, no un detalle de estilo ──────────
