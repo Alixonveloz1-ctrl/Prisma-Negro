@@ -852,7 +852,76 @@ function minutosObjetivo() {
   return bueno;
 }
 
+/**
+ * LO QUE LA PANTALLA DECÍA DEL EPISODIO ANTERIOR NO ES DE ESTE.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * «Esos mensajes que quedan son remanentes del episodio anterior. Se supone que
+ *  este era un episodio nuevo, y sigue mostrando audios generados, mensajes del
+ *  episodio anterior.»
+ *
+ * Al cambiar de episodio se repintaban los DATOS del nuevo —tomas, fichas, guion,
+ * pasos— pero lo transitorio se quedaba puesto: la barra llena, «narración: 55 de
+ * 55, sin fallos», la casilla de rehacer marcada, la lista de videos montados. Un
+ * episodio recién abierto y vacío decía que tenía la narración hecha.
+ *
+ * Todos los caminos que cambian de episodio pasan por `pintarTodo`, así que es
+ * aquí donde se nota el cambio y se olvida lo del anterior: antes de pintar nada.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+/** Las cajas de aviso que hablan DEL EPISODIO, no del canal ni de los ajustes. */
+const AVISOS_DEL_EPISODIO = [
+  'paso1', 'paso2', 'paso3', 'paso4', 'paso5', 'paso6',
+  'investigacion', 'guion', 'continuar', 'tomas', 'previa',
+];
+let piezaPintada = null;
+
+function olvidarRastros() {
+  for (const donde of AVISOS_DEL_EPISODIO) avisar(donde, '');
+  for (const id of ['barra', 'barra2']) {
+    const b = $(id);
+    if (b) b.style.width = '0';
+  }
+  for (const id of ['progreso', 'progreso2']) {
+    const t = $(id);
+    if (t) t.textContent = '';
+  }
+  // Rehacer es una decisión sobre UN episodio: en el siguiente vuelve a estar
+  // apagado, o el primer botón repetiría —y pagaría— lo que ya estaba.
+  const rehacer = $('rehacer-todo');
+  if (rehacer) rehacer.checked = false;
+  const montados = $('lista-montados');
+  if (montados) montados.innerHTML = '';
+  $('b-buscar-material')?.classList.add('oculto');
+  // La bajada se habilita cuando el montaje DE ESTE episodio está: lo mira
+  // `vigilarMontaje` al cambiar.
+  const bajar = $('b-bajar');
+  if (bajar) bajar.disabled = true;
+}
+
+/**
+ * Con una tanda en marcha no se cambia de episodio.
+ *
+ * Cada unidad generada se guarda en el episodio ABIERTO y con su id: cambiar a
+ * mitad mandaría la voz o las imágenes —ya pagadas— al episodio equivocado, sin
+ * un solo error.
+ */
+function exigirSinTandaEnMarcha() {
+  if (cola.corriendo) {
+    throw new Error(
+      'Hay una tanda generando en «El episodio». Detenla o espera a que termine antes de ' +
+        'cambiar de episodio: lo que salga se guardaría en el episodio equivocado.',
+    );
+  }
+}
+
 function pintarTodo() {
+  // Si cambió el episodio, lo transitorio del anterior se olvida ANTES de pintar.
+  if (piezaPintada !== null && piezaPintada !== pieza().id) {
+    olvidarRastros();
+    vigilarMontaje().catch(() => {});
+  }
+  piezaPintada = pieza().id;
   pintarModo();
   // Las propuestas pagadas vuelven a salir tras recargar: estaban en una variable
   // suelta y desaparecían al cerrar la pestaña.
@@ -1258,6 +1327,7 @@ accion(
   async () => {
     const idea = $('idea').value.trim();
     if (!idea) throw new Error('Escribe tu idea arriba y vuelve a darle.');
+    exigirSinTandaEnMarcha();
     P.config.genero = $('genero').value;
     P.idea = idea;
 
@@ -1295,22 +1365,31 @@ accion(
 );
 
 /** Un episodio nuevo y vacío, sin caso: para empezar de cero. */
-accion(
-  'b-episodio-nuevo',
-  async () => {
-    const z = estado.abrirPieza(P, { titulo: 'Episodio nuevo' });
-    P.titulo = z.titulo;
-    casos = [];
-    P.casosPropuestos = [];
-    await guardar();
-    pintarTodo();
-    // Y SE VA AL EPISODIO. Abrir uno y quedarse en la lista obliga a buscar por
-    // dónde se sigue, que es lo mismo que no haberlo abierto.
-    ir('guion');
-    avisar('paso1', `Abierto ${z.id}, vacío. Elige un caso aquí o escribe tu propia idea.`, 'bueno');
-  },
-  'historial',
-);
+async function empezarEpisodioNuevo() {
+  exigirSinTandaEnMarcha();
+  const z = estado.abrirPieza(P, { titulo: 'Episodio nuevo' });
+  P.titulo = z.titulo;
+  casos = [];
+  P.casosPropuestos = [];
+  await guardar();
+  pintarTodo();
+  // Y SE VA AL EPISODIO. Abrir uno y quedarse en la lista obliga a buscar por
+  // dónde se sigue, que es lo mismo que no haberlo abierto.
+  ir('guion');
+  avisar('paso1', `Abierto ${z.id}, vacío. Elige un caso aquí o escribe tu propia idea.`, 'bueno');
+}
+// Desde la lista de episodios Y desde el Inicio: «no hay una forma de iniciar un
+// episodio nuevo ahí».
+accion('b-episodio-nuevo', empezarEpisodioNuevo, 'historial');
+accion('b-inicio-nuevo', empezarEpisodioNuevo, 'inicio');
+
+// SEGUIR: al episodio, y al paso en el que va. Es una pulsación, así que el
+// salto lo pide la persona y no la aplicación.
+$('b-inicio-seguir')?.addEventListener('click', () => {
+  const s = siguientePaso(pieza());
+  ir('guion');
+  $(`paso${s.n}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
 accion('b-otros-casos', buscar, 'paso1');
 accion('b-ir-episodios', async () => ir('episodios'), 'paso1');
 
@@ -1363,6 +1442,12 @@ function pintarCasos() {
         z.titulo = c.titulo;
         if (!z.creado) z.creado = Date.now();
       } else {
+        // Abre OTRO episodio: con una tanda en marcha, no.
+        try {
+          exigirSinTandaEnMarcha();
+        } catch (e) {
+          return avisar('paso1', e.message, 'malo');
+        }
         estado.abrirPieza(P, { caso: c });
       }
       P.titulo = c.titulo;
@@ -4106,6 +4191,53 @@ function pintarInicio() {
     el.onclick = () => ir(vista);
     entradas.appendChild(el);
   }
+
+  // EL EPISODIO EN MARCHA, Y POR DÓNDE SE SIGUE.
+  //
+  // «El inicio no es un inicio real, es un resumen de las otras secciones. No
+  //  hay una forma de iniciar un episodio nuevo ahí.» Aquí se dice cuál está en
+  //  marcha y en qué paso va, con un botón que lleva a ese paso y otro que abre
+  //  uno nuevo.
+  const marcha = $('en-marcha');
+  if (marcha) {
+    const titulo = $('en-marcha-titulo');
+    if (hay) {
+      const s = siguientePaso(z);
+      if (titulo) titulo.textContent = 'El episodio en marcha';
+      marcha.innerHTML = `<b>${escapar(z.titulo || z.caso?.titulo || z.id)}</b><p>${escapar(s.dice)}</p>`;
+      $('b-inicio-seguir').textContent = `Seguir: ${s.accion}`;
+    } else {
+      if (titulo) titulo.textContent = 'Empieza';
+      marcha.innerHTML =
+        '<b>No hay ningún episodio empezado.</b>' +
+        '<p>Empieza uno: eliges el caso, se construye el expediente, se escribe el guion y se genera todo lo demás.</p>';
+    }
+    $('b-inicio-seguir').classList.toggle('oculto', !hay);
+    $('b-inicio-nuevo').classList.toggle('primario', !hay);
+  }
+}
+
+/**
+ * En qué paso va un episodio, con palabras, y qué es lo siguiente.
+ *
+ * Es la misma cuenta que enciende los pasos en `pintarPasos` y las pastillas de
+ * las fases en `cuentasDeFases` —que miran el episodio abierto—, dicha de una vez
+ * para el Inicio.
+ */
+function siguientePaso(z) {
+  const t = z.tomas;
+  if (!z.caso) return { n: 1, dice: 'Sin caso todavía. Lo primero es elegirlo, o escribir tu propia idea (paso 1).', accion: 'elegir el caso' };
+  if (!z.fichas.length) return { n: 2, dice: 'Caso elegido. Falta construir el expediente (paso 2).', accion: 'construir el expediente' };
+  if (!z.tratamiento) return { n: 3, dice: 'Expediente hecho. Falta dirigir la pieza y escribir el guion (paso 3).', accion: 'dirigir y escribir el guion' };
+  if (!(z.guion || '').trim() || !t.length) return { n: 3, dice: 'Pieza dirigida. Falta escribir el guion y partirlo en tomas (paso 3).', accion: 'escribir el guion' };
+  const faltan = cuentasDeFases()
+    .filter(([, , hechas, total]) => hechas < total)
+    .map(([, nombre, hechas, total]) => `${nombre.toLowerCase()} ${hechas} de ${total}`);
+  if (faltan.length) {
+    return { n: 4, dice: `Guion en ${t.length} tomas. Falta generar: ${faltan.join(' · ')} (paso 4).`, accion: 'generar el material' };
+  }
+  if (!z.montaje) return { n: 5, dice: 'Todo el material generado. Falta montar el video (paso 5).', accion: 'montar el video' };
+  return { n: 6, dice: 'Montado. Queda bajar el video y el texto de publicación (paso 6).', accion: 'bajar el video' };
 }
 
 function pintarEpisodioAbierto() {
@@ -4150,7 +4282,12 @@ function pintarHistorial() {
   const piezas = estado.episodiosDe(P).sort((a, b) => (b.creado || 0) - (a.creado || 0));
   $('cuenta-historial').textContent = piezas.length > 1 ? `${piezas.length}` : '';
 
-  caja.className = 'hist';
+  // CADA FILA CON SU FORMA. «La sección de casos está horrible, parece una
+  // página de los ochenta.» Y era una regla de estilo: la lista se vestía con
+  // `.hist button`, que alcanzaba también al «Borrar» de cada fila —un botón
+  // más— y lo sacaba a ancho completo, aplastando el título a una palabra por
+  // línea. La fila tiene ahora sus propias clases, y el botón de borrar no crece.
+  caja.className = 'episodios';
   caja.innerHTML = '';
   for (const z of piezas) {
     const padres = estado.ascendencia(P, z);
@@ -4161,17 +4298,22 @@ function pintarHistorial() {
       z.tomas.length ? `${z.tomas.length} tomas` : '',
       z.tomas.filter((t) => t.imagen === 'ok').length ? `${z.tomas.filter((t) => t.imagen === 'ok').length} imágenes` : '',
     ].filter(Boolean);
+    const abierto = z.id === P.piezaActiva;
 
     const fila = document.createElement('div');
-    fila.style.cssText = 'display:flex;gap:8px;align-items:stretch';
+    fila.className = abierto ? 'episodio on' : 'episodio';
 
     const b = document.createElement('button');
-    b.style.flex = '1';
-    if (z.id === P.piezaActiva) b.className = 'on';
+    b.className = 'episodio-abrir';
     b.innerHTML =
-      `<b>${escapar(z.titulo || z.caso?.titulo || 'Sin título')}${z.id === P.piezaActiva ? ' · abierto' : ''}</b>` +
+      `<b>${escapar(z.titulo || z.caso?.titulo || 'Sin título')}${abierto ? ' · abierto' : ''}</b>` +
       `<span>${escapar(z.id)} · ${padres.length ? `continuación de «${escapar(padres[0].titulo)}» · ` : ''}${partes.join(' · ')}</span>`;
     b.onclick = async () => {
+      try {
+        exigirSinTandaEnMarcha();
+      } catch (e) {
+        return avisar('historial', e.message, 'malo');
+      }
       P.piezaActiva = z.id;
       P.titulo = z.titulo || P.titulo;
       await guardar();
@@ -4183,12 +4325,13 @@ function pintarHistorial() {
     // BORRAR, que no existía en ninguna parte. Se pregunta con el nombre delante:
     // un «¿seguro?» a secas se contesta que sí sin leer.
     const x = document.createElement('button');
-    x.className = 'btn peligro chico';
+    x.className = 'btn peligro chico episodio-borrar';
     x.textContent = 'Borrar';
     x.title = `Quitar «${z.titulo}» del proyecto`;
     x.onclick = async () => {
       if (!confirm(`¿Quitar «${z.titulo || z.id}» del proyecto?\n\nLo YA GENERADO no se borra de la nube —está pagado y otros episodios pueden reutilizarlo—, y su número no se vuelve a usar.`)) return;
       try {
+        exigirSinTandaEnMarcha();
         estado.borrarPieza(P, z.id);
       } catch (e) {
         return avisar('historial', e.message, 'malo');
@@ -4217,6 +4360,7 @@ accion(
   async () => {
     const padre = pieza();
     if (!padre.caso) throw new Error('Este caso todavía no tiene nada. Elige un caso primero.');
+    exigirSinTandaEnMarcha();
     if (!padre.guion.trim()) {
       throw new Error('Escribe el guion de este caso antes de pedirle una continuación.');
     }
@@ -4250,6 +4394,7 @@ accion(
   async () => {
     const vieja = pieza();
     if (!vieja.guion.trim()) throw new Error('Esta pieza no tiene guion que reescribir.');
+    exigirSinTandaEnMarcha();
     const z = estado.reescribirPieza(P, vieja.id);
     await guardar();
     pintarTodo();

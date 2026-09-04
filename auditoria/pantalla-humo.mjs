@@ -606,8 +606,10 @@ export async function humoDeLaPantalla({
       const b =
         typeof orden === 'string'
           ? elementos.get(orden)
-          : botonesDentro(elementos.get(orden.dentro)).filter((x) =>
-              String(x.textContent || '').includes(orden.rotulo),
+          : // Por lo que dice EN CUALQUIER FORMA: un botón que pinta título y
+            // detalle lo hace con innerHTML, y su textContent está vacío.
+            botonesDentro(elementos.get(orden.dentro)).filter((x) =>
+              textoDeArbol(x).includes(orden.rotulo),
             )[orden.n || 0];
       if (!b) {
         fallos.push(`no existe el botón ${id}`);
@@ -666,6 +668,10 @@ export async function humoDeLaPantalla({
     texto: (id) => elementos.get(id)?.textContent || '',
     /** Si un botón del HTML está bloqueado. Los que pinta la app van en `botonesDe`. */
     deshabilitado: (id) => elementos.get(id)?.disabled === true,
+    /** Si un elemento del HTML lleva la clase que lo esconde. */
+    oculto: (id) => elementos.get(id)?.classList.contains('oculto') === true,
+    /** Un estilo puesto a mano por la aplicación: la anchura de una barra, por ejemplo. */
+    estilo: (id, propiedad) => elementos.get(id)?.style?.[propiedad],
     html: (id) => elementos.get(id)?.innerHTML || '',
     /** Cuántas fichas pintó la aplicación dentro de una caja. */
     hijosDe: (id) => elementos.get(id)?.children.length || 0,

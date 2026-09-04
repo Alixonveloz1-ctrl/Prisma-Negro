@@ -1938,6 +1938,193 @@ export const invariantes = [
   },
 
   {
+    nombre: 'lo-que-decia-la-pantalla-del-episodio-anterior-no-se-queda',
+    dice: '«Esos mensajes que quedan son remanentes del episodio anterior. Se supone que este era un episodio nuevo, y sigue mostrando audios generados, mensajes del episodio anterior.» Al cambiar de episodio se repintaban los DATOS del nuevo —tomas, fichas, guion— pero lo transitorio se quedaba puesto: la barra llena, «narración: 55 de 55, sin fallos», la casilla de rehacer marcada. Un episodio recién abierto y vacío decía que tenía la narración hecha. Ahora la pantalla olvida todo lo que decía del anterior al cambiar. Y con una tanda en marcha no se cambia de episodio: cada unidad se guarda en el episodio ABIERTO, así que lo generado —y pagado— iría a parar al equivocado.',
+    async comprobar(ctx) {
+      const { humoDeLaPantalla, proyectoYaEmpezado } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+      const main = fuente(ctx, 'app/main.js');
+      const fallos = [];
+
+      // 1 · EN MARCHA. Una tanda de narración que falla —la nube de mentira no
+      // devuelve audio— deja su queja, su progreso y su barra en el paso 4.
+      // Abrir OTRO episodio desde la lista lo borra todo.
+      const p = proyectoYaEmpezado();
+      p.piezas.push({
+        id: 'p02',
+        titulo: 'Otro caso',
+        creado: 2,
+        caso: { titulo: 'Otro caso', sinopsis: 's', cuando: '2020', donde: 'y' },
+        fichas: [],
+        guion: '',
+        escenas: [],
+        tomas: [],
+      });
+      const r = await humoDeLaPantalla({
+        parche,
+        proyecto: p,
+        pulsa: ['b-narrar', { dentro: 'historial', rotulo: 'Otro caso' }],
+      });
+      fallos.push(...r.fallos);
+      if (!r.dichas().some((q) => q.startsWith('b-narrar → aviso-paso4'))) {
+        fallos.push('La prueba no vale: la tanda de narración no dejó nada en el paso 4, así que no hay nada que olvidar.');
+      }
+      const queda = r.html('aviso-paso4').replace(/<[^>]+>/g, '').trim();
+      if (queda) fallos.push(`Abierto otro episodio, el paso 4 sigue diciendo lo del anterior: «${queda.slice(0, 70)}».`);
+      if (r.texto('progreso')) fallos.push(`El progreso sigue siendo el del episodio anterior: «${r.texto('progreso')}».`);
+      if (r.estilo('barra', 'width') !== '0') {
+        fallos.push(`La barra sigue como la dejó la tanda del episodio anterior (${r.estilo('barra', 'width')}).`);
+      }
+
+      // 2 · Lo que el arnés no puede tocar se mira en el código: la casilla de
+      // rehacer, la bajada del paquete y la lista de montados se olvidan también.
+      const i = main.indexOf('function olvidarRastros');
+      const cuerpo = i < 0 ? '' : main.slice(i, main.indexOf('\n}\n', i));
+      if (!cuerpo) fallos.push('No hay quien olvide lo transitorio al cambiar de episodio.');
+      for (const [qué, re] of [
+        ['la casilla de rehacer', /rehacer-todo/],
+        ['la bajada del paquete', /b-bajar/],
+        ['la lista de videos montados', /lista-montados/],
+      ]) {
+        if (cuerpo && !re.test(cuerpo)) fallos.push(`Al cambiar de episodio no se olvida ${qué}.`);
+      }
+
+      // 3 · CON UNA TANDA EN MARCHA NO SE CAMBIA. Todos los caminos que abren
+      // otro episodio pasan por la misma puerta.
+      if (!/function exigirSinTandaEnMarcha/.test(main)) fallos.push('Nada impide cambiar de episodio con una tanda en marcha.');
+      for (const [qué, ancla] of [
+        ['abrir uno de la lista', 'P.piezaActiva = z.id;'],
+        ['empezar uno nuevo', 'async function empezarEpisodioNuevo'],
+        ['elegir un caso con otro ya empezado', 'estado.abrirPieza(P, { caso: c })'],
+        ['usar la idea propia', "'b-usar-idea',\n  async () => {"],
+        ['pedir una continuación', "'b-continuacion',\n  async () => {"],
+        ['reescribir', "'b-reescribir',\n  async () => {"],
+      ]) {
+        const k = main.indexOf(ancla);
+        if (k < 0) {
+          fallos.push(`No encuentro dónde se hace ${qué}: la comprobación estaría mirando al vacío.`);
+          continue;
+        }
+        if (!/exigirSinTandaEnMarcha\(\)/.test(main.slice(Math.max(0, k - 500), k + 500))) {
+          fallos.push(`Se puede ${qué} con una tanda en marcha: lo generado iría al episodio equivocado.`);
+        }
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: al cambiar de episodio no se olvida nada.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) =>
+        t.replace(
+          '    olvidarRastros();\n    vigilarMontaje().catch(() => {});',
+          '    vigilarMontaje().catch(() => {});',
+        ),
+      ),
+  },
+
+  {
+    nombre: 'la-lista-de-episodios-no-se-aplasta',
+    dice: '«La forma en la que está construida la sección de casos está horrible, parece una página de los ochenta, de los principios del Internet.» Y lo era, por una regla de estilo: `.hist button` vestía a TODO botón dentro de la lista, y el «Borrar» de cada fila —que también es un botón— salía a ancho completo, aplastando el título a una columna de una palabra por línea. Y al tocarlo en el teléfono se quedaba pintado de rojo: el `:hover` de un ratón que no existe, que Safari deja puesto después de tocar. La fila tiene ahora su propia forma, la regla de la lista solo viste a sus hijos directos, y lo que pasa al posar el ratón solo pasa donde hay ratón.',
+    comprobar(ctx) {
+      const css = hoja(ctx);
+      const main = fuente(ctx, 'app/main.js');
+      const todas = reglas(css);
+      const fallos = [];
+
+      // 1 · La regla de la lista no baja a los botones anidados.
+      for (const { selector } of todas) {
+        if (/^\.hist\s+button/.test(selector)) {
+          fallos.push(`«${selector}» viste a cualquier botón dentro de la lista, el de borrar incluido: la fila se aplasta.`);
+        }
+      }
+      if (!todas.some(({ selector }) => selector === '.hist > button')) {
+        fallos.push('La lista de entradas no tiene regla para sus hijos directos.');
+      }
+
+      // 2 · La fila del episodio tiene su forma: el botón de abrir crece y el de
+      // borrar no.
+      const fila = todas.find(({ selector }) => selector === '.episodio');
+      const abrir = todas.find(({ selector }) => selector === '.episodio-abrir');
+      const borrar = todas.find(({ selector }) => selector === '.episodio-borrar');
+      if (!fila || !/display:\s*flex/.test(fila.cuerpo)) fallos.push('La fila del episodio no es una fila.');
+      if (!abrir || !/flex:\s*1/.test(abrir.cuerpo) || !/min-width:\s*0/.test(abrir.cuerpo)) {
+        fallos.push('El botón de abrir no ocupa la fila, o no puede encoger sin aplastarse.');
+      }
+      if (!borrar || !/flex:\s*0/.test(borrar.cuerpo)) fallos.push('El botón de borrar puede crecer y aplastar el título.');
+
+      // 3 · Y la pantalla pinta las filas con esas clases, no con estilos sueltos.
+      const i = main.indexOf('function pintarHistorial');
+      const cuerpo = i < 0 ? '' : main.slice(i, main.indexOf('\n}\n', i));
+      for (const c of ['episodio-abrir', 'episodio-borrar']) {
+        if (!cuerpo.includes(c)) fallos.push(`La lista no usa «${c}».`);
+      }
+      if (/style\.cssText|style\.flex/.test(cuerpo)) fallos.push('La fila se sigue montando con estilos a mano.');
+
+      // 4 · Nada de :hover fuera de @media (hover:hover): en el teléfono se
+      // queda pegado tras tocar.
+      if (/:hover/.test(sinMedia(css))) {
+        fallos.push('Hay reglas :hover fuera de @media (hover:hover): en el teléfono se quedan pegadas después de tocar.');
+      }
+      return fallos;
+    },
+    // Se rompe como estaba: la regla de la lista alcanza a todo botón de dentro.
+    romper: (ctx) => editando(ctx, 'index.html', (t) => t.replace('.hist > button{', '.hist button{')),
+  },
+
+  {
+    nombre: 'el-inicio-es-donde-se-empieza',
+    dice: '«El inicio de la aplicación no es un inicio real, es un resumen de las otras secciones. No hay una forma de iniciar un episodio nuevo ahí, solo de ver los demás episodios.» El Inicio decía en qué estado estaba todo y por dónde se entraba a cada sección, y nada más: para empezar había que ir a Casos, y para seguir había que acordarse de en qué paso se quedó uno. Un inicio es por donde se EMPIEZA: dice qué episodio está en marcha y en qué paso va, lleva a ese paso con un botón, y abre uno nuevo con otro.',
+    async comprobar(ctx) {
+      const { humoDeLaPantalla } = await import('../pantalla-humo.mjs');
+      const enContexto = ctx.fuentes.get('app/main.js');
+      const enDisco = readFileSync(join(ctx.raiz, 'app/main.js'), 'utf8');
+      const parche = enContexto !== enDisco ? () => enContexto : null;
+      const html = fuente(ctx, 'index.html');
+      const fallos = [];
+
+      const desde = html.indexOf('id="v-inicio"');
+      const inicio = desde < 0 ? '' : html.slice(desde, html.indexOf('<section ', desde + 1));
+      for (const [qué, id] of [
+        ['seguir con el episodio en marcha', 'b-inicio-seguir'],
+        ['empezar un episodio nuevo', 'b-inicio-nuevo'],
+        ['saber qué episodio está en marcha y en qué paso va', 'en-marcha'],
+      ]) {
+        if (!inicio.includes(`id="${id}"`)) fallos.push(`En el Inicio no se puede ${qué}.`);
+      }
+
+      // 1 · Arrancando con un episodio a medias, el Inicio dice cuál es y en qué
+      // paso va, y ofrece seguir.
+      const r = await humoDeLaPantalla({ parche });
+      fallos.push(...r.fallos);
+      const dice = r.html('en-marcha');
+      if (!/Un caso cualquiera/.test(dice)) fallos.push('El Inicio no dice qué episodio está en marcha.');
+      if (!/paso \d/.test(dice)) fallos.push('El Inicio no dice en qué paso va el episodio en marcha.');
+      if (r.oculto('b-inicio-seguir')) fallos.push('Con un episodio a medias, el Inicio no ofrece seguir con él.');
+
+      // 2 · «Empezar un episodio nuevo» desde el Inicio abre uno de verdad.
+      const r2 = await humoDeLaPantalla({ parche, pulsa: ['b-inicio-nuevo'] });
+      fallos.push(...r2.fallos);
+      const guardado = r2.proyectoGuardado();
+      const episodios = (guardado?.piezas || []).filter((z) => !z.esBiblioteca);
+      if (episodios.length !== 2) {
+        fallos.push(`Tras «Empezar un episodio nuevo» en el Inicio hay ${episodios.length} episodios: tenía que haber dos.`);
+      }
+      if (!guardado || guardado.piezaActiva === 'p01') fallos.push('El episodio nuevo no queda abierto.');
+
+      // 3 · Sin ningún episodio, el Inicio lo dice y no ofrece seguir con nada.
+      const r3 = await humoDeLaPantalla({ parche, proyecto: { id: 'vacio', piezaActiva: '', piezas: [] } });
+      fallos.push(...r3.fallos);
+      if (!r3.oculto('b-inicio-seguir')) fallos.push('Sin episodios, el Inicio ofrece seguir con uno que no existe.');
+      if (!/[Nn]ing[uú]n episodio/.test(r3.html('en-marcha'))) fallos.push('Sin episodios, el Inicio no dice que no hay ninguno.');
+      return fallos;
+    },
+    // Se rompe como estaba: el botón del Inicio no abre nada.
+    romper: (ctx) =>
+      editando(ctx, 'app/main.js', (t) => t.replace("accion('b-inicio-nuevo', empezarEpisodioNuevo, 'inicio');", '')),
+  },
+
+  {
     nombre: 'los-botones-se-pulsan-y-no-revientan',
     dice: '«Can\'t find variable: dueña», en pantalla, al darle a Preparar. Lo puso una limpieza que borró la declaración y dejó el uso. `node --check` no lo ve —es sintaxis válida— y el arnés tampoco lo veía: ARRANCABA la aplicación y ahí se quedaba, y `preparar()` solo corre cuando alguien pulsa. Un fallo de programación en cualquier manejador viajaba entero hasta el teléfono. Ahora el arnés PULSA, y un error que solo puede ser un fallo de programación —una variable que no existe, algo que no es función— no pasa de aquí.',
     async comprobar(ctx) {

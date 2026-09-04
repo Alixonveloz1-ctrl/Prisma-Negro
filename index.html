@@ -13,33 +13,42 @@
 <style>
 /* ═══════════════════════════════════════════════════════════════════════════
    PRISMA NEGRO · sistema visual
+   ───────────────────────────────────────────────────────────────────────────
+   «Estéticamente es horrible. Nunca me ha gustado el diseño. Parece una
+    aplicación antigua.»
+
+   Lo que la hacía vieja no era el color: era que TODO llevaba borde de un
+   píxel y sombra —tarjetas, botones, campos, pastillas—, encima de un fondo
+   casi igual. Eso es un panel de administración de hace diez años. Una
+   aplicación de teléfono de hoy separa las cosas por superficie, no por línea:
+   fondo oscuro, tarjetas un punto más claras sin borde, botones llenos, y la
+   letra del sistema. Los nombres de las clases no cambian: la aplicación y la
+   auditoría los usan.
    ═══════════════════════════════════════════════════════════════════════════ */
 :root{
-  --fondo:#0A0B10;
-  --fondo-2:#0E0F16;
-  --carta:#13141C;
-  --carta-2:#191B24;
-  --carta-3:#20222D;
-  --tinta:#ECEDF2;
-  --tinta-2:#9DA3B4;
-  --tinta-3:#6B7183;
-  --linea:rgba(255,255,255,.065);
-  --linea-2:rgba(255,255,255,.13);
-  --violeta:#6D5AE6;
-  --violeta-2:#8B7BFF;
-  --violeta-suave:rgba(109,90,230,.14);
-  --verde:#3DD68C;
-  --verde-suave:rgba(61,214,140,.13);
-  --oro:#E5A83B;
-  --oro-suave:rgba(229,168,59,.13);
-  --rojo:#F0555C;
-  --rojo-suave:rgba(240,85,92,.13);
-  --s1:0 1px 2px rgba(0,0,0,.4);
-  --s2:0 2px 8px rgba(0,0,0,.45);
-  --s3:0 8px 24px -6px rgba(0,0,0,.6);
-  --r-s:10px; --r-m:14px; --r-l:18px; --r-xl:22px;
-  --tr:170ms cubic-bezier(.4,0,.2,1);
-  --lateral:236px;
+  --fondo:#09090E;
+  --fondo-2:#101017;
+  --carta:#15151E;
+  --carta-2:#1D1D28;
+  --carta-3:#272735;
+  --tinta:#F5F5F9;
+  --tinta-2:#A6AABB;
+  --tinta-3:#71768A;
+  --linea:rgba(255,255,255,.07);
+  --linea-2:rgba(255,255,255,.14);
+  --violeta:#7B6BFF;
+  --violeta-2:#A79CFF;
+  --violeta-suave:rgba(123,107,255,.17);
+  --verde:#3FD98F;
+  --verde-suave:rgba(63,217,143,.14);
+  --oro:#E9B34E;
+  --oro-suave:rgba(233,179,78,.14);
+  --rojo:#F4575F;
+  --rojo-suave:rgba(244,87,95,.14);
+  --s3:0 14px 34px -10px rgba(0,0,0,.65);
+  --r-s:12px; --r-m:16px; --r-l:20px; --r-xl:24px;
+  --tr:160ms cubic-bezier(.4,0,.2,1);
+  --lateral:240px;
 }
 
 /* §7.13 — LA ANCHURA ES UNA INVARIANTE, NO UN DETALLE DE ESTILO.
@@ -52,13 +61,14 @@ select,input,textarea,button{max-width:100%}
 html{-webkit-text-size-adjust:100%;background:var(--fondo)}
 body{
   margin:0;background:var(--fondo);color:var(--tinta);
-  font-family:'Inter',system-ui,-apple-system,sans-serif;
-  font-size:15px;line-height:1.55;letter-spacing:-.009em;
+  /* La letra del sistema: en el iPhone es la misma que la de sus aplicaciones. */
+  font-family:-apple-system,BlinkMacSystemFont,'Inter',system-ui,'Segoe UI',Roboto,sans-serif;
+  font-size:15px;line-height:1.5;letter-spacing:-.006em;
   -webkit-font-smoothing:antialiased;
-  padding-bottom:calc(84px + env(safe-area-inset-bottom));
+  padding-bottom:calc(86px + env(safe-area-inset-bottom));
 }
 .serif{font-family:'Instrument Serif',Georgia,serif;font-weight:400;letter-spacing:0}
-::selection{background:rgba(139,123,255,.32)}
+::selection{background:rgba(167,156,255,.35)}
 h1,h2,h3{margin:0}
 
 /* ── Estructura ─────────────────────────────────────────────────────────── */
@@ -79,7 +89,6 @@ aside button{
   color:var(--tinta-2);font:inherit;font-size:14px;font-weight:500;text-align:left;
   transition:var(--tr);
 }
-aside button:hover{background:var(--carta);color:var(--tinta)}
 aside button.on{background:var(--violeta-suave);color:var(--violeta-2);font-weight:600}
 aside button svg{width:18px;height:18px;flex:none}
 aside .usuario{
@@ -87,39 +96,39 @@ aside .usuario{
   border-top:1px solid var(--linea);color:var(--tinta-2);font-size:13px;
 }
 
-main{flex:1;min-width:0;padding:22px 18px 40px}
+main{flex:1;min-width:0;padding:16px 14px 40px}
 .contenido{max-width:900px;margin:0 auto}
 
 /* ── Cabecera ───────────────────────────────────────────────────────────── */
-.saludo{margin-bottom:24px}
-.saludo h1{font-size:30px;font-weight:600;letter-spacing:-.028em;line-height:1.15}
-.saludo p{margin:7px 0 0;color:var(--tinta-2);font-size:15px}
+.saludo{margin:6px 2px 18px}
+.saludo h1{font-size:28px;font-weight:700;letter-spacing:-.03em;line-height:1.15}
+.saludo p{margin:6px 0 0;color:var(--tinta-2);font-size:15px}
 
-.movil-marca{display:flex;align-items:center;gap:10px;margin-bottom:20px}
-.movil-marca b{font-size:17px;font-weight:700;letter-spacing:-.02em}
-.movil-marca span{font-size:11px;color:var(--tinta-3);margin-left:auto}
+.movil-marca{display:flex;align-items:center;gap:10px;margin:2px 2px 14px}
+.movil-marca b{font-size:15px;font-weight:700;letter-spacing:-.02em;color:var(--tinta-2)}
+.movil-marca span{font-size:12px;color:var(--tinta-3);margin-left:auto}
 
-/* ── Tarjetas ───────────────────────────────────────────────────────────── */
+/* ── Tarjetas: superficie, no borde ─────────────────────────────────────── */
 .panel{
-  background:var(--carta);border:1px solid var(--linea);border-radius:var(--r-l);
-  padding:18px;margin:0 0 14px;box-shadow:var(--s2);
+  background:var(--carta);border-radius:var(--r-l);
+  padding:18px 16px;margin:0 0 12px;
 }
 .panel > h2{
-  font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--tinta-2);
-  font-weight:700;margin:0 0 14px;display:flex;align-items:center;gap:9px;
+  font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--tinta-3);
+  font-weight:600;margin:0 0 12px;display:flex;align-items:center;gap:9px;
 }
 .panel > h2 .cuenta{margin-left:auto;color:var(--tinta-3);font-weight:600;letter-spacing:0;font-size:12px;text-transform:none}
-.nota{color:var(--tinta-2);font-size:13.5px;margin:0;line-height:1.6}
+.nota{color:var(--tinta-2);font-size:13.5px;margin:0;line-height:1.55}
 .nota.chica{font-size:12.5px;color:var(--tinta-3)}
 
 /* ── El paso numerado: la pieza central del flujo ───────────────────────── */
 .paso{
-  background:var(--carta);border:1px solid var(--linea);border-radius:var(--r-l);
-  padding:18px;margin:0 0 12px;box-shadow:var(--s2);transition:var(--tr);
+  background:var(--carta);border-radius:var(--r-l);
+  padding:18px 16px;margin:0 0 12px;transition:var(--tr);
 }
-.paso.espera{opacity:.5}
-.paso.hecho{border-color:rgba(61,214,140,.25)}
-.paso-cab{display:flex;align-items:flex-start;gap:13px;flex-wrap:wrap}
+.paso.espera{opacity:.45}
+.paso.hecho{box-shadow:inset 0 0 0 1px rgba(63,217,143,.4)}
+.paso-cab{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap}
 .paso-n{
   width:28px;height:28px;flex:none;border-radius:9px;background:var(--violeta-suave);
   color:var(--violeta-2);display:inline-flex;align-items:center;justify-content:center;
@@ -127,7 +136,7 @@ main{flex:1;min-width:0;padding:22px 18px 40px}
 }
 .paso.hecho .paso-n{background:var(--verde-suave);color:var(--verde)}
 .paso-txt{flex:1;min-width:160px}
-.paso-txt h3{font-size:16.5px;font-weight:650;letter-spacing:-.015em}
+.paso-txt h3{font-size:17px;font-weight:650;letter-spacing:-.015em}
 .paso-txt p{margin:4px 0 0;color:var(--tinta-2);font-size:13.5px;line-height:1.5}
 .paso-acc{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 @media (max-width:640px){
@@ -135,64 +144,58 @@ main{flex:1;min-width:0;padding:22px 18px 40px}
   .paso-acc .btn{flex:1 1 auto}
 }
 
-/* ── Botones ────────────────────────────────────────────────────────────── */
+/* ── Botones: lleno, tintado o solo texto ───────────────────────────────── */
 .btn{
-  appearance:none;border:1px solid var(--linea-2);background:var(--carta-2);color:var(--tinta);
-  font:inherit;font-size:14px;font-weight:600;letter-spacing:-.01em;
-  padding:10px 15px;border-radius:var(--r-s);cursor:pointer;
+  appearance:none;border:none;background:var(--carta-3);color:var(--tinta);
+  font:inherit;font-size:14.5px;font-weight:600;letter-spacing:-.01em;
+  padding:11px 16px;border-radius:var(--r-s);cursor:pointer;
   display:inline-flex;align-items:center;justify-content:center;gap:7px;
-  transition:var(--tr);box-shadow:var(--s1);white-space:nowrap;min-height:42px;
+  transition:var(--tr);white-space:nowrap;min-height:44px;
 }
-.btn:hover{background:var(--carta-3);border-color:rgba(255,255,255,.2)}
-.btn:active{transform:scale(.985)}
-.btn svg{width:16px;height:16px;flex:none}
-.btn.primario{background:var(--violeta);border-color:var(--violeta);color:#fff;box-shadow:0 2px 14px rgba(109,90,230,.38)}
-.btn.primario:hover{background:#7B69EE}
-.btn.fantasma{background:transparent;box-shadow:none}
-.btn.fantasma:hover{background:rgba(255,255,255,.05)}
-.btn.peligro{background:transparent;border-color:transparent;color:var(--rojo);box-shadow:none}
-.btn.peligro:hover{background:var(--rojo-suave)}
-.btn.grande{width:100%;padding:14px;font-size:15px}
-.btn.chico{padding:7px 12px;font-size:12.5px;min-height:36px;border-radius:8px}
+.btn:active{transform:scale(.97);opacity:.9}
+.btn svg{width:17px;height:17px;flex:none}
+.btn.primario{background:var(--violeta);color:#fff}
+.btn.fantasma{background:var(--violeta-suave);color:var(--violeta-2)}
+.btn.peligro{background:transparent;color:var(--rojo)}
+.btn.grande{width:100%;padding:15px;font-size:16px;border-radius:14px}
+.btn.chico{padding:7px 13px;font-size:13px;min-height:36px;border-radius:10px}
 .btn[disabled]{opacity:.35;cursor:default;transform:none!important}
 .fila-btn{display:flex;flex-wrap:wrap;gap:9px}
 :focus-visible{outline:2px solid var(--violeta-2);outline-offset:2px;border-radius:6px}
 
 /* ── Campos ─────────────────────────────────────────────────────────────── */
-label{display:block;font-size:12px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--tinta-3);margin:16px 0 7px}
+label{display:block;font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--tinta-3);margin:16px 0 7px}
 input,select,textarea{
   width:100%;background:var(--fondo-2);color:var(--tinta);
-  border:1px solid var(--linea-2);border-radius:var(--r-s);
-  padding:11px 13px;font:inherit;font-size:14.5px;transition:var(--tr);
+  border:none;border-radius:var(--r-s);box-shadow:inset 0 0 0 1px var(--linea);
+  padding:12px 14px;font:inherit;font-size:15px;transition:var(--tr);
 }
-input:focus,select:focus,textarea:focus{outline:none;border-color:var(--violeta);box-shadow:0 0 0 3px var(--violeta-suave)}
-textarea{min-height:200px;resize:vertical;line-height:1.7;font-size:14.5px}
-select{appearance:none;background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239DA3B4' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;background-size:17px;padding-right:36px}
-input[type=range]{padding:0;accent-color:var(--violeta-2);border:none;background:none}
+input:focus,select:focus,textarea:focus{outline:none;box-shadow:inset 0 0 0 1.5px var(--violeta)}
+textarea{min-height:200px;resize:vertical;line-height:1.7;font-size:15px}
+select{appearance:none;background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23A6AABB' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;background-size:17px;padding-right:38px}
+input[type=range]{padding:0;accent-color:var(--violeta-2);box-shadow:none;background:none}
 
 /* ── Casos: las tarjetas que se eligen ──────────────────────────────────── */
 .casos{
-  display:grid;gap:11px;margin-top:14px;
+  display:grid;gap:10px;margin-top:14px;
   grid-template-columns:repeat(auto-fill,minmax(144px,1fr));
 }
 .caso{
-  border:1.5px solid var(--linea);border-radius:var(--r-m);overflow:hidden;
+  border:none;border-radius:var(--r-m);overflow:hidden;
   background:var(--carta-2);cursor:pointer;transition:var(--tr);
   display:flex;flex-direction:column;text-align:left;padding:0;font:inherit;color:inherit;
   position:relative;
 }
-.caso:hover{border-color:var(--linea-2);transform:translateY(-2px)}
-.caso.elegido{border-color:var(--violeta);box-shadow:0 0 0 3px var(--violeta-suave)}
+.caso.elegido{box-shadow:0 0 0 2px var(--violeta)}
 .caso .lam{
-  aspect-ratio:4/3;background:linear-gradient(145deg,#1B1D28,#0E0F16);
+  aspect-ratio:4/3;background:linear-gradient(145deg,#232433,#12121A);
   display:flex;align-items:center;justify-content:center;color:var(--tinta-3);
-  font-size:11px;padding:10px;text-align:center;line-height:1.4;border-bottom:1px solid var(--linea);
+  font-size:11px;padding:10px;text-align:center;line-height:1.4;
 }
 .caso .lam img{width:100%;height:100%;object-fit:cover}
 .caso .cq{
   position:absolute;top:9px;right:9px;width:24px;height:24px;border-radius:50%;
   background:var(--violeta);color:#fff;display:none;align-items:center;justify-content:center;
-  box-shadow:0 2px 8px rgba(0,0,0,.5);
 }
 .caso.elegido .cq{display:flex}
 .caso .cb{padding:11px 12px 13px}
@@ -208,22 +211,52 @@ input[type=range]{padding:0;accent-color:var(--violeta-2);border:none;background
 /* ── Pestañas ───────────────────────────────────────────────────────────── */
 nav.pestanas{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px}
 nav.pestanas button{
-  appearance:none;flex:0 0 auto;background:var(--carta-2);border:1px solid var(--linea);
+  appearance:none;flex:0 0 auto;background:var(--carta-2);border:none;
   color:var(--tinta-2);font:inherit;font-size:13px;font-weight:600;
   padding:8px 14px;border-radius:99px;cursor:pointer;transition:var(--tr);min-height:38px;
 }
-nav.pestanas button.on{background:var(--violeta);border-color:var(--violeta);color:#fff}
+nav.pestanas button.on{background:var(--violeta);color:#fff}
+
+/* ── Las entradas del Inicio: filas con flecha ──────────────────────────── */
+/* SOLO LOS HIJOS DIRECTOS. La regla era `.hist button` y vestía a cualquier
+   botón que hubiera dentro —el «Borrar» de cada episodio, por ejemplo—, que
+   salía a ancho completo y aplastaba el título a una palabra por línea. */
+.hist{display:flex;flex-direction:column;gap:8px}
+.hist > button{
+  display:block;width:100%;text-align:left;padding:13px 40px 13px 15px;border:none;
+  border-radius:var(--r-m);background:var(--carta);color:var(--tinta);font:inherit;
+  cursor:pointer;position:relative;transition:var(--tr);
+}
+.hist > button::after{
+  content:'';position:absolute;right:18px;top:50%;width:8px;height:8px;
+  border-right:2px solid var(--tinta-3);border-bottom:2px solid var(--tinta-3);
+  transform:translateY(-50%) rotate(-45deg);
+}
+.hist > button.on{box-shadow:inset 0 0 0 1.5px var(--violeta)}
+.hist b{display:block;font-size:15px;font-weight:600;letter-spacing:-.01em}
+.hist span{display:block;margin-top:2px;font-size:12.5px;color:var(--tinta-2)}
+
+/* ── La lista de episodios: cada fila con su forma ──────────────────────── */
+.episodios{display:flex;flex-direction:column;gap:8px}
+.episodio{display:flex;align-items:center;gap:4px;border-radius:var(--r-m);background:var(--carta-2);transition:var(--tr)}
+.episodio.on{background:var(--violeta-suave);box-shadow:inset 0 0 0 1.5px var(--violeta)}
+.episodio-abrir{
+  flex:1 1 auto;min-width:0;appearance:none;background:none;border:none;text-align:left;
+  padding:13px 14px;color:inherit;font:inherit;cursor:pointer;border-radius:var(--r-m);
+}
+.episodio-abrir b{display:block;font-size:15px;font-weight:600;letter-spacing:-.01em;overflow-wrap:anywhere}
+.episodio-abrir span{display:block;margin-top:3px;font-size:12.5px;color:var(--tinta-2);line-height:1.45}
+.episodio-borrar{flex:0 0 auto;margin-right:6px}
+
+/* ── El episodio en marcha, en el Inicio ────────────────────────────────── */
+.en-marcha{margin:0 0 14px}
+.en-marcha b{display:block;font-size:20px;font-weight:700;letter-spacing:-.025em;line-height:1.25}
+.en-marcha p{margin:6px 0 0;color:var(--tinta-2);font-size:13.5px;line-height:1.55}
 
 /* ── Galería y filas de material ────────────────────────────────────────── */
-.hist{display:flex;flex-direction:column;gap:8px}
-.hist button{display:block;width:100%;text-align:left;padding:11px 13px;border:1px solid var(--linea);
-  border-radius:var(--r-m);background:var(--fondo-2);color:var(--tinta);font:inherit;cursor:pointer}
-.hist button.on{border-color:var(--violeta);background:rgba(124,92,255,.10)}
-.hist b{display:block;font-size:14px;font-weight:600;letter-spacing:-.01em}
-.hist span{display:block;margin-top:3px;font-size:12px;color:var(--tinta-2)}
 .galeria{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:9px}
-.pieza-mat.elegido{border-color:var(--violeta);box-shadow:0 0 0 1px var(--violeta)}
-.pieza-mat{border:1px solid var(--linea);border-radius:var(--r-m);overflow:hidden;background:var(--fondo-2)}
+.pieza-mat.elegido{box-shadow:0 0 0 2px var(--violeta)}
+.pieza-mat{border:none;border-radius:var(--r-m);overflow:hidden;background:var(--carta-2)}
 .pieza-mat img,.pieza-mat video{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#0B0C12}
 .pieza-mat .cuerpo{padding:8px 9px 10px}
 .pieza-mat .cuerpo p{margin:0 0 7px;font-size:11.5px;color:var(--tinta-2);line-height:1.45}
@@ -235,13 +268,13 @@ nav.pestanas button.on{background:var(--violeta);border-color:var(--violeta);col
 }
 /* El visto bueno se ve DESDE FUERA, sin abrir la tarjeta: con 141 imágenes, saber
    cuáles quedan por mirar no puede exigir leer 141 rótulos. */
-.pieza-mat.aprobada{border-color:var(--verde);box-shadow:0 0 0 1px var(--verde)}
+.pieza-mat.aprobada{box-shadow:0 0 0 2px var(--verde)}
 .pieza-mat .cuerpo .btn{margin:0 5px 5px 0}
 .chip{
-  padding:6px 11px;border:1px solid var(--linea);border-radius:999px;background:var(--fondo-2);
-  color:var(--tinta-2);font:inherit;font-size:12px;cursor:pointer
+  padding:7px 12px;border:none;border-radius:999px;background:var(--carta-3);
+  color:var(--tinta-2);font:inherit;font-size:12.5px;font-weight:500;cursor:pointer
 }
-.chip.on{border-color:var(--violeta);background:rgba(124,92,255,.10);color:var(--tinta)}
+.chip.on{background:var(--violeta-suave);color:var(--violeta-2)}
 .fila-mat{
   display:flex;gap:10px;align-items:center;padding:11px 0;border-bottom:1px solid var(--linea);
 }
@@ -254,7 +287,7 @@ nav.pestanas button.on{background:var(--violeta);border-color:var(--violeta);col
 /* ── Visor de la previa ─────────────────────────────────────────────────── */
 .visor{
   position:relative;aspect-ratio:16/9;background:#06070C;border-radius:var(--r-m);
-  overflow:hidden;border:1px solid var(--linea);
+  overflow:hidden;
 }
 .visor img,.visor video{width:100%;height:100%;object-fit:contain;display:block}
 /* LOS DOS VISUALES, SUPERPUESTOS. En flujo normal —que es como estaban— dos hijos
@@ -275,10 +308,10 @@ nav.pestanas button.on{background:var(--violeta);border-color:var(--violeta);col
 }
 .tiras{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px;margin-top:12px}
 .tira{
-  border:1px solid var(--linea);border-radius:10px;overflow:hidden;background:var(--fondo-2);
+  border:none;border-radius:10px;overflow:hidden;background:var(--carta-2);
   cursor:pointer;padding:0;font:inherit;color:inherit;text-align:left;position:relative;
 }
-.tira.activa{border-color:var(--violeta);box-shadow:0 0 0 2px var(--violeta-suave)}
+.tira.activa{box-shadow:0 0 0 2px var(--violeta)}
 .tira img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#0B0C12}
 .tira .sin{width:100%;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;color:var(--rojo);font-size:10.5px}
 .tira .pie{padding:5px 7px 7px;font-size:10.5px;color:var(--tinta-3);display:flex;gap:4px;align-items:center;flex-wrap:wrap}
@@ -300,8 +333,8 @@ nav.pestanas button.on{background:var(--violeta);border-color:var(--violeta);col
 .visor.cine img#previa-imagen,.visor.cine video#previa-clip{object-fit:contain}
 .btn-cine{
   position:absolute;right:10px;top:10px;z-index:5;appearance:none;cursor:pointer;
-  width:38px;height:38px;border-radius:10px;border:1px solid rgba(255,255,255,.25);
-  background:rgba(10,11,16,.55);color:#fff;font-size:17px;line-height:1;
+  width:38px;height:38px;border-radius:10px;border:none;
+  background:rgba(10,11,16,.6);color:#fff;font-size:17px;line-height:1;
 }
 .visor.cine .btn-cine{position:fixed;top:calc(10px + env(safe-area-inset-top))}
 .formato-vertical .pieza-mat img,.formato-vertical .pieza-mat video{aspect-ratio:9/16;object-fit:cover}
@@ -309,23 +342,23 @@ nav.pestanas button.on{background:var(--violeta);border-color:var(--violeta);col
 .formato-vertical .tiras{grid-template-columns:repeat(auto-fill,minmax(84px,1fr))}
 
 /* ── Interruptor ────────────────────────────────────────────────────────── */
-.interruptor{display:flex;align-items:center;gap:9px;margin:12px 0 0;text-transform:none;letter-spacing:0;font-size:13.5px;color:var(--tinta-2);font-weight:500;cursor:pointer}
-.interruptor input{width:18px;height:18px;flex:none;accent-color:var(--violeta-2);margin:0}
+.interruptor{display:flex;align-items:center;gap:10px;margin:12px 0 0;text-transform:none;letter-spacing:0;font-size:14px;color:var(--tinta-2);font-weight:500;cursor:pointer}
+.interruptor input{width:20px;height:20px;flex:none;accent-color:var(--violeta);margin:0;box-shadow:none}
 
 /* ── Reparto de fuentes ─────────────────────────────────────────────────── */
 .reparto{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
 
 /* ── Pastillas y estados ────────────────────────────────────────────────── */
 .pastilla{
-  font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;
-  border:1px solid var(--linea-2);color:var(--tinta-2);white-space:nowrap;
+  font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;
+  background:var(--carta-3);color:var(--tinta-2);white-space:nowrap;
   display:inline-flex;align-items:center;gap:5px;
 }
-.pastilla.p-ok{color:var(--verde);border-color:rgba(61,214,140,.3);background:var(--verde-suave)}
-.pastilla.p-falta{color:var(--rojo);border-color:rgba(240,85,92,.3);background:var(--rojo-suave)}
+.pastilla.p-ok{color:var(--verde);background:var(--verde-suave)}
+.pastilla.p-falta{color:var(--rojo);background:var(--rojo-suave)}
 /* La cuenta de cada fase, en su propio botón: verde completa, ámbar a medias. */
-.desglose{margin-top:12px;border:1px solid var(--linea);border-radius:var(--r-m);overflow:hidden}
-.desglose .f{display:flex;align-items:center;gap:9px;padding:9px 12px;border-top:1px solid var(--linea);font-size:13px}
+.desglose{margin-top:12px;border-radius:var(--r-m);overflow:hidden;background:var(--carta-2)}
+.desglose .f{display:flex;align-items:center;gap:9px;padding:10px 12px;border-top:1px solid var(--linea);font-size:13px}
 .desglose .f:first-child{border-top:none}
 .desglose .f b{flex:1;min-width:74px;font-weight:600}
 .desglose .n{font-variant-numeric:tabular-nums;font-weight:700}
@@ -336,17 +369,17 @@ nav.pestanas button.on{background:var(--violeta);border-color:var(--violeta);col
 /* El botón de cada fila, al final y sin empujar los números. */
 .desglose .f .btn{margin-left:auto;flex:none}
 @media (max-width:420px){.desglose .f{flex-wrap:wrap}.desglose .f .btn{margin-left:0}}
-.cuenta-fase{font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;border:1px solid var(--linea-2);color:var(--tinta-2);background:var(--carta)}
+.cuenta-fase{font-size:11px;font-weight:700;padding:2px 7px;border-radius:999px;color:var(--tinta-2);background:rgba(0,0,0,.28)}
 .cuenta-fase:empty{display:none}
-.cuenta-fase.lista{color:var(--verde);border-color:rgba(61,214,140,.3);background:var(--verde-suave)}
-.cuenta-fase.a-medias{color:#E8B54B;border-color:rgba(232,181,75,.3);background:rgba(232,181,75,.1)}
-.pastilla.p-aviso{color:var(--oro);border-color:rgba(229,168,59,.3);background:var(--oro-suave)}
-.pastilla.p-tipo{color:var(--violeta-2);border-color:rgba(139,123,255,.3);background:var(--violeta-suave)}
+.cuenta-fase.lista{color:var(--verde);background:var(--verde-suave)}
+.cuenta-fase.a-medias{color:var(--oro);background:var(--oro-suave)}
+.pastilla.p-aviso{color:var(--oro);background:var(--oro-suave)}
+.pastilla.p-tipo{color:var(--violeta-2);background:var(--violeta-suave)}
 
 /* ── Avisos ─────────────────────────────────────────────────────────────── */
 .aviso{
   border-left:3px solid var(--violeta);background:var(--violeta-suave);
-  padding:11px 13px;border-radius:8px;font-size:13.5px;margin-top:12px;
+  padding:12px 14px;border-radius:12px;font-size:13.5px;margin-top:12px;
   overflow-wrap:anywhere;line-height:1.55;
 }
 .aviso.malo{border-color:var(--rojo);background:var(--rojo-suave)}
@@ -359,30 +392,30 @@ nav.pestanas button.on{background:var(--violeta);border-color:var(--violeta);col
 
 .registro{
   font:12px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace;
-  background:#06070C;border:1px solid var(--linea);border-radius:var(--r-s);
+  background:#06070B;border-radius:var(--r-s);
   padding:11px 13px;margin-top:11px;max-height:220px;overflow:auto;
   white-space:pre-wrap;overflow-wrap:anywhere;color:var(--tinta-2);
 }
 
 /* ── Cifras ─────────────────────────────────────────────────────────────── */
-.cifras{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:11px}
-.cifra{background:var(--fondo-2);border:1px solid var(--linea);border-radius:var(--r-m);padding:12px}
-.cifra b{display:block;font-size:22px;font-weight:650;letter-spacing:-.02em;line-height:1.1}
+.cifras{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:10px}
+.cifra{background:var(--carta-2);border-radius:var(--r-m);padding:12px}
+.cifra b{display:block;font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
 .cifra span{display:block;font-size:11.5px;color:var(--tinta-3);margin-top:3px}
 
 /* ── Progreso ───────────────────────────────────────────────────────────── */
-.barra{height:6px;background:var(--fondo-2);border-radius:99px;overflow:hidden;margin-top:13px;border:1px solid var(--linea)}
+.barra{height:6px;background:var(--carta-3);border-radius:99px;overflow:hidden;margin-top:13px}
 .barra > i{display:block;height:100%;background:linear-gradient(90deg,var(--violeta),var(--violeta-2));width:0;transition:width .3s}
 
 /* ── Tomas ──────────────────────────────────────────────────────────────── */
 .tomas{display:grid;gap:8px;margin-top:14px}
-.toma{border:1px solid var(--linea);border-radius:var(--r-m);padding:11px 12px;background:var(--fondo-2)}
+.toma{border-radius:var(--r-m);padding:12px 13px;background:var(--carta-2)}
 .toma .cab{display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
 .toma .cab .n{font-size:11.5px;color:var(--tinta-3);font-weight:600;margin-right:3px}
 .toma p{margin:0;font-size:13px;color:var(--tinta-2);line-height:1.55;overflow-wrap:anywhere}
 
 /* ── Fichas ─────────────────────────────────────────────────────────────── */
-.ficha{border:1px solid var(--linea);border-radius:var(--r-m);padding:12px;background:var(--fondo-2);margin-bottom:8px}
+.ficha{border-radius:var(--r-m);padding:12px 13px;background:var(--carta-2);margin-bottom:8px}
 .ficha .cab{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:7px;font-size:11.5px;color:var(--tinta-3)}
 .ficha p{margin:0;font-size:13.5px;line-height:1.55}
 .ficha .cita{margin-top:7px;font-size:12.5px;color:var(--tinta-2);border-left:2px solid var(--linea-2);padding-left:10px;font-style:italic}
@@ -390,30 +423,42 @@ nav.pestanas button.on{background:var(--violeta);border-color:var(--violeta);col
 /* ── Navegación inferior (móvil) ────────────────────────────────────────── */
 nav.abajo{
   position:fixed;left:0;right:0;bottom:0;z-index:60;
-  background:rgba(14,15,22,.94);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  background:rgba(9,9,14,.86);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
   border-top:1px solid var(--linea);
-  padding:7px 4px calc(7px + env(safe-area-inset-bottom));
+  padding:8px 4px calc(8px + env(safe-area-inset-bottom));
   display:flex;justify-content:space-around;
 }
 nav.abajo button{
   appearance:none;background:none;border:none;cursor:pointer;flex:1 1 0;min-width:0;
-  display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 2px;
-  color:var(--tinta-3);font:inherit;font-size:9.5px;font-weight:700;
-  letter-spacing:.04em;text-transform:uppercase;position:relative;transition:var(--tr);
+  display:flex;flex-direction:column;align-items:center;gap:4px;padding:4px 2px;
+  color:var(--tinta-3);font:inherit;font-size:9.5px;font-weight:600;
+  letter-spacing:.03em;text-transform:uppercase;position:relative;transition:var(--tr);
 }
 /* Cinturón y tirantes: aunque una etiqueta crezca, no puede pisar a la de al lado. */
 nav.abajo button span{
   max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;
 }
 nav.abajo button.on{color:var(--violeta-2)}
-nav.abajo button.on::after{content:'';position:absolute;top:-7px;width:30px;height:3px;border-radius:0 0 3px 3px;background:var(--violeta-2)}
-nav.abajo button svg{width:22px;height:22px}
+nav.abajo button svg{width:23px;height:23px}
 
 /* ── Pantalla de acceso ─────────────────────────────────────────────────── */
 .acceso{max-width:400px;margin:8vh auto 0;padding:0 4px}
 .acceso .logo{text-align:center;margin-bottom:30px}
 .acceso .logo b{display:block;font-size:32px;font-weight:700;letter-spacing:-.03em}
 .acceso .logo span{display:block;color:var(--tinta-3);font-size:13.5px;margin-top:5px}
+
+/* ── Lo que pasa al posar el ratón, SOLO DONDE HAY RATÓN ─────────────────
+   En el teléfono no hay ratón, pero Safari deja el :hover puesto después de
+   tocar: el «Borrar» de un episodio se quedaba pintado de rojo hasta tocar
+   otra cosa. Se veía como una caja roja sin sentido al lado de cada fila. */
+@media (hover:hover){
+  aside button:hover{background:var(--carta);color:var(--tinta)}
+  .btn:hover{filter:brightness(1.12)}
+  .btn.peligro:hover{background:var(--rojo-suave)}
+  .caso:hover{transform:translateY(-2px)}
+  .hist > button:hover{background:var(--carta-2)}
+  .episodio-abrir:hover{background:var(--carta-3)}
+}
 
 /* ── Pantalla ancha ───────────────────────────────────────────────────────
    TODO lo de escritorio va aquí, al final. Cuando estaba a media hoja, la regla
@@ -493,13 +538,29 @@ nav.abajo button svg{width:22px;height:22px}
           <p id="sub-inicio">De una idea a un episodio terminado, sin salir de aquí.</p>
         </div>
 
+        <!-- POR DÓNDE SE SIGUE Y POR DÓNDE SE EMPIEZA.
+             «El inicio de la aplicación no es un inicio real, es un resumen de
+              las otras secciones. No hay una forma de iniciar un episodio nuevo
+              ahí, solo de ver los demás episodios.»
+             Un inicio es por donde se empieza: dice qué episodio está en marcha
+             y en qué paso va, lleva a ese paso con un botón, y abre uno nuevo
+             con otro. Las entradas a las secciones siguen abajo, como mapa. -->
+        <div class="panel" id="panel-en-marcha">
+          <h2 id="en-marcha-titulo">El episodio en marcha</h2>
+          <div id="en-marcha" class="en-marcha"></div>
+          <div class="fila-btn">
+            <button class="btn primario grande" id="b-inicio-seguir">Seguir</button>
+          </div>
+          <div class="fila-btn" style="margin-top:9px">
+            <button class="btn grande" id="b-inicio-nuevo">Empezar un episodio nuevo</button>
+          </div>
+          <div id="aviso-inicio"></div>
+        </div>
+
         <div class="panel">
           <h2>Cómo va el canal</h2>
           <div id="estado-canal" class="nota chica"></div>
         </div>
-
-        <!-- LAS ENTRADAS. Cada una lleva a su sección y dice en qué está. -->
-        <div class="hist" id="entradas-inicio"></div>
 
         <div class="panel" id="panel-auto">
           <h2>Producción automática</h2>
@@ -515,6 +576,9 @@ nav.abajo button svg{width:22px;height:22px}
           </div>
           <div id="aviso-auto"></div>
         </div>
+
+        <!-- LAS ENTRADAS. Cada una lleva a su sección y dice en qué está. -->
+        <div class="hist" id="entradas-inicio"></div>
 
         <p class="pie">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" style="width:15px;height:15px"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 7 18.2l1.9-5.8L4 8.8h6.1z"/></svg>
@@ -862,7 +926,10 @@ nav.abajo button svg{width:22px;height:22px}
         <div class="panel hoja-previa" data-hoja="montado">
           <h2>Montado <span class="cuenta" id="cuenta-previa"></span></h2>
           <div class="visor" id="visor-montado">
-            <img id="previa-imagen" alt="">
+            <!-- Nace escondida: una imagen sin fuente se pinta igual, con un
+                 borde claro que se veía como una raya en el visor vacío. El
+                 reproductor la enseña cuando tiene qué enseñar. -->
+            <img id="previa-imagen" alt="" style="display:none">
             <!-- Las tomas con clip se ven AQUÍ, en bucle y sin sonido: el visor era solo
                  un <img>, así que un clip no se veía en la previa —y el montaje sí lo
                  monta—. El bucle es el mismo que hace el video final. -->
